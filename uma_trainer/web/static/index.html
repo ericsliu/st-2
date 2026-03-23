@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Uma Trainer Dashboard</title>
+  <style>
+    /* ── Reset & base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f0f1a; --surface: #1a1a2e; --surface2: #22223a;
+      --border: #333366; --text: #e0e0f0; --muted: #7c7ca8;
+      --accent: #a78bfa; --green: #4ade80; --yellow: #fbbf24;
+      --red: #f87171; --blue: #60a5fa; --pink: #f472b6;
+    }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface); padding: 0.75rem 2rem;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 1rem; position: sticky; top: 0; z-index: 100;
+    }
+    header h1 { font-size: 1.25rem; color: var(--accent); font-weight: 700; }
+    .badge {
+      padding: 0.2rem 0.65rem; border-radius: 99px; font-size: 0.72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .badge-idle { background: #333; color: #aaa; }
+    .badge-running { background: #14532d; color: var(--green); }
+    .badge-paused { background: #422006; color: var(--yellow); }
+    .badge-error { background: #450a0a; color: var(--red); }
+    #header-turn { margin-left: auto; font-size: 0.85rem; color: var(--muted); }
+
+    /* ── Tab bar ── */
+    nav.tabs {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      display: flex; gap: 0; padding: 0 1.5rem; overflow-x: auto;
+    }
+    nav.tabs button {
+      background: none; border: none; border-bottom: 3px solid transparent;
+      color: var(--muted); font-size: 0.9rem; font-weight: 600;
+      padding: 0.75rem 1.25rem; cursor: pointer; white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    nav.tabs button:hover { color: var(--text); }
+    nav.tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── Tab panels ── */
+    .tab-panel { display: none; padding: 1.5rem 2rem; max-width: 1300px; margin: 0 auto; }
+    .tab-panel.active { display: block; }
+
+    /* ── Controls bar ── */
+    .controls { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center; }
+    .controls button {
+      padding: 0.5rem 1.2rem; border: none; border-radius: 8px;
+      font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: opacity 0.15s;
+    }
+    .controls button:hover { opacity: 0.8; }
+    .btn-pause { background: var(--yellow); color: #000; }
+    .btn-resume { background: var(--green); color: #000; }
+    .btn-save { background: var(--accent); color: #000; }
+    .btn-add { background: var(--blue); color: #000; }
+    .btn-del { background: var(--red); color: #fff; font-size: 0.78rem; padding: 0.3rem 0.65rem; }
+    .btn-sm { padding: 0.3rem 0.75rem; font-size: 0.8rem; border: none; border-radius: 6px; cursor: pointer; }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.25rem;
+    }
+    .card-title {
+      font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--muted); margin-bottom: 1rem; font-weight: 700;
+    }
+
+    /* ── Grid layouts ── */
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; }
+    .mb { margin-bottom: 1.25rem; }
+
+    /* ── Stat rows ── */
+    .stat-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.4rem 0; border-bottom: 1px solid var(--surface2);
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: var(--muted); font-size: 0.88rem; }
+    .stat-value { color: var(--text); font-size: 0.88rem; font-weight: 700; }
+
+    /* ── Energy / progress bars ── */
+    .bar-wrap { width: 100%; height: 10px; background: var(--surface2); border-radius: 5px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 5px; transition: width 0.5s; }
+    .bar-energy { background: linear-gradient(90deg, #22c55e, #86efac); }
+    .bar-turn  { background: linear-gradient(90deg, var(--accent), var(--pink)); }
+
+    /* ── Training tiles ── */
+    #tiles-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0.75rem;
+    }
+    .tile {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 0.75rem 0.5rem; text-align: center;
+      position: relative; transition: border-color 0.3s;
+    }
+    .tile.top { border-color: var(--accent); box-shadow: 0 0 8px rgba(167,139,250,0.3); }
+    .tile-stat { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem; }
+    .tile-score { font-size: 1.6rem; font-weight: 800; color: var(--text); line-height: 1; }
+    .tile-score-bar { width: 100%; height: 6px; background: var(--surface); border-radius: 3px; margin: 0.4rem 0; overflow: hidden; }
+    .tile-score-fill { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.5s; }
+    .tile-badges { display: flex; gap: 3px; justify-content: center; flex-wrap: wrap; margin-top: 0.3rem; }
+    .tile-badge { font-size: 0.6rem; padding: 1px 5px; border-radius: 4px; font-weight: 700; }
+    .tb-rainbow { background: #4c1d95; color: #c4b5fd; }
+    .tb-gold    { background: #451a03; color: #fbbf24; }
+    .tb-hint    { background: #052e16; color: #4ade80; }
+    .tb-dir     { background: #1e3a5f; color: #60a5fa; }
+    .tile-cards { font-size: 0.72rem; color: var(--muted); margin-top: 0.3rem; }
+
+    /* ── Event panel ── */
+    #event-text { font-size: 0.9rem; color: var(--text); margin-bottom: 0.75rem; line-height: 1.5; min-height: 2em; }
+    .choice-btn {
+      display: block; width: 100%; margin-bottom: 0.5rem; padding: 0.6rem 0.9rem;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); font-size: 0.85rem; text-align: left; cursor: default;
+      transition: border-color 0.2s;
+    }
+    .choice-btn.recommended { border-color: var(--accent); background: rgba(167,139,250,0.08); }
+    .choice-idx { font-weight: 700; color: var(--accent); margin-right: 0.4rem; }
+
+    /* ── Support cards ── */
+    .sc-row {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.5rem 0; border-bottom: 1px solid var(--surface2);
+    }
+    .sc-row:last-child { border-bottom: none; }
+    .sc-name { font-size: 0.85rem; flex: 1; }
+    .sc-bond-wrap { width: 80px; }
+    .sc-bond-bar { height: 6px; border-radius: 3px; background: var(--blue); }
+    .sc-friend { font-size: 0.7rem; padding: 1px 6px; border-radius: 4px; background: #fdf2f8; color: #9d174d; font-weight: 700; }
+
+    /* ── Tables ── */
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { text-align: left; padding: 0.5rem 0.75rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border-bottom: 1px solid var(--border); }
+    td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--surface2); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface2); }
+
+    /* ── Forms ── */
+    input[type=text], input[type=number], select, textarea {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); border-radius: 6px; padding: 0.4rem 0.6rem;
+      font-size: 0.85rem; font-family: inherit; outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    textarea { resize: vertical; width: 100%; min-height: 300px; font-family: 'Menlo', 'Monaco', monospace; font-size: 0.82rem; line-height: 1.5; }
+    label { font-size: 0.82rem; color: var(--muted); display: block; margin-bottom: 0.3rem; }
+    .form-row { margin-bottom: 1rem; }
+    .form-inline { display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap; }
+    .form-inline .form-row { margin-bottom: 0; }
+    input[type=range] { accent-color: var(--accent); cursor: pointer; }
+
+    /* ── Slider row ── */
+    .slider-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }
+    .slider-row label { width: 80px; margin: 0; color: var(--text); font-size: 0.85rem; }
+    .slider-row input[type=range] { flex: 1; }
+    .slider-val { width: 42px; text-align: right; font-size: 0.85rem; font-weight: 700; color: var(--accent); }
+
+    /* ── Advice editor ── */
+    #advice-select { min-width: 220px; }
+    #advice-status { font-size: 0.8rem; color: var(--green); }
+
+    /* ── Run history ── */
+    .run-success td { color: var(--green); }
+    .run-fail td:first-child { color: var(--red); }
+
+    /* ── Search box ── */
+    .search-box { padding: 0.4rem 0.8rem; border-radius: 8px; width: 260px; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 1.5rem; right: 1.5rem;
+      background: #1e293b; border: 1px solid var(--border); border-radius: 10px;
+      padding: 0.75rem 1.25rem; font-size: 0.85rem; color: var(--text);
+      opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 200;
+    }
+    #toast.show { opacity: 1; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══ -->
+<header>
+  <h1>🐴 Uma Trainer</h1>
+  <span id="fsm-badge" class="badge badge-idle">idle</span>
+  <span id="header-screen" style="font-size:0.82rem;color:var(--muted)"></span>
+  <span id="header-turn" style="display:none"></span>
+</header>
+
+<!-- ═══ TAB BAR ═══ -->
+<nav class="tabs">
+  <button class="active" onclick="switchTab('monitor')">Live Monitor</button>
+  <button onclick="switchTab('strategy')">Strategy</button>
+  <button onclick="switchTab('advice')">Advice</button>
+  <button onclick="switchTab('events-override')">Event Overrides</button>
+  <button onclick="switchTab('kb')">Knowledge Base</button>
+  <button onclick="switchTab('history')">Run History</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════
+     TAB 1 — LIVE MONITOR
+════════════════════════════════════════════ -->
+<div id="tab-monitor" class="tab-panel active">
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="btn-pause" onclick="api('/api/pause','POST').then(refresh)">Pause</button>
+    <button class="btn-resume" onclick="api('/api/resume','POST').then(refresh)">Resume</button>
+    <span id="last-action" style="font-size:0.82rem;color:var(--muted)"></span>
+  </div>
+
+  <!-- Top row: Energy + Turn + Mood + Stats -->
+  <div class="grid-2 mb">
+
+    <div class="card">
+      <div class="card-title">Trainee Status</div>
+      <div class="stat-row">
+        <span class="stat-label">Energy</span>
+        <span class="stat-value" id="m-energy">—</span>
+      </div>
+      <div class="bar-wrap" style="margin:-0.2rem 0 0.8rem">
+        <div class="bar-fill bar-energy" id="m-energy-bar" style="width:0%"></div>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Turn</span>
+        <span class="stat-value" id="m-turn">—</span>
+      </div>
+      <div class="bar-wrap" style="margin:-0.2rem 0 0.8rem">
+        <div class="bar-fill bar-turn" id="m-turn-bar" style="width:0%"></div>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Mood</span>
+        <span class="stat-value" id="m-mood">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Scenario</span>
+        <span class="stat-value" id="m-scenario">—</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Stats</div>
+      <div id="stats-rows">
+        <!-- filled by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Training tiles -->
+  <div class="card mb">
+    <div class="card-title">Training Tiles</div>
+    <div id="tiles-grid">
+      <!-- filled by JS -->
+    </div>
+  </div>
+
+  <!-- Event + Support cards -->
+  <div class="grid-2">
+
+    <div class="card">
+      <div class="card-title">Current Event</div>
+      <div id="event-text">No active event</div>
+      <div id="choices-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Support Cards</div>
+      <div id="sc-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     TAB 2 — STRATEGY
+════════════════════════════════════════════ -->
+<div id="tab-strategy" class="tab-panel">
+
+  <div class="controls">
+    <button class="btn-save" onclick="saveStrategy()">Save Strategy</button>
+    <span id="strategy-status" style="font-size:0.8rem;color:var(--green)"></span>
+  </div>
+
+  <div class="grid-2">
+
+    <!-- Stat weights (early / late) -->
+    <div class="card">
+      <div class="card-title">Stat Weights — Early Game</div>
+      <div id="weights-early"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Stat Weights — Late Game</div>
+      <div id="weights-late"></div>
+    </div>
+
+  </div>
+
+  <div class="grid-2" style="margin-top:1.25rem">
+
+    <div class="card">
+      <div class="card-title">Energy Thresholds</div>
+      <div class="slider-row">
+        <label>Rest at</label>
+        <input type="range" id="rest-threshold" min="10" max="90" value="40"
+               oninput="document.getElementById('rest-val').textContent=this.value">
+        <span class="slider-val" id="rest-val">40</span>
+      </div>
+      <div style="font-size:0.78rem;color:var(--muted);margin-top:0.25rem">
+        Bot will rest when energy drops below this value.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Skill Lists</div>
+      <div class="form-row">
+        <label>Blacklist (never buy) — one per line</label>
+        <textarea id="skill-blacklist" style="min-height:80px"></textarea>
+      </div>
+      <div class="form-row">
+        <label>Whitelist (always buy) — one per line</label>
+        <textarea id="skill-whitelist" style="min-height:80px"></textarea>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════
+     TAB 3 — ADVICE (MARKDOWN EDITOR)
+════════════════════════════════════════════ -->
+<div id="tab-advice" class="tab-panel">
+
+  <div class="controls">
+    <select id="advice-select" onchange="loadAdviceFile()">
+      <option value="">— select file —</option>
+    </select>
+    <button class="btn-save" onclick="saveAdviceFile()">Save</button>
+    <button class="btn-add" onclick="newAdviceFile()">+ New File</button>
+    <button class="btn-del" onclick="deleteAdviceFile()">Delete</button>
+    <span id="advice-status"></span>
+  </div>
+
+  <div class="card" style="padding:1rem">
+    <div class="card-title" id="advice-filename">Select or create an advice file</div>
+    <textarea id="advice-editor" placeholder="Write Markdown advice here. The bot will inject this into its prompts for the matching scenario."></textarea>
+  </div>
+
+  <div style="margin-top:1rem;font-size:0.8rem;color:var(--muted);line-height:1.6">
+    <strong style="color:var(--text)">Tips:</strong>
+    Files named <code>general.md</code> are always included.
+    Files named <code>ura_finale.md</code>, <code>unity_cup.md</code>, etc. are injected when that scenario is active.
+    Changes take effect immediately — no restart needed.
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════
+     TAB 4 — EVENT OVERRIDES
+════════════════════════════════════════════ -->
+<div id="tab-events-override" class="tab-panel">
+
+  <div class="controls">
+    <button class="btn-save" onclick="saveOverrides()">Save All</button>
+    <button class="btn-add" onclick="addOverrideRow()">+ Add Rule</button>
+    <span id="overrides-status" style="font-size:0.8rem;color:var(--green)"></span>
+  </div>
+
+  <div class="card" style="overflow-x:auto">
+    <table id="overrides-table">
+      <thead>
+        <tr>
+          <th>Text contains</th>
+          <th>Choice</th>
+          <th>Note</th>
+          <th>Energy min</th>
+          <th>Energy max</th>
+          <th>Turn min</th>
+          <th>Turn max</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="overrides-body">
+      </tbody>
+    </table>
+  </div>
+
+  <div style="margin-top:1rem;font-size:0.8rem;color:var(--muted);line-height:1.6">
+    <strong style="color:var(--text)">How it works:</strong>
+    Rules are checked before the knowledge base and LLM. The first matching rule wins.
+    Leave energy/turn fields empty to match regardless of those conditions.
+    <em>Choice 0 = first option, 1 = second, 2 = third.</em>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════
+     TAB 5 — KNOWLEDGE BASE BROWSER
+════════════════════════════════════════════ -->
+<div id="tab-kb" class="tab-panel">
+
+  <div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
+    <select id="kb-section" onchange="loadKB()" style="padding:0.4rem 0.75rem;border-radius:8px">
+      <option value="support-cards">Support Cards</option>
+      <option value="skills">Skills</option>
+      <option value="events">Events</option>
+    </select>
+    <input class="search-box" id="kb-search" type="text" placeholder="Search..." oninput="filterKB()">
+  </div>
+
+  <div class="card" style="overflow-x:auto">
+    <table id="kb-table">
+      <thead id="kb-thead"></thead>
+      <tbody id="kb-tbody"></tbody>
+    </table>
+  </div>
+
+  <div id="kb-pagination" style="display:flex;gap:0.5rem;margin-top:1rem;align-items:center;font-size:0.85rem">
+    <button class="btn-sm" style="background:var(--surface2);color:var(--text)" onclick="kbPrev()">← Prev</button>
+    <span id="kb-page-info"></span>
+    <button class="btn-sm" style="background:var(--surface2);color:var(--text)" onclick="kbNext()">Next →</button>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════
+     TAB 6 — RUN HISTORY
+════════════════════════════════════════════ -->
+<div id="tab-history" class="tab-panel">
+
+  <div class="controls">
+    <button class="btn-sm" style="background:var(--surface2);color:var(--text);padding:0.5rem 1rem" onclick="loadHistory()">Refresh</button>
+  </div>
+
+  <div class="card" style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Result</th>
+          <th>Trainee</th>
+          <th>Scenario</th>
+          <th>Goals</th>
+          <th>Turns</th>
+          <th>Started</th>
+          <th>Finished</th>
+        </tr>
+      </thead>
+      <tbody id="history-body"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- ═══ TOAST ═══ -->
+<div id="toast"></div>
+
+
+<!-- ═══════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ── Utilities ───────────────────────────────
+async function api(url, method='GET', body=null) {
+  const opts = { method, headers: {} };
+  if (body !== null) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(`${method} ${url} → ${r.status}`);
+  return r.json();
+}
+
+function toast(msg, err=false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.borderColor = err ? 'var(--red)' : 'var(--border)';
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function el(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Tabs ────────────────────────────────────
+const TAB_IDS = ['monitor','strategy','advice','events-override','kb','history'];
+function switchTab(name) {
+  TAB_IDS.forEach(id => {
+    el('tab-'+id)?.classList.toggle('active', id === name);
+  });
+  document.querySelectorAll('nav.tabs button').forEach((b,i) => {
+    b.classList.toggle('active', TAB_IDS[i] === name);
+  });
+  if (name === 'strategy') loadStrategy();
+  if (name === 'advice') loadAdviceList();
+  if (name === 'events-override') loadOverrides();
+  if (name === 'kb') loadKB();
+  if (name === 'history') loadHistory();
+}
+
+// ── Polling ─────────────────────────────────
+let _status = {};
+async function refresh() {
+  try { _status = await api('/api/status'); } catch(e) { return; }
+  renderMonitor(_status);
+}
+setInterval(refresh, 1500);
+refresh();
+
+// ── Monitor rendering ────────────────────────
+const STAT_COLORS = {
+  speed:'#60a5fa', stamina:'#4ade80', power:'#f97316',
+  guts:'#f87171', wit:'#c084fc'
+};
+const MOOD_COLORS = {
+  great:'var(--green)', good:'#86efac', normal:'var(--text)',
+  bad:'var(--yellow)', terrible:'var(--red)'
+};
+
+function renderMonitor(s) {
+  // Header badge
+  const badge = el('fsm-badge');
+  const state = s.fsm_state ?? 'offline';
+  badge.textContent = state.replace(/_/g,' ');
+  badge.className = 'badge ' + (
+    state === 'running_turn' || state === 'executing_action' ? 'badge-running' :
+    state === 'paused' ? 'badge-paused' :
+    state.includes('error') ? 'badge-error' : 'badge-idle'
+  );
+  el('header-screen').textContent = s.game_screen ? `[${s.game_screen}]` : '';
+  if (s.turn) {
+    el('header-turn').style.display = '';
+    el('header-turn').textContent = `Turn ${s.turn} / ${s.max_turns}`;
+  }
+
+  // Energy
+  el('m-energy').textContent = s.energy ?? '—';
+  el('m-energy-bar').style.width = (s.energy ?? 0) + '%';
+  // Turn
+  el('m-turn').textContent = s.turn ? `${s.turn} / ${s.max_turns}` : '—';
+  el('m-turn-bar').style.width = s.max_turns ? `${100*s.turn/s.max_turns}%` : '0%';
+  // Mood
+  const moodEl = el('m-mood');
+  moodEl.textContent = s.mood ?? '—';
+  moodEl.style.color = MOOD_COLORS[s.mood] ?? 'var(--text)';
+  el('m-scenario').textContent = s.scenario || '—';
+
+  // Stats
+  const stats = s.stats ?? {};
+  const statsHtml = Object.entries(stats).map(([k,v]) => `
+    <div class="stat-row">
+      <span class="stat-label" style="color:${STAT_COLORS[k]??'var(--muted)'}">${k}</span>
+      <span class="stat-value">${v}</span>
+    </div>`).join('');
+  el('stats-rows').innerHTML = statsHtml || '<span style="color:var(--muted);font-size:0.85rem">No data</span>';
+
+  // Last action
+  el('last-action').textContent = s.last_action
+    ? `Last: [T${s.last_action_tier}] ${s.last_action}`
+    : '';
+
+  // Training tiles
+  renderTiles(s.training_tiles ?? []);
+
+  // Event
+  const eventPanel = el('event-text');
+  const choicesPanel = el('choices-list');
+  if (s.event_text) {
+    eventPanel.textContent = s.event_text;
+    const choicesHtml = (s.event_choices ?? []).map((c,i) => `
+      <div class="choice-btn${c.recommended?' recommended':''}">
+        <span class="choice-idx">${c.index}</span>${esc(c.text)}
+      </div>`).join('');
+    choicesPanel.innerHTML = choicesHtml;
+  } else {
+    eventPanel.textContent = 'No active event';
+    choicesPanel.innerHTML = '';
+  }
+
+  // Support cards
+  const scHtml = (s.support_cards ?? []).map(c => `
+    <div class="sc-row">
+      <span class="sc-name">${esc(c.name)}</span>
+      ${c.is_friend ? '<span class="sc-friend">Friend</span>' : ''}
+      <div class="sc-bond-wrap">
+        <div class="bar-wrap"><div class="sc-bond-bar bar-fill" style="width:${c.bond}%"></div></div>
+      </div>
+      <span style="font-size:0.78rem;color:var(--muted);width:30px;text-align:right">${c.bond}</span>
+    </div>`).join('');
+  el('sc-list').innerHTML = scHtml || '<span style="color:var(--muted);font-size:0.85rem">No data</span>';
+}
+
+function renderTiles(tiles) {
+  if (!tiles.length) {
+    el('tiles-grid').innerHTML = '<span style="color:var(--muted);font-size:0.85rem">No training tiles</span>';
+    return;
+  }
+  const maxScore = Math.max(...tiles.map(t => t.score ?? 0), 1);
+  const sorted = [...tiles].sort((a,b) => (b.score??0)-(a.score??0));
+  const topStat = sorted[0]?.stat;
+
+  const html = tiles.map(t => {
+    const score = t.score ?? 0;
+    const pct = Math.round(100 * score / maxScore);
+    const badges = [
+      t.is_rainbow && '<span class="tile-badge tb-rainbow">🌈 Rainbow</span>',
+      t.is_gold    && '<span class="tile-badge tb-gold">⭐ Gold</span>',
+      t.has_hint   && '<span class="tile-badge tb-hint">💡 Hint</span>',
+      t.has_director && '<span class="tile-badge tb-dir">🎬 Dir</span>',
+    ].filter(Boolean).join('');
+    const color = STAT_COLORS[t.stat] ?? 'var(--accent)';
+    const isTop = t.stat === topStat;
+    return `
+      <div class="tile${isTop?' top':''}">
+        <div class="tile-stat" style="color:${color}">${t.stat}</div>
+        <div class="tile-score">${score.toFixed ? score.toFixed(1) : score}</div>
+        <div class="tile-score-bar">
+          <div class="tile-score-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+        <div class="tile-badges">${badges}</div>
+        <div class="tile-cards">${t.card_count} card${t.card_count===1?'':'s'}</div>
+      </div>`;
+  }).join('');
+  el('tiles-grid').innerHTML = html;
+}
+
+// ── Strategy ─────────────────────────────────
+let _strategy = {};
+const STAT_NAMES = ['speed','stamina','power','guts','wit'];
+
+async function loadStrategy() {
+  try { _strategy = await api('/api/overrides/strategy'); } catch(e) { _strategy = {}; }
+  renderStrategyForm();
+}
+
+function renderStrategyForm() {
+  const overrides = _strategy.stat_weight_overrides ?? [];
+  const early = overrides.find(o => o.condition === 'early_game')?.weights ?? {};
+  const late  = overrides.find(o => o.condition === 'late_game')?.weights ?? {};
+
+  function sliders(weights, prefix) {
+    return STAT_NAMES.map(s => {
+      const v = weights[s] ?? 1.0;
+      const vStr = parseFloat(v).toFixed(1);
+      return `
+        <div class="slider-row">
+          <label style="color:${STAT_COLORS[s]??'var(--text)'}">${s}</label>
+          <input type="range" id="${prefix}-${s}" min="0.2" max="3.0" step="0.1" value="${v}"
+                 oninput="el('${prefix}-${s}-val').textContent=parseFloat(this.value).toFixed(1)">
+          <span class="slider-val" id="${prefix}-${s}-val">${vStr}</span>
+        </div>`;
+    }).join('');
+  }
+
+  el('weights-early').innerHTML = sliders(early, 'w-early');
+  el('weights-late').innerHTML  = sliders(late,  'w-late');
+
+  // Rest threshold
+  const thresh = _strategy.rest_energy_override ?? 40;
+  el('rest-threshold').value = thresh;
+  el('rest-val').textContent = thresh;
+
+  // Skill lists
+  el('skill-blacklist').value = (_strategy.skill_blacklist ?? []).join('\n');
+  el('skill-whitelist').value = (_strategy.skill_whitelist ?? []).join('\n');
+}
+
+async function saveStrategy() {
+  function readWeights(prefix) {
+    const w = {};
+    STAT_NAMES.forEach(s => {
+      w[s] = parseFloat(el(`${prefix}-${s}`)?.value ?? 1.0);
+    });
+    return w;
+  }
+  const payload = {
+    stat_weight_overrides: [
+      { condition: 'early_game', weights: readWeights('w-early') },
+      { condition: 'late_game',  weights: readWeights('w-late') },
+    ],
+    rest_energy_override: parseInt(el('rest-threshold').value),
+    skill_blacklist: el('skill-blacklist').value.split('\n').map(s=>s.trim()).filter(Boolean),
+    skill_whitelist: el('skill-whitelist').value.split('\n').map(s=>s.trim()).filter(Boolean),
+  };
+  try {
+    await api('/api/overrides/strategy', 'PUT', { data: payload });
+    el('strategy-status').textContent = '✓ Saved';
+    toast('Strategy saved');
+    setTimeout(() => { el('strategy-status').textContent = ''; }, 3000);
+  } catch(e) { toast('Save failed: '+e.message, true); }
+}
+
+// ── Advice ───────────────────────────────────
+async function loadAdviceList() {
+  const files = await api('/api/advice').catch(() => []);
+  const sel = el('advice-select');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— select file —</option>'
+    + files.map(f => `<option value="${esc(f.name)}"${f.name===cur?' selected':''}>${esc(f.name)}</option>`).join('');
+  if (cur) loadAdviceFile();
+}
+
+async function loadAdviceFile() {
+  const name = el('advice-select').value;
+  if (!name) { el('advice-editor').value = ''; el('advice-filename').textContent = 'Select or create a file'; return; }
+  try {
+    const d = await api(`/api/advice/${name}`);
+    el('advice-editor').value = d.content;
+    el('advice-filename').textContent = name;
+  } catch(e) { toast('Load failed: '+e.message, true); }
+}
+
+async function saveAdviceFile() {
+  const name = el('advice-select').value;
+  if (!name) { toast('No file selected', true); return; }
+  try {
+    await api(`/api/advice/${name}`, 'PUT', { content: el('advice-editor').value });
+    el('advice-status').textContent = '✓ Saved';
+    toast('Advice saved — takes effect immediately');
+    setTimeout(() => { el('advice-status').textContent = ''; }, 3000);
+  } catch(e) { toast('Save failed: '+e.message, true); }
+}
+
+async function newAdviceFile() {
+  const raw = prompt('Filename (e.g. unity_cup or unity_cup.md):');
+  if (!raw) return;
+  const name = raw.replace(/\.md$/i, '');
+  if (!name) { toast('Invalid name', true); return; }
+  await api(`/api/advice/${name}`, 'PUT', { content: '' }).catch(e => toast(e.message, true));
+  await loadAdviceList();
+  el('advice-select').value = name;
+  loadAdviceFile();
+}
+
+async function deleteAdviceFile() {
+  const name = el('advice-select').value;
+  if (!name) return;
+  if (!confirm(`Delete "${name}"?`)) return;
+  await api(`/api/advice/${name}`, 'DELETE').catch(e => toast(e.message, true));
+  el('advice-editor').value = '';
+  el('advice-filename').textContent = 'Select or create a file';
+  await loadAdviceList();
+  toast(`Deleted ${name}`);
+}
+
+// ── Event overrides ───────────────────────────
+let _overrides = [];
+
+async function loadOverrides() {
+  _overrides = await api('/api/overrides/events').catch(() => []);
+  renderOverrides();
+}
+
+function renderOverrides() {
+  const tbody = el('overrides-body');
+  tbody.innerHTML = _overrides.map((o, i) => `
+    <tr>
+      <td><input type="text" value="${esc(o.text_contains)}" data-field="text_contains" data-idx="${i}" style="width:200px"></td>
+      <td><input type="number" value="${o.choice??0}" data-field="choice" data-idx="${i}" style="width:55px" min="0" max="2"></td>
+      <td><input type="text" value="${esc(o.note??'')}" data-field="note" data-idx="${i}" style="width:180px"></td>
+      <td><input type="number" value="${o.energy_min??''}" data-field="energy_min" data-idx="${i}" style="width:65px" placeholder="—"></td>
+      <td><input type="number" value="${o.energy_max??''}" data-field="energy_max" data-idx="${i}" style="width:65px" placeholder="—"></td>
+      <td><input type="number" value="${o.turn_min??''}" data-field="turn_min" data-idx="${i}" style="width:55px" placeholder="—"></td>
+      <td><input type="number" value="${o.turn_max??''}" data-field="turn_max" data-idx="${i}" style="width:55px" placeholder="—"></td>
+      <td><button class="btn-del" onclick="removeOverrideRow(${i})">✕</button></td>
+    </tr>`).join('');
+
+  // Live sync inputs → _overrides
+  tbody.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const idx = +inp.dataset.idx;
+      const field = inp.dataset.field;
+      const v = inp.value.trim();
+      if (field === 'choice') _overrides[idx][field] = v === '' ? 0 : parseInt(v);
+      else if (['energy_min','energy_max','turn_min','turn_max'].includes(field))
+        _overrides[idx][field] = v === '' ? null : parseInt(v);
+      else _overrides[idx][field] = v;
+    });
+  });
+}
+
+function addOverrideRow() {
+  _overrides.push({ text_contains:'', choice:0, note:'', energy_min:null, energy_max:null, turn_min:null, turn_max:null });
+  renderOverrides();
+  el('overrides-body').lastElementChild?.querySelector('input')?.focus();
+}
+
+function removeOverrideRow(i) {
+  _overrides.splice(i,1);
+  renderOverrides();
+}
+
+async function saveOverrides() {
+  // Strip null fields before sending
+  const cleaned = _overrides.map(o => {
+    const r = { text_contains: o.text_contains, choice: o.choice, note: o.note ?? '' };
+    if (o.energy_min != null) r.energy_min = o.energy_min;
+    if (o.energy_max != null) r.energy_max = o.energy_max;
+    if (o.turn_min   != null) r.turn_min   = o.turn_min;
+    if (o.turn_max   != null) r.turn_max   = o.turn_max;
+    return r;
+  });
+  try {
+    const res = await api('/api/overrides/events', 'PUT', cleaned);
+    el('overrides-status').textContent = `✓ Saved ${res.count} rules`;
+    toast('Event overrides saved');
+    setTimeout(() => { el('overrides-status').textContent = ''; }, 3000);
+  } catch(e) { toast('Save failed: '+e.message, true); }
+}
+
+// ── Knowledge Base Browser ────────────────────
+let _kbData = [], _kbFiltered = [], _kbPage = 0;
+const KB_PAGE_SIZE = 40;
+
+const KB_COLUMNS = {
+  'support-cards': [
+    { key:'name', label:'Name' }, { key:'type', label:'Type' },
+    { key:'rarity', label:'Rarity' }, { key:'tier', label:'Tier' },
+    { key:'training_bonuses', label:'Training Bonuses' },
+  ],
+  'skills': [
+    { key:'name', label:'Name' }, { key:'category', label:'Category' },
+    { key:'priority', label:'Priority' }, { key:'description', label:'Description' },
+  ],
+  'events': [
+    { key:'event_text', label:'Event Text' }, { key:'best_choice_index', label:'Best Choice' },
+    { key:'source', label:'Source' }, { key:'confidence', label:'Conf.' },
+  ],
+};
+
+async function loadKB() {
+  const section = el('kb-section').value;
+  _kbData = await api(`/api/${section}`).catch(() => []);
+  // For events the API returns {events, total} — unwrap
+  if (_kbData && _kbData.events) _kbData = _kbData.events;
+  _kbPage = 0;
+  filterKB();
+  renderKBHeader(section);
+}
+
+function renderKBHeader(section) {
+  const cols = KB_COLUMNS[section] ?? [];
+  el('kb-thead').innerHTML = '<tr>'+cols.map(c=>`<th>${esc(c.label)}</th>`).join('')+'</tr>';
+}
+
+function filterKB() {
+  const q = el('kb-search').value.toLowerCase();
+  _kbFiltered = q
+    ? _kbData.filter(row => Object.values(row).some(v => String(v??'').toLowerCase().includes(q)))
+    : _kbData;
+  _kbPage = 0;
+  renderKBPage();
+}
+
+function renderKBPage() {
+  const section = el('kb-section').value;
+  const cols = KB_COLUMNS[section] ?? [];
+  const start = _kbPage * KB_PAGE_SIZE;
+  const rows = _kbFiltered.slice(start, start + KB_PAGE_SIZE);
+  el('kb-tbody').innerHTML = rows.map(row =>
+    '<tr>'+cols.map(c=>`<td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(row[c.key])}">${esc(row[c.key])}</td>`).join('')+'</tr>'
+  ).join('');
+  el('kb-page-info').textContent = `${start+1}–${Math.min(start+KB_PAGE_SIZE, _kbFiltered.length)} of ${_kbFiltered.length}`;
+}
+
+function kbPrev() { if (_kbPage > 0) { _kbPage--; renderKBPage(); } }
+function kbNext() {
+  if ((_kbPage+1)*KB_PAGE_SIZE < _kbFiltered.length) { _kbPage++; renderKBPage(); }
+}
+
+// ── Run History ───────────────────────────────
+async function loadHistory() {
+  const runs = await api('/api/runs').catch(() => []);
+  el('history-body').innerHTML = runs.map(r => `
+    <tr class="${r.success ? 'run-success' : ''}">
+      <td>${r.success ? '✓ Win' : '✗ Fail'}</td>
+      <td>${esc(r.trainee_id||'—')}</td>
+      <td>${esc(r.scenario||'—')}</td>
+      <td>${r.goals_completed??0}/${r.total_goals??0}</td>
+      <td>${r.turns_taken??'—'}</td>
+      <td style="font-size:0.78rem">${r.started_at ? new Date(r.started_at).toLocaleString() : '—'}</td>
+      <td style="font-size:0.78rem">${r.finished_at ? new Date(r.finished_at).toLocaleString() : '—'}</td>
+    </tr>`).join('') || '<tr><td colspan="7" style="color:var(--muted);text-align:center">No runs yet</td></tr>';
+}
+</script>
+</body>
+</html>

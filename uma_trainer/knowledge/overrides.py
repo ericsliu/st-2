@@ -1,0 +1,248 @@
+"""Hot-reloading YAML override files for events and training strategy.
+
+data/overrides/events.yaml   — Tier 0 event choice overrides
+data/overrides/strategy.yaml — Stat weight, skill, energy threshold overrides
+
+Both files are re-read whenever their mtime changes (checked every call).
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Event overrides
+# ---------------------------------------------------------------------------
+
+@dataclass
+class EventOverride:
+    """A single Tier 0 event choice override rule."""
+    text_contains: str          # Case-insensitive substring match against event text
+    choice: int                 # 0-based choice index to select
+    note: str = ""              # Human-readable explanation
+    # Optional conditions (all must be true if specified)
+    energy_min: int | None = None    # Only apply if energy >= this
+    energy_max: int | None = None    # Only apply if energy <= this
+    turn_min: int | None = None      # Only apply if turn >= this
+    turn_max: int | None = None      # Only apply if turn <= this
+
+
+# ---------------------------------------------------------------------------
+# Strategy overrides
+# ---------------------------------------------------------------------------
+
+@dataclass
+class StatWeightOverride:
+    condition: str              # "early_game" | "late_game" | "always"
+    weights: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
+class StrategyOverrides:
+    stat_weight_overrides: list[StatWeightOverride] = field(default_factory=list)
+    skill_blacklist: list[str] = field(default_factory=list)
+    skill_whitelist: list[str] = field(default_factory=list)  # Force-buy these
+    rest_energy_override: int | None = None
+    energy_penalty_override: int | None = None
+    bond_priority_turns_override: int | None = None
+    raw: dict = field(default_factory=dict)   # Raw YAML for the dashboard
+
+
+# ---------------------------------------------------------------------------
+# Loader
+# ---------------------------------------------------------------------------
+
+class OverridesLoader:
+    """Loads and hot-reloads YAML override files."""
+
+    EVENTS_FILENAME = "events.yaml"
+    STRATEGY_FILENAME = "strategy.yaml"
+
+    def __init__(self, overrides_dir: str = "data/overrides") -> None:
+        self.overrides_dir = Path(overrides_dir)
+        self.overrides_dir.mkdir(parents=True, exist_ok=True)
+
+        self._events: list[EventOverride] = []
+        self._events_mtime: float = 0.0
+
+        self._strategy: StrategyOverrides = StrategyOverrides()
+        self._strategy_mtime: float = 0.0
+
+    # ------------------------------------------------------------------
+    # Event overrides
+    # ------------------------------------------------------------------
+
+    def get_event_overrides(self) -> list[EventOverride]:
+        """Return event overrides, reloading from disk if file changed."""
+        self._maybe_reload_events()
+        return self._events
+
+    def match_event(
+        self,
+        event_text: str,
+        energy: int = 100,
+        turn: int = 0,
+    ) -> EventOverride | None:
+        """Return the first matching override for an event, or None."""
+        overrides = self.get_event_overrides()
+        text_lower = event_text.lower()
+        for override in overrides:
+            if override.text_contains.lower() not in text_lower:
+                continue
+            if override.energy_min is not None and energy < override.energy_min:
+                continue
+            if override.energy_max is not None and energy > override.energy_max:
+                continue
+            if override.turn_min is not None and turn < override.turn_min:
+                continue
+            if override.turn_max is not None and turn > override.turn_max:
+                continue
+            return override
+        return None
+
+    def save_event_overrides(self, overrides: list[dict]) -> None:
+        """Write event overrides YAML and invalidate cache."""
+        path = self.overrides_dir / self.EVENTS_FILENAME
+        path.write_text(yaml.dump(overrides, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        self._events_mtime = 0.0  # Force reload
+        logger.info("Saved event overrides (%d rules)", len(overrides))
+
+    def get_event_overrides_raw(self) -> list[dict]:
+        """Return raw event overrides as a list of dicts (for the dashboard)."""
+        self._maybe_reload_events()
+        path = self.overrides_dir / self.EVENTS_FILENAME
+        if path.exists():
+            try:
+                return yaml.safe_load(path.read_text()) or []
+            except Exception:
+                return []
+        return []
+
+    # ------------------------------------------------------------------
+    # Strategy overrides
+    # ------------------------------------------------------------------
+
+    def get_strategy(self) -> StrategyOverrides:
+        """Return strategy overrides, reloading from disk if file changed."""
+        self._maybe_reload_strategy()
+        return self._strategy
+
+    def get_stat_weights(self, base_weights: dict[str, float], turn: int, max_turns: int) -> dict[str, float]:
+        """Merge base weights with any applicable override weights."""
+        strategy = self.get_strategy()
+        weights = dict(base_weights)
+
+        for override in strategy.stat_weight_overrides:
+            applies = False
+            if override.condition == "always":
+                applies = True
+            elif override.condition == "early_game" and turn < 24:
+                applies = True
+            elif override.condition == "late_game" and turn > max_turns - 22:
+                applies = True
+
+            if applies:
+                weights.update(override.weights)
+
+        return weights
+
+    def save_strategy(self, data: dict) -> None:
+        """Write strategy YAML and invalidate cache."""
+        path = self.overrides_dir / self.STRATEGY_FILENAME
+        path.write_text(yaml.dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        self._strategy_mtime = 0.0  # Force reload
+        logger.info("Saved strategy overrides")
+
+    def get_strategy_raw(self) -> dict:
+        """Return raw strategy YAML as dict (for the dashboard)."""
+        path = self.overrides_dir / self.STRATEGY_FILENAME
+        if path.exists():
+            try:
+                return yaml.safe_load(path.read_text()) or {}
+            except Exception:
+                return {}
+        return {}
+
+    # ------------------------------------------------------------------
+    # Internal reload logic
+    # ------------------------------------------------------------------
+
+    def _maybe_reload_events(self) -> None:
+        path = self.overrides_dir / self.EVENTS_FILENAME
+        if not path.exists():
+            return
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return
+        if mtime == self._events_mtime:
+            return
+
+        try:
+            raw = yaml.safe_load(path.read_text()) or []
+            self._events = [self._parse_event_override(item) for item in raw if isinstance(item, dict)]
+            self._events_mtime = mtime
+            logger.info("Reloaded event overrides (%d rules)", len(self._events))
+        except Exception as e:
+            logger.warning("Failed to parse event overrides: %s", e)
+
+    def _maybe_reload_strategy(self) -> None:
+        path = self.overrides_dir / self.STRATEGY_FILENAME
+        if not path.exists():
+            return
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return
+        if mtime == self._strategy_mtime:
+            return
+
+        try:
+            raw = yaml.safe_load(path.read_text()) or {}
+            self._strategy = self._parse_strategy(raw)
+            self._strategy.raw = raw
+            self._strategy_mtime = mtime
+            logger.info("Reloaded strategy overrides")
+        except Exception as e:
+            logger.warning("Failed to parse strategy overrides: %s", e)
+
+    @staticmethod
+    def _parse_event_override(item: dict) -> EventOverride:
+        return EventOverride(
+            text_contains=str(item.get("text_contains", "")),
+            choice=int(item.get("choice", 0)),
+            note=str(item.get("note", "")),
+            energy_min=item.get("energy_min"),
+            energy_max=item.get("energy_max"),
+            turn_min=item.get("turn_min"),
+            turn_max=item.get("turn_max"),
+        )
+
+    @staticmethod
+    def _parse_strategy(raw: dict) -> StrategyOverrides:
+        s = StrategyOverrides()
+
+        for item in raw.get("stat_weight_overrides", []):
+            s.stat_weight_overrides.append(
+                StatWeightOverride(
+                    condition=str(item.get("condition", "always")),
+                    weights={k: float(v) for k, v in item.get("weights", {}).items()},
+                )
+            )
+
+        s.skill_blacklist = [str(x) for x in raw.get("skill_blacklist", [])]
+        s.skill_whitelist = [str(x) for x in raw.get("skill_whitelist", [])]
+        s.rest_energy_override = raw.get("rest_energy_override")
+        s.energy_penalty_override = raw.get("energy_penalty_override")
+        s.bond_priority_turns_override = raw.get("bond_priority_turns_override")
+
+        return s

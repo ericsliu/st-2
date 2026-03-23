@@ -1,0 +1,12 @@
+[
+  {"race_id": "junior_debut", "name": "Junior Debut Race", "grade": "Pre-OP", "distance": 1200, "surface": "turf", "direction": "right", "season": "spring", "year": 1, "fan_reward": 100},
+  {"race_id": "hopeful_stakes", "name": "Hopeful Stakes", "grade": "G1", "distance": 2000, "surface": "turf", "direction": "right", "season": "winter", "year": 1, "fan_reward": 5000},
+  {"race_id": "satsuki_sho", "name": "Satsuki Sho", "grade": "G1", "distance": 2000, "surface": "turf", "direction": "right", "season": "spring", "year": 2, "fan_reward": 8000},
+  {"race_id": "japanese_derby", "name": "Japanese Derby", "grade": "G1", "distance": 2400, "surface": "turf", "direction": "left", "season": "spring", "year": 2, "fan_reward": 10000},
+  {"race_id": "kikka_sho", "name": "Kikka Sho", "grade": "G1", "distance": 3000, "surface": "turf", "direction": "right", "season": "fall", "year": 2, "fan_reward": 9000},
+  {"race_id": "tenno_sho_spring", "name": "Tenno Sho (Spring)", "grade": "G1", "distance": 3200, "surface": "turf", "direction": "right", "season": "spring", "year": 3, "fan_reward": 12000},
+  {"race_id": "takarazuka_kinen", "name": "Takarazuka Kinen", "grade": "G1", "distance": 2200, "surface": "turf", "direction": "right", "season": "summer", "year": 3, "fan_reward": 11000},
+  {"race_id": "japan_cup", "name": "Japan Cup", "grade": "G1", "distance": 2400, "surface": "turf", "direction": "left", "season": "fall", "year": 3, "fan_reward": 15000},
+  {"race_id": "arima_kinen", "name": "Arima Kinen", "grade": "G1", "distance": 2500, "surface": "turf", "direction": "right", "season": "winter", "year": 3, "fan_reward": 15000},
+  {"race_id": "ura_finale", "name": "URA Finale", "grade": "G1", "distance": 2400, "surface": "turf", "direction": "left", "season": "winter", "year": 3, "fan_reward": 50000}
+]

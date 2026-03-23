@@ -1,0 +1,45 @@
+capture:
+  backend: scrcpy            # scrcpy | screencapturekit
+  device_serial: ""          # Empty = first connected ADB device
+  window_title: "MuMuPlayer"
+  fps_decision: 1.5          # Frames per second during active decision points
+  fps_passive: 0.2           # Frames per second during races/cutscenes/loading
+  crop_region: null          # [x, y, w, h] or null for full frame
+
+yolo:
+  model_path: models/uma_yolo.mlpackage
+  confidence_threshold: 0.50
+  use_coreml: true
+  device: mps                # mps | cpu | cuda
+
+ocr:
+  primary: apple_vision      # apple_vision | easyocr
+  fallback_enabled: true
+  language: en
+
+llm:
+  local_model: phi4-mini:q4_K_M
+  ollama_host: http://localhost:11434
+  claude_model: claude-sonnet-4-6
+  claude_daily_limit: 5      # Max Claude API calls per day
+  cache_ttl_hours: 168       # 1 week
+
+scorer:
+  stat_weights:
+    speed: 1.2
+    stamina: 1.0
+    power: 0.9
+    guts: 0.8
+    wit: 0.7
+  rainbow_bonus: 2.0
+  gold_bonus: 1.5
+  hint_bonus: 1.2
+  card_stack_per_card: 0.8
+  energy_penalty_threshold: 30
+  rest_energy_threshold: 20
+  bond_priority_turns: 24    # Prefer bond-building in first 24 turns
+
+db_path: data/uma_trainer.db
+log_level: INFO
+web_port: 8080
+headless: false

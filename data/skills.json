@@ -1,0 +1,66 @@
+[
+  {
+    "skill_id": "acceleration_boost",
+    "name": "Acceleration Boost",
+    "description": "Greatly increases acceleration at the start of a race.",
+    "category": "speed",
+    "stat_requirements": {"speed": 300},
+    "priority": 9
+  },
+  {
+    "skill_id": "corner_recovery",
+    "name": "Corner Recovery",
+    "description": "Recovers stamina when rounding corners.",
+    "category": "stamina",
+    "stat_requirements": {"stamina": 250},
+    "priority": 8
+  },
+  {
+    "skill_id": "late_bloomer",
+    "name": "Late Bloomer",
+    "description": "Activates in the final stretch, providing a speed boost.",
+    "category": "speed",
+    "stat_requirements": {"speed": 400, "guts": 200},
+    "priority": 9
+  },
+  {
+    "skill_id": "position_sense",
+    "name": "Position Sense",
+    "description": "Improves positioning during races.",
+    "category": "support",
+    "stat_requirements": {"wit": 200},
+    "priority": 7
+  },
+  {
+    "skill_id": "front_runner_instinct",
+    "name": "Front Runner's Instinct",
+    "description": "Speed boost when running at the front of the pack.",
+    "category": "speed",
+    "stat_requirements": {"speed": 350},
+    "priority": 8
+  },
+  {
+    "skill_id": "stamina_keeper",
+    "name": "Stamina Keeper",
+    "description": "Reduces stamina consumption throughout the race.",
+    "category": "stamina",
+    "stat_requirements": {"stamina": 300},
+    "priority": 7
+  },
+  {
+    "skill_id": "recovery_medium",
+    "name": "Recovery (Medium)",
+    "description": "Slightly recovers HP during a race.",
+    "category": "recovery",
+    "stat_requirements": {},
+    "priority": 4
+  },
+  {
+    "skill_id": "concentration",
+    "name": "Concentration",
+    "description": "Small speed boost when the pack bunches up.",
+    "category": "speed",
+    "stat_requirements": {"wit": 150},
+    "priority": 6
+  }
+]

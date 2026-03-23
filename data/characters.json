@@ -1,0 +1,56 @@
+[
+  {
+    "character_id": "special_week",
+    "name": "Special Week",
+    "aptitudes": {
+      "speed": "A",
+      "stamina": "B",
+      "power": "B",
+      "guts": "C",
+      "wit": "C",
+      "turf": "A",
+      "dirt": "C",
+      "short": "C",
+      "mile": "B",
+      "medium": "A",
+      "long": "B"
+    },
+    "scenario": "ura_finale"
+  },
+  {
+    "character_id": "silence_suzuka",
+    "name": "Silence Suzuka",
+    "aptitudes": {
+      "speed": "S",
+      "stamina": "C",
+      "power": "A",
+      "guts": "B",
+      "wit": "B",
+      "turf": "A",
+      "dirt": "D",
+      "short": "B",
+      "mile": "A",
+      "medium": "A",
+      "long": "C"
+    },
+    "scenario": "ura_finale"
+  },
+  {
+    "character_id": "tokai_teio",
+    "name": "Tokai Teio",
+    "aptitudes": {
+      "speed": "A",
+      "stamina": "B",
+      "power": "A",
+      "guts": "B",
+      "wit": "C",
+      "turf": "A",
+      "dirt": "C",
+      "short": "C",
+      "mile": "B",
+      "medium": "A",
+      "long": "A"
+    },
+    "scenario": "ura_finale"
+  }
+]

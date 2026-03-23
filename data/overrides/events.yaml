@@ -1,0 +1,28 @@
+# Event choice overrides — Tier 0 (checked before the knowledge base)
+#
+# Each rule matches if text_contains is found (case-insensitive) in the event text.
+# Optional conditions: energy_min, energy_max, turn_min, turn_max
+#
+# choice: 0-based index (0 = first option, 1 = second, etc.)
+
+- text_contains: "extra workout"
+  choice: 0
+  note: "Always accept if energy is sufficient"
+  energy_min: 40
+
+- text_contains: "feeling fired up"
+  choice: 0
+  note: "Accept the motivation boost"
+
+- text_contains: "rival challenges"
+  choice: 0
+  note: "Always accept rivalry events — bond + stats"
+
+- text_contains: "take a break"
+  choice: 1
+  note: "Skip the break option — keep training"
+  energy_min: 50
+
+- text_contains: "nightmare"
+  choice: 1
+  note: "Avoid nightmare events that drain energy"

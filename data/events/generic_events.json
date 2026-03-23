@@ -1,0 +1,26 @@
+[
+  {
+    "event_text": "You're feeling fired up today!",
+    "character_id": null,
+    "best_choice_index": 0,
+    "choice_effects": ["Mood improves", "Energy decreases slightly"],
+    "source": "manual",
+    "confidence": 1.0
+  },
+  {
+    "event_text": "A rival challenges you to a practice race.",
+    "character_id": null,
+    "best_choice_index": 0,
+    "choice_effects": ["Speed +5, Bond +5 with rival", "Skip — no effect"],
+    "source": "manual",
+    "confidence": 0.9
+  },
+  {
+    "event_text": "Your trainer suggests an extra workout.",
+    "character_id": null,
+    "best_choice_index": 0,
+    "choice_effects": ["Power +8, Energy -10", "Rest and skip"],
+    "source": "manual",
+    "confidence": 0.85
+  }
+]
