@@ -1,8 +1,9 @@
-"""Event screen decision logic: 5-tier lookup chain.
+"""Event screen decision logic: 6-tier lookup chain.
 
 Tier 0: Hand-written overrides (data/overrides/events.yaml) — highest priority
-Tier 1: Exact hash lookup in knowledge base
-Tier 2: Fuzzy match (>85% similarity) in knowledge base
+Tier 1: Exact hash lookup in bot knowledge base
+Tier 2: Fuzzy match (>85% similarity) in bot knowledge base
+Tier 2.5: Fuzzy match against master.mdb event titles
 Tier 3: Local LLM (Ollama)
 Tier 4: Claude API (high-value fallback)
 """
@@ -52,8 +53,13 @@ class EventHandler:
         if result is not None:
             return result
 
-        # Tier 2: Fuzzy match
+        # Tier 2: Fuzzy match in bot KB
         result = self._try_fuzzy_match(event_text, choices)
+        if result is not None:
+            return result
+
+        # Tier 2.5: Fuzzy match in master.mdb
+        result = self._try_master_db_match(event_text, choices)
         if result is not None:
             return result
 
@@ -117,6 +123,37 @@ class EventHandler:
                 )
         except Exception as e:
             logger.debug("Fuzzy match lookup error: %s", e)
+        return None
+
+    def _try_master_db_match(
+        self, event_text: str, choices: list[EventChoice]
+    ) -> BotAction | None:
+        """Try matching against master.mdb event titles.
+
+        master.mdb provides the event's story_id which can link to choice
+        outcome data.  Even when outcome data isn't available, confirming
+        that the event exists in master.mdb gives the LLM better context.
+        For now this tier identifies the event but still defers the choice
+        decision to the LLM tiers (since master.mdb event outcome tables
+        require further reverse-engineering to map choice index → effects).
+        """
+        try:
+            match = self.kb.event_lookup.find_in_master(event_text, threshold=80)
+            if match is not None:
+                story_id, matched_title, score = match
+                # We found the event in master.mdb but can't yet determine
+                # the optimal choice from the DB alone.  Log it and continue
+                # to the LLM tiers, which can use the matched title for
+                # better context.
+                logger.info(
+                    "Event: master.mdb match '%s' (score=%.0f, id=%d) — "
+                    "deferring choice to LLM",
+                    matched_title[:40], score, story_id,
+                )
+                # TODO: Once we reverse-engineer single_mode_event_conclusion
+                # tables, we can return a choice directly here.
+        except Exception as e:
+            logger.debug("Master.mdb event lookup error: %s", e)
         return None
 
     def _try_local_llm(

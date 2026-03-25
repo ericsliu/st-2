@@ -7,7 +7,6 @@ Usage:
     python main.py run                  # Start autonomous Career Mode run
     python main.py dashboard            # Start web monitoring dashboard
     python main.py import-kb            # Import knowledge base JSON files
-    python main.py collect              # Collect screenshots for YOLO training
     python main.py --help
 """
 
@@ -32,7 +31,7 @@ def _setup_logging(level: str) -> None:
         datefmt="%H:%M:%S",
     )
     # Suppress noisy third-party loggers
-    for noisy in ("ultralytics", "PIL", "easyocr", "httpx", "httpcore"):
+    for noisy in ("PIL", "easyocr", "httpx", "httpcore"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
@@ -73,7 +72,7 @@ def run(config: str, preset: str | None, headless: bool, log_level: str) -> None
 
     # Build the dependency graph
     from uma_trainer.capture import get_capture_backend
-    from uma_trainer.perception.detector import YOLODetector
+    from uma_trainer.perception.screen_identifier import ScreenIdentifier
     from uma_trainer.perception.ocr import OCREngine
     from uma_trainer.perception.assembler import StateAssembler
     from uma_trainer.decision.scorer import TrainingScorer
@@ -95,11 +94,11 @@ def run(config: str, preset: str | None, headless: bool, log_level: str) -> None
     logger.info("Initializing Uma Trainer...")
 
     capture = get_capture_backend(cfg.capture)
-    detector = YOLODetector(cfg.yolo)
+    screen_id = ScreenIdentifier(tolerance=cfg.regions.screen_anchor_tolerance)
     ocr = OCREngine(cfg.ocr)
-    assembler = StateAssembler(detector, ocr, cfg)
+    assembler = StateAssembler(screen_id, ocr, cfg)
 
-    kb = KnowledgeBase(cfg.db_path)
+    kb = KnowledgeBase(cfg.db_path, master_mdb_path=cfg.master_mdb_path)
     advice = AdviceLoader(Path("data/advice"))
     overrides = OverridesLoader(Path("data/overrides"))
     llm_cache = LLMCache(cfg.db_path, cfg.llm.cache_ttl_hours)
@@ -111,7 +110,7 @@ def run(config: str, preset: str | None, headless: bool, log_level: str) -> None
         scorer.apply_preset(preset_data)
 
     event_handler = EventHandler(kb, local_llm, claude, overrides=overrides)
-    skill_buyer = SkillBuyer(kb, scorer)
+    skill_buyer = SkillBuyer(kb, scorer, overrides=overrides)
     race_selector = RaceSelector(kb)
     engine = DecisionEngine(scorer, event_handler, skill_buyer, race_selector)
 
@@ -191,22 +190,6 @@ def import_kb(data: str, db: str, clear: bool, log_level: str) -> None:
     loader = KnowledgeBaseLoader(kb, data)
     loader.load_all()
     kb.close()
-
-
-@cli.command()
-@click.option("--config", default="config/default.yaml", show_default=True)
-@click.option("--output", default="datasets/images", show_default=True)
-@click.option("--interval", default=5.0, show_default=True, help="Auto-capture interval (seconds)")
-@click.option("--log-level", default="INFO", show_default=True)
-def collect(config: str, output: str, interval: float, log_level: str) -> None:
-    """Collect screenshots for building the YOLO training dataset."""
-    _setup_logging(log_level)
-    import subprocess
-    subprocess.run(
-        [sys.executable, "scripts/collect_screenshots.py",
-         "--config", config, "--output", output, "--interval", str(interval)],
-        check=False,
-    )
 
 
 if __name__ == "__main__":

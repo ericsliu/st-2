@@ -6,11 +6,10 @@ capture:
   fps_passive: 0.2           # Frames per second during races/cutscenes/loading
   crop_region: null          # [x, y, w, h] or null for full frame
 
-yolo:
-  model_path: models/uma_yolo.mlpackage
-  confidence_threshold: 0.50
-  use_coreml: true
-  device: mps                # mps | cpu | cuda
+regions:
+  canonical_resolution: [1080, 1920]
+  screen_anchor_tolerance: 30
+  template_dir: data/templates
 
 ocr:
   primary: apple_vision      # apple_vision | easyocr
@@ -40,6 +39,7 @@ scorer:
   bond_priority_turns: 24    # Prefer bond-building in first 24 turns
 
 db_path: data/uma_trainer.db
+master_mdb_path: data/master.mdb
 log_level: INFO
 web_port: 8080
 headless: false

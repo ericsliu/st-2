@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Generator
 
 from uma_trainer.knowledge.event_lookup import EventLookup
+from uma_trainer.knowledge.master_db import MasterDB
 from uma_trainer.knowledge.skill_lookup import SkillLookup
 from uma_trainer.knowledge.card_lookup import CardLookup
 
@@ -19,20 +20,39 @@ SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 
 class KnowledgeBase:
-    """Top-level knowledge base: owns the SQLite connection and sub-lookups."""
+    """Top-level knowledge base: owns the SQLite connection and sub-lookups.
 
-    def __init__(self, db_path: str = "data/uma_trainer.db") -> None:
+    Optionally integrates with master.mdb (the game's own database) for
+    authoritative static data on events, skills, support cards, etc.
+    """
+
+    def __init__(
+        self,
+        db_path: str = "data/uma_trainer.db",
+        master_mdb_path: str | None = None,
+    ) -> None:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
         self._conn = self._open_connection()
         self._apply_schema()
 
-        self.event_lookup = EventLookup(self)
+        # Optional master.mdb for authoritative game data
+        self.master_db: MasterDB | None = None
+        if master_mdb_path:
+            self.master_db = MasterDB(master_mdb_path)
+            if not self.master_db.available:
+                self.master_db = None
+
+        self.event_lookup = EventLookup(self, master_db=self.master_db)
         self.skill_lookup = SkillLookup(self)
         self.card_lookup = CardLookup(self)
 
-        logger.info("KnowledgeBase ready at %s", self.db_path)
+        logger.info(
+            "KnowledgeBase ready at %s (master.mdb: %s)",
+            self.db_path,
+            "available" if self.master_db else "not available",
+        )
 
     def _open_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(
@@ -108,6 +128,8 @@ class KnowledgeBase:
         self._conn.commit()
 
     def close(self) -> None:
+        if self.master_db:
+            self.master_db.close()
         if self._conn:
             self._conn.close()
 

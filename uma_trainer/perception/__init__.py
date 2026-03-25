@@ -1,1 +1,1 @@
-"""Perception pipeline: YOLO detection, OCR, and state assembly."""
+"""Perception pipeline: screen identification, OCR, pixel analysis, and state assembly."""

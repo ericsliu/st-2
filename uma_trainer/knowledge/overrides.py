@@ -47,14 +47,45 @@ class StatWeightOverride:
 
 
 @dataclass
+class SkillPriority:
+    """A skill the bot should actively try to acquire."""
+    name: str
+    max_circle: int = 1   # 1 = single-circle only, 2 = allow double-circle
+
+
+@dataclass
 class StrategyOverrides:
     stat_weight_overrides: list[StatWeightOverride] = field(default_factory=list)
     skill_blacklist: list[str] = field(default_factory=list)
-    skill_whitelist: list[str] = field(default_factory=list)  # Force-buy these
+    skill_priority_list: list[SkillPriority] = field(default_factory=list)
+    allow_double_circle: bool = False   # Global default; parent runs set False
     rest_energy_override: int | None = None
     energy_penalty_override: int | None = None
     bond_priority_turns_override: int | None = None
     raw: dict = field(default_factory=dict)   # Raw YAML for the dashboard
+
+    def is_priority_skill(self, name: str) -> SkillPriority | None:
+        """Check if a skill is on the priority list (case-insensitive)."""
+        name_lower = name.lower()
+        for sp in self.skill_priority_list:
+            if sp.name.lower() == name_lower:
+                return sp
+        return None
+
+    def is_blacklisted(self, name: str) -> bool:
+        name_lower = name.lower()
+        return any(b.lower() in name_lower for b in self.skill_blacklist)
+
+    def should_double_circle(self, name: str) -> bool:
+        """Whether a specific skill should be double-circled.
+
+        Only True if the global allow_double_circle is set AND the skill
+        is on the priority list with max_circle >= 2.
+        """
+        if not self.allow_double_circle:
+            return False
+        sp = self.is_priority_skill(name)
+        return sp is not None and sp.max_circle >= 2
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +271,25 @@ class OverridesLoader:
             )
 
         s.skill_blacklist = [str(x) for x in raw.get("skill_blacklist", [])]
-        s.skill_whitelist = [str(x) for x in raw.get("skill_whitelist", [])]
+
+        # Priority list: skills the AI will actively try to acquire
+        for item in raw.get("skill_priority_list", []):
+            if isinstance(item, str):
+                s.skill_priority_list.append(SkillPriority(name=item))
+            elif isinstance(item, dict):
+                s.skill_priority_list.append(
+                    SkillPriority(
+                        name=str(item.get("name", "")),
+                        max_circle=int(item.get("max_circle", 1)),
+                    )
+                )
+
+        # Backwards compat: treat old skill_whitelist as priority list
+        for name in raw.get("skill_whitelist", []):
+            if not any(sp.name.lower() == str(name).lower() for sp in s.skill_priority_list):
+                s.skill_priority_list.append(SkillPriority(name=str(name)))
+
+        s.allow_double_circle = bool(raw.get("allow_double_circle", False))
         s.rest_energy_override = raw.get("rest_energy_override")
         s.energy_penalty_override = raw.get("energy_penalty_override")
         s.bond_priority_turns_override = raw.get("bond_priority_turns_override")

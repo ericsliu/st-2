@@ -20,23 +20,10 @@ class CaptureConfig(BaseModel):
     crop_region: tuple[int, int, int, int] | None = None  # x, y, w, h
 
 
-class YOLOConfig(BaseModel):
-    model_path: str = "models/uma_yolo.mlpackage"
-    confidence_threshold: float = 0.50
-    use_coreml: bool = True
-    device: str = "mps"
-
-    @model_validator(mode="after")
-    def check_model_exists(self) -> "YOLOConfig":
-        path = Path(self.model_path)
-        if not path.exists():
-            # Not a hard error — model may not be trained yet
-            import warnings
-            warnings.warn(
-                f"YOLO model not found at {self.model_path}. "
-                "Run scripts/train_yolo.py first, or the bot will use stub detection."
-            )
-        return self
+class RegionsConfig(BaseModel):
+    canonical_resolution: tuple[int, int] = (1080, 1920)
+    screen_anchor_tolerance: int = 30
+    template_dir: str = "data/templates"
 
 
 class OCRConfig(BaseModel):
@@ -81,11 +68,12 @@ class ScorerConfig(BaseModel):
 
 class AppConfig(BaseModel):
     capture: CaptureConfig = Field(default_factory=CaptureConfig)
-    yolo: YOLOConfig = Field(default_factory=YOLOConfig)
+    regions: RegionsConfig = Field(default_factory=RegionsConfig)
     ocr: OCRConfig = Field(default_factory=OCRConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     scorer: ScorerConfig = Field(default_factory=ScorerConfig)
     db_path: str = "data/uma_trainer.db"
+    master_mdb_path: str = "data/master.mdb"
     log_level: str = "INFO"
     web_port: int = 8080
     headless: bool = False

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uma_trainer.knowledge.database import KnowledgeBase
+    from uma_trainer.knowledge.master_db import MasterDB
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +29,21 @@ class EventRecord:
 
 
 class EventLookup:
-    """Provides exact and fuzzy event text matching."""
+    """Provides exact and fuzzy event text matching.
 
-    def __init__(self, db: "KnowledgeBase") -> None:
+    Lookup chain: exact hash → fuzzy match in bot DB → fuzzy match
+    against master.mdb event titles → LLM fallback (handled externally).
+    """
+
+    def __init__(
+        self,
+        db: "KnowledgeBase",
+        master_db: "MasterDB | None" = None,
+    ) -> None:
         self.db = db
+        self.master_db = master_db
         self._corpus: list[tuple[str, int]] | None = None  # (text, id) cache
+        self._master_corpus: list[tuple[str, int]] | None = None
 
     def _normalize(self, text: str) -> str:
         return text.strip().lower()
@@ -120,12 +131,64 @@ class EventLookup:
         self._corpus = None  # Invalidate cache
         logger.debug("Upserted event: hash=%s...", h[:16])
 
+    def find_in_master(
+        self, event_text: str, threshold: int = 80
+    ) -> tuple[int, str, float] | None:
+        """Search master.mdb event titles for a fuzzy match.
+
+        Returns (story_id, matched_title, score) or None.
+        This provides the master.mdb story_id which can be used to look up
+        choice outcomes from the game's own data.
+        """
+        if self.master_db is None or not self.master_db.available:
+            return None
+
+        try:
+            from rapidfuzz import process, fuzz
+        except ImportError:
+            return None
+
+        corpus = self._get_master_corpus()
+        if not corpus:
+            return None
+
+        texts = [t for t, _ in corpus]
+        normalized = self._normalize(event_text)
+
+        match = process.extractOne(
+            normalized,
+            texts,
+            scorer=fuzz.token_sort_ratio,
+            score_cutoff=threshold,
+        )
+        if match is None:
+            return None
+
+        matched_text, score, idx = match
+        story_id = corpus[idx][1]
+        logger.debug(
+            "Master.mdb event match: score=%.1f id=%d '%s'",
+            score, story_id, matched_text[:40],
+        )
+        return (story_id, matched_text, float(score))
+
     def _get_corpus(self) -> list[tuple[str, int]]:
         """Return cached (normalized_text, id) pairs for fuzzy matching."""
         if self._corpus is None:
             rows = self.db.query_all("SELECT id, event_text FROM events")
             self._corpus = [(self._normalize(r["event_text"]), r["id"]) for r in rows]
         return self._corpus
+
+    def _get_master_corpus(self) -> list[tuple[str, int]]:
+        """Return cached (normalized_title, story_id) pairs from master.mdb."""
+        if self._master_corpus is None and self.master_db is not None:
+            titles = self.master_db.get_event_titles()
+            self._master_corpus = [
+                (self._normalize(title), story_id)
+                for story_id, title in titles
+                if title.strip()
+            ]
+        return self._master_corpus or []
 
     def _row_to_record(self, row) -> EventRecord:
         return EventRecord(

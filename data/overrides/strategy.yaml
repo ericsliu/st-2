@@ -15,7 +15,7 @@ stat_weight_overrides:
   - condition: late_game
     weights:
       speed: 1.5      # Late game: max speed
-      stamina: 1.3    # And stamina for URA finals
+      stamina: 1.3    # And stamina for finals
       power: 0.9
       guts: 0.6
       wit: 0.4        # Wit less useful late game
@@ -25,10 +25,23 @@ skill_blacklist:
   - "Recovery (Medium)"
   - "Healing Wave"
 
-# Skills to always buy if available (overrides cost threshold)
-skill_whitelist:
+# Skills the AI will actively try to acquire.
+# Each entry can be a simple name (string) or an object with max_circle:
+#   - "Acceleration Boost"              # single-circle only (default)
+#   - name: "Late Bloomer"
+#     max_circle: 2                     # allow double-circle for this skill
+#
+# Skills on this list bypass normal cost thresholds and are always bought
+# if available and affordable.
+skill_priority_list:
   - "Late Bloomer"
   - "Acceleration Boost"
+
+# Whether to allow double-circling (upgrading) skills at all.
+# Set to false for parent/factor runs where breadth > depth.
+# Even when true, only skills on the priority list with max_circle: 2
+# will be double-circled.
+allow_double_circle: false
 
 # Energy threshold overrides (null = use config value)
 rest_energy_override: null         # e.g. 25 to rest earlier

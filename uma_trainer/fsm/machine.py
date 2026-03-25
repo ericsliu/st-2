@@ -382,12 +382,8 @@ class GameFSM:
     # ------------------------------------------------------------------
 
     def _initialize(self) -> None:
-        """Load models, connect ADB, initialize subsystems."""
+        """Connect ADB and initialize subsystems."""
         logger.info("Initializing perception pipeline...")
-        try:
-            self.assembler.detector.load_model()
-        except Exception as e:
-            logger.warning("YOLO model load failed: %s (continuing in stub mode)", e)
 
         logger.info("Connecting ADB...")
         if not self.injector.adb.connect():

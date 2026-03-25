@@ -179,6 +179,37 @@
     /* ── Search box ── */
     .search-box { padding: 0.4rem 0.8rem; border-radius: 8px; width: 260px; }
 
+    /* ── Typeahead ── */
+    .typeahead-results {
+      position: absolute; top: 100%; left: 0; right: 0; z-index: 50;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      max-height: 200px; overflow-y: auto; display: none;
+    }
+    .typeahead-results.open { display: block; }
+    .typeahead-item {
+      padding: 0.45rem 0.75rem; cursor: pointer; font-size: 0.85rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .typeahead-item:hover { background: var(--border); }
+    .typeahead-item:last-child { border-bottom: none; }
+    .typeahead-source { font-size: 0.65rem; color: var(--muted); margin-left: 0.5rem; }
+
+    /* ── Skill tags ── */
+    .skill-tag {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      padding: 0.25rem 0.6rem; font-size: 0.8rem; margin: 0.15rem 0.15rem;
+    }
+    .skill-tag select {
+      background: var(--surface); border: 1px solid var(--border); color: var(--text);
+      border-radius: 4px; font-size: 0.72rem; padding: 0.1rem 0.2rem;
+    }
+    .skill-tag .remove {
+      cursor: pointer; color: var(--red); font-weight: 700; font-size: 0.9rem;
+      line-height: 1; margin-left: 0.15rem;
+    }
+    .skill-tag .remove:hover { color: #ff4444; }
+
     /* ── Toast ── */
     #toast {
       position: fixed; bottom: 1.5rem; right: 1.5rem;
@@ -329,14 +360,38 @@
     </div>
 
     <div class="card">
-      <div class="card-title">Skill Lists</div>
-      <div class="form-row">
-        <label>Blacklist (never buy) — one per line</label>
-        <textarea id="skill-blacklist" style="min-height:80px"></textarea>
+      <div class="card-title">Skill Strategy</div>
+
+      <div class="form-row" style="margin-bottom:0.75rem">
+        <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+          <input type="checkbox" id="allow-double-circle">
+          <span>Allow double-circling skills</span>
+        </label>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:0.15rem">
+          Disable for parent/factor runs (breadth over depth).
+        </div>
       </div>
+
       <div class="form-row">
-        <label>Whitelist (always buy) — one per line</label>
-        <textarea id="skill-whitelist" style="min-height:80px"></textarea>
+        <label>Priority List (AI will actively acquire these)</label>
+        <div id="priority-list" style="margin-bottom:0.4rem"></div>
+        <div style="position:relative">
+          <input type="text" id="priority-search" placeholder="Search skill name..."
+                 oninput="skillTypeahead('priority-search','priority-results',addPrioritySkill)"
+                 autocomplete="off">
+          <div id="priority-results" class="typeahead-results"></div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Blacklist (never buy)</label>
+        <div id="blacklist-items" style="margin-bottom:0.4rem"></div>
+        <div style="position:relative">
+          <input type="text" id="blacklist-search" placeholder="Search skill name..."
+                 oninput="skillTypeahead('blacklist-search','blacklist-results',addBlacklistSkill)"
+                 autocomplete="off">
+          <div id="blacklist-results" class="typeahead-results"></div>
+        </div>
       </div>
     </div>
 
@@ -656,6 +711,10 @@ async function loadStrategy() {
   renderStrategyForm();
 }
 
+let _priorityList = [];  // [{name, max_circle}]
+let _blacklistItems = [];
+let _typeaheadTimer = null;
+
 function renderStrategyForm() {
   const overrides = _strategy.stat_weight_overrides ?? [];
   const early = overrides.find(o => o.condition === 'early_game')?.weights ?? {};
@@ -683,10 +742,98 @@ function renderStrategyForm() {
   el('rest-threshold').value = thresh;
   el('rest-val').textContent = thresh;
 
-  // Skill lists
-  el('skill-blacklist').value = (_strategy.skill_blacklist ?? []).join('\n');
-  el('skill-whitelist').value = (_strategy.skill_whitelist ?? []).join('\n');
+  // Double-circle toggle
+  el('allow-double-circle').checked = !!_strategy.allow_double_circle;
+
+  // Priority list
+  _priorityList = (_strategy.skill_priority_list ?? []).map(item =>
+    typeof item === 'string' ? { name: item, max_circle: 1 } : item
+  );
+  // Backwards compat: migrate old whitelist
+  for (const name of (_strategy.skill_whitelist ?? [])) {
+    if (!_priorityList.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+      _priorityList.push({ name, max_circle: 1 });
+    }
+  }
+  renderPriorityList();
+
+  // Blacklist
+  _blacklistItems = _strategy.skill_blacklist ?? [];
+  renderBlacklistItems();
 }
+
+function renderPriorityList() {
+  el('priority-list').innerHTML = _priorityList.map((item, i) => `
+    <span class="skill-tag">
+      ${item.name}
+      <select onchange="_priorityList[${i}].max_circle=parseInt(this.value)"
+              title="Max circle level">
+        <option value="1" ${item.max_circle===1?'selected':''}>①</option>
+        <option value="2" ${item.max_circle>=2?'selected':''}>②</option>
+      </select>
+      <span class="remove" onclick="removePriority(${i})">×</span>
+    </span>
+  `).join('') || '<span style="color:var(--muted);font-size:0.8rem">None — add skills below</span>';
+}
+
+function renderBlacklistItems() {
+  el('blacklist-items').innerHTML = _blacklistItems.map((name, i) => `
+    <span class="skill-tag">
+      ${name}
+      <span class="remove" onclick="removeBlacklist(${i})">×</span>
+    </span>
+  `).join('') || '<span style="color:var(--muted);font-size:0.8rem">None</span>';
+}
+
+function addPrioritySkill(name) {
+  if (!_priorityList.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+    _priorityList.push({ name, max_circle: 1 });
+    renderPriorityList();
+  }
+  el('priority-search').value = '';
+  el('priority-results').classList.remove('open');
+}
+
+function addBlacklistSkill(name) {
+  if (!_blacklistItems.some(b => b.toLowerCase() === name.toLowerCase())) {
+    _blacklistItems.push(name);
+    renderBlacklistItems();
+  }
+  el('blacklist-search').value = '';
+  el('blacklist-results').classList.remove('open');
+}
+
+function removePriority(i) { _priorityList.splice(i, 1); renderPriorityList(); }
+function removeBlacklist(i) { _blacklistItems.splice(i, 1); renderBlacklistItems(); }
+
+async function skillTypeahead(inputId, resultsId, onSelect) {
+  clearTimeout(_typeaheadTimer);
+  const q = el(inputId).value.trim();
+  const container = el(resultsId);
+
+  if (q.length < 2) { container.classList.remove('open'); return; }
+
+  _typeaheadTimer = setTimeout(async () => {
+    try {
+      const results = await api(`/api/skills/search?q=${encodeURIComponent(q)}&limit=10`);
+      if (!results.length) { container.classList.remove('open'); return; }
+      container.innerHTML = results.map(r => `
+        <div class="typeahead-item" onclick="(${onSelect.name})('${r.name.replace(/'/g,"\\'")}')">
+          ${r.name}
+          <span class="typeahead-source">${r.source === 'master' ? 'game DB' : 'bot DB'}</span>
+        </div>
+      `).join('');
+      container.classList.add('open');
+    } catch(e) { container.classList.remove('open'); }
+  }, 250);
+}
+
+// Close typeahead on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('.typeahead-results') && !e.target.matches('#priority-search,#blacklist-search')) {
+    document.querySelectorAll('.typeahead-results').forEach(el => el.classList.remove('open'));
+  }
+});
 
 async function saveStrategy() {
   function readWeights(prefix) {
@@ -702,8 +849,9 @@ async function saveStrategy() {
       { condition: 'late_game',  weights: readWeights('w-late') },
     ],
     rest_energy_override: parseInt(el('rest-threshold').value),
-    skill_blacklist: el('skill-blacklist').value.split('\n').map(s=>s.trim()).filter(Boolean),
-    skill_whitelist: el('skill-whitelist').value.split('\n').map(s=>s.trim()).filter(Boolean),
+    allow_double_circle: el('allow-double-circle').checked,
+    skill_blacklist: _blacklistItems,
+    skill_priority_list: _priorityList,
   };
   try {
     await api('/api/overrides/strategy', 'PUT', { data: payload });

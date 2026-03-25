@@ -62,7 +62,7 @@ info "Core dependencies installed"
 
 if [[ -f "requirements-dev.txt" ]]; then
   read -r -p "$(echo -e "${YELLOW}?${RESET}  Install dev dependencies (pytest, ruff, etc.)? [y/N] ")" install_dev
-  if [[ "${install_dev,,}" == "y" ]]; then
+  if [[ "$install_dev" == "y" || "$install_dev" == "Y" ]]; then
     pip install --quiet -r requirements-dev.txt
     info "Dev dependencies installed"
   fi

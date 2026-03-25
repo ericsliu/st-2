@@ -90,9 +90,9 @@ def create_router(
                 "fps_decision": config.capture.fps_decision,
                 "fps_passive": config.capture.fps_passive,
             },
-            "yolo": {
-                "model_path": config.yolo.model_path,
-                "confidence_threshold": config.yolo.confidence_threshold,
+            "regions": {
+                "canonical_resolution": config.regions.canonical_resolution,
+                "screen_anchor_tolerance": config.regions.screen_anchor_tolerance,
             },
             "llm": {
                 "local_model": config.llm.local_model,
@@ -196,6 +196,50 @@ def create_router(
             "SELECT skill_id, name, category, priority, description FROM skills ORDER BY priority DESC, name"
         )
         return [dict(r) for r in rows]
+
+    @router.get("/api/skills/search")
+    async def search_skills(q: str = "", limit: int = 20) -> list[dict]:
+        """Typeahead search for skill names.
+
+        Searches master.mdb first (authoritative, complete), then falls
+        back to the bot's own skill table.
+        """
+        if not q or len(q) < 2:
+            return []
+
+        results: list[dict] = []
+        seen_names: set[str] = set()
+
+        # Search master.mdb (has all skills)
+        if kb is not None and kb.master_db is not None and kb.master_db.available:
+            from uma_trainer.knowledge.master_db import _CAT_SKILL_NAME
+            matches = kb.master_db.search_text(_CAT_SKILL_NAME, q)
+            for skill_id, name in matches[:limit]:
+                name_lower = name.lower()
+                if name_lower not in seen_names:
+                    seen_names.add(name_lower)
+                    results.append({
+                        "skill_id": str(skill_id),
+                        "name": name,
+                        "source": "master",
+                    })
+
+        # Also search bot's own DB
+        if kb is not None and len(results) < limit:
+            rows = kb.query_all(
+                "SELECT skill_id, name FROM skills WHERE name_lower LIKE ? LIMIT ?",
+                (f"%{q.lower()}%", limit - len(results)),
+            )
+            for r in rows:
+                if r["name"].lower() not in seen_names:
+                    seen_names.add(r["name"].lower())
+                    results.append({
+                        "skill_id": r["skill_id"],
+                        "name": r["name"],
+                        "source": "bot_db",
+                    })
+
+        return results[:limit]
 
     @router.get("/api/events")
     async def get_events(limit: int = 50, offset: int = 0) -> dict[str, Any]:
