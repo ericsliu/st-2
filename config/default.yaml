@@ -1,6 +1,6 @@
 capture:
   backend: scrcpy            # scrcpy | screencapturekit
-  device_serial: ""          # Empty = first connected ADB device
+  device_serial: "127.0.0.1:5555"          # Empty = first connected ADB device
   window_title: "MuMuPlayer"
   fps_decision: 1.5          # Frames per second during active decision points
   fps_passive: 0.2           # Frames per second during races/cutscenes/loading

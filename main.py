@@ -43,10 +43,11 @@ def cli() -> None:
 
 @cli.command()
 @click.option("--config", default="config/default.yaml", show_default=True, help="Config file")
+@click.option("--scenario", default=None, help="Scenario name (trackblazer, ura_finale, unity_cup)")
 @click.option("--preset", default=None, help="Training preset name (from data/presets/)")
 @click.option("--headless", is_flag=True, help="Run without web dashboard")
 @click.option("--log-level", default="INFO", show_default=True)
-def run(config: str, preset: str | None, headless: bool, log_level: str) -> None:
+def run(config: str, scenario: str | None, preset: str | None, headless: bool, log_level: str) -> None:
     """Start an autonomous Career Mode training run."""
     _setup_logging(log_level)
     logger = logging.getLogger("main")
@@ -70,6 +71,12 @@ def run(config: str, preset: str | None, headless: bool, log_level: str) -> None
     else:
         preset_data = None
 
+    # Load scenario
+    from uma_trainer.scenario import load_scenario
+    scenario_name = scenario or cfg.scenario
+    scenario_handler = load_scenario(scenario_name)
+    logger.info("Scenario: %s (%s)", scenario_handler.config.display_name, scenario_name)
+
     # Build the dependency graph
     from uma_trainer.capture import get_capture_backend
     from uma_trainer.perception.screen_identifier import ScreenIdentifier
@@ -79,6 +86,7 @@ def run(config: str, preset: str | None, headless: bool, log_level: str) -> None
     from uma_trainer.decision.event_handler import EventHandler
     from uma_trainer.decision.skill_buyer import SkillBuyer
     from uma_trainer.decision.race_selector import RaceSelector
+    from uma_trainer.decision.shop_manager import ShopManager
     from uma_trainer.decision.strategy import DecisionEngine
     from uma_trainer.action.adb_client import ADBClient
     from uma_trainer.action.input_injector import InputInjector
@@ -94,7 +102,10 @@ def run(config: str, preset: str | None, headless: bool, log_level: str) -> None
     logger.info("Initializing Uma Trainer...")
 
     capture = get_capture_backend(cfg.capture)
-    screen_id = ScreenIdentifier(tolerance=cfg.regions.screen_anchor_tolerance)
+    screen_id = ScreenIdentifier(
+        template_dir=cfg.regions.template_dir,
+        tolerance=cfg.regions.screen_anchor_tolerance,
+    )
     ocr = OCREngine(cfg.ocr)
     assembler = StateAssembler(screen_id, ocr, cfg)
 
@@ -105,14 +116,18 @@ def run(config: str, preset: str | None, headless: bool, log_level: str) -> None
     local_llm = OllamaClient(cfg.llm, llm_cache, advice=advice)
     claude = ClaudeAPIClient(cfg.llm, llm_cache, advice=advice)
 
-    scorer = TrainingScorer(cfg.scorer, overrides=overrides)
+    scorer = TrainingScorer(cfg.scorer, overrides=overrides, scenario=scenario_handler)
     if preset_data:
         scorer.apply_preset(preset_data)
 
     event_handler = EventHandler(kb, local_llm, claude, overrides=overrides)
     skill_buyer = SkillBuyer(kb, scorer, overrides=overrides)
-    race_selector = RaceSelector(kb)
-    engine = DecisionEngine(scorer, event_handler, skill_buyer, race_selector)
+    race_selector = RaceSelector(kb, overrides=overrides, scenario=scenario_handler)
+    shop_manager = ShopManager(overrides=overrides, scenario=scenario_handler)
+    engine = DecisionEngine(
+        scorer, event_handler, skill_buyer, race_selector, shop_manager,
+        scenario=scenario_handler,
+    )
 
     adb = ADBClient(cfg.capture.device_serial)
     injector = InputInjector(adb, cfg)

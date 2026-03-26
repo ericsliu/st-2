@@ -62,9 +62,11 @@ class ActionType(str, Enum):
     INFIRMARY = "infirmary"
     GO_OUT = "go_out"
     RACE = "race"
+    SHOP = "shop"
     CHOOSE_EVENT = "choose_event"
     BUY_SKILL = "buy_skill"
     SKIP_SKILL = "skip_skill"
+    USE_ITEM = "use_item"
     WAIT = "wait"  # No-op (loading, animation)
 
 
@@ -105,6 +107,13 @@ class TrainingTile:
     failure_rate: float = 0.0  # 0.0–1.0
     position: int = 0  # 0–4 left to right
     tap_coords: tuple[int, int] = (0, 0)
+    # Stat gains OCR'd from the tile: {stat_name: gain_value}
+    stat_gains: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def total_stat_gain(self) -> int:
+        """Sum of all stat gains from this tile."""
+        return sum(self.stat_gains.values())
 
 
 @dataclass
@@ -120,6 +129,20 @@ class CareerGoal:
     race_name: str = ""
     required_fans: int = 0
     completed: bool = False
+
+
+@dataclass
+class RaceOption:
+    """A race available in the race list screen."""
+    name: str = ""
+    grade: str = ""              # G1, G2, G3, OP, Pre-OP
+    distance: int = 0            # metres
+    surface: str = "turf"        # turf | dirt
+    season: str = ""
+    fan_reward: int = 0
+    is_goal_race: bool = False   # Part of career goals
+    position: int = 0            # Index in the visible list (for tapping)
+    tap_coords: tuple[int, int] = (0, 0)
 
 
 @dataclass
@@ -155,20 +178,24 @@ class GameState:
     current_turn: int = 0
     max_turns: int = 72
     scenario: str = "ura_finale"
+    fan_count: int = 0
     event_text: str = ""
     event_choices: list[EventChoice] = field(default_factory=list)
     available_skills: list[SkillOption] = field(default_factory=list)
+    available_races: list[RaceOption] = field(default_factory=list)
     confidence: float = 1.0  # Assembler confidence in this reading
     raw_detections: list[Any] = field(default_factory=list)
     timestamp: float = field(default_factory=time.time)
 
     @property
     def is_early_game(self) -> bool:
-        return self.current_turn < 24
+        """Deprecated: use scenario.is_phase(turn, 'early_game') instead."""
+        return self.current_turn < self.max_turns * 0.333
 
     @property
     def is_late_game(self) -> bool:
-        return self.current_turn > 50
+        """Deprecated: use scenario.is_phase(turn, 'late_game') instead."""
+        return self.current_turn > self.max_turns * 0.694
 
 
 @dataclass

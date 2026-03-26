@@ -6,17 +6,20 @@ overlays all defined regions as labelled rectangles, and optionally
 runs OCR on each region to verify accuracy.
 
 Usage:
-    # Capture live from ADB and annotate:
+    # Capture live from ADB, save raw screenshot, and annotate:
     python scripts/calibrate_regions.py
 
     # Load an existing screenshot:
-    python scripts/calibrate_regions.py --input /tmp/uma_training.png
+    python scripts/calibrate_regions.py --input /tmp/uma_screenshot.png
 
     # Also run OCR on each region:
     python scripts/calibrate_regions.py --ocr
 
     # Sample pixel colours at specific points:
     python scripts/calibrate_regions.py --sample 540,960 100,1530
+
+    # Sample anchor points to verify screen identification:
+    python scripts/calibrate_regions.py --anchors
 """
 
 from __future__ import annotations
@@ -26,12 +29,22 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Ensure project root is on sys.path so `uma_trainer` is importable
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 
 def capture_screenshot(device: str = "127.0.0.1:5555") -> np.ndarray:
-    """Capture a screenshot via ADB."""
+    """Capture a screenshot via ADB. Auto-connects if needed."""
+    # Ensure ADB is connected to the device
+    subprocess.run(
+        ["adb", "connect", device],
+        capture_output=True,
+        timeout=5,
+    )
+
     result = subprocess.run(
         ["adb", "-s", device, "exec-out", "screencap", "-p"],
         capture_output=True,
@@ -126,9 +139,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Calibrate region map coordinates")
     parser.add_argument("--input", "-i", help="Path to screenshot PNG (skip ADB capture)")
     parser.add_argument("--device", "-d", default="127.0.0.1:5555", help="ADB device serial")
-    parser.add_argument("--output", "-o", default="/tmp/uma_calibrated.png", help="Output path")
+    parser.add_argument("--output", "-o", default="/tmp/uma_calibrated.png", help="Output annotated path")
+    parser.add_argument("--raw", default="/tmp/uma_screenshot.png", help="Save raw screenshot to this path")
     parser.add_argument("--ocr", action="store_true", help="Run OCR on each region")
     parser.add_argument("--sample", nargs="*", help="Pixel coords to sample (x,y)")
+    parser.add_argument("--anchors", action="store_true", help="Sample all screen anchor points")
     parser.add_argument(
         "--screen",
         choices=["turn_action", "stat_select", "event", "all"],
@@ -142,6 +157,10 @@ def main() -> None:
         img_rgb = np.array(Image.open(args.input).convert("RGB"))
     else:
         img_rgb = capture_screenshot(args.device)
+        # Save the raw screenshot so it can be re-used with --input
+        raw_path = args.raw
+        Image.fromarray(img_rgb).save(raw_path)
+        print(f"Raw screenshot saved to: {raw_path}")
 
     print(f"Frame size: {img_rgb.shape[1]}×{img_rgb.shape[0]}")
 
@@ -177,6 +196,52 @@ def main() -> None:
             x, y = s.split(",")
             points.append((int(x), int(y)))
         sample_pixels(img_rgb, points)
+
+    # Test screen identification (templates + pixel anchor fallback)
+    if args.anchors:
+        from uma_trainer.perception.screen_identifier import ScreenIdentifier
+
+        sid = ScreenIdentifier()
+        result, details = sid.identify_with_details(frame_bgr)
+
+        if details:
+            print("\n=== Template Matching ===")
+            for screen_name, tmpl_results in details.items():
+                print(f"  {screen_name}:")
+                for t in tmpl_results:
+                    status = "HIT" if t["matched"] else "MISS"
+                    loc = f" at {t['location']}" if t["location"] else ""
+                    print(f"    {t['name']:20s} conf={t['confidence']:.3f} → {status}{loc}")
+                print()
+        else:
+            print("\n  (No templates loaded — using pixel anchor fallback)")
+            # Show pixel anchor details
+            from uma_trainer.perception.regions import SCREEN_ANCHORS
+            print("\n=== Pixel Anchor Analysis ===")
+            for anchor_set in SCREEN_ANCHORS:
+                matches = 0
+                total = len(anchor_set.anchors)
+                for anchor in anchor_set.anchors:
+                    x = min(max(anchor.x, 0), img_rgb.shape[1] - 1)
+                    y = min(max(anchor.y, 0), img_rgb.shape[0] - 1)
+                    r, g, b = img_rgb[y, x, :3]
+                    hit = anchor.matches(int(r), int(g), int(b), tolerance=30)
+                    matches += hit
+                    status = "HIT" if hit else "MISS"
+                    print(
+                        f"  [{anchor_set.screen.value:12s}] ({x:4d},{y:4d}) "
+                        f"R={r:3d} G={g:3d} B={b:3d}  → {status}"
+                    )
+                matched = matches >= anchor_set.min_matches
+                print(
+                    f"  → {anchor_set.screen.value}: {matches}/{total} "
+                    f"(need {anchor_set.min_matches}) — "
+                    f"{'MATCHED' if matched else 'no match'}\n"
+                )
+
+        is_stat = sid.is_stat_selection(frame_bgr) if result.value == "training" else False
+        print(f"  ScreenIdentifier result: {result.value}"
+              f"{' (stat selection)' if is_stat else ''}")
 
     # Run OCR
     if args.ocr:

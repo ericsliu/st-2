@@ -1,0 +1,89 @@
+# Trackblazer scenario definition
+# 72-turn career across 3 years with ~30 races, shop system, and Grade Points.
+
+name: trackblazer
+display_name: "Trackblazer"
+max_turns: 72
+
+# Phase boundaries as fractions of max_turns
+phases:
+  junior:  { start: 0.0,   end: 0.333 }   # turns 0-23
+  classic: { start: 0.333, end: 0.667 }   # turns 24-47
+  senior:  { start: 0.667, end: 1.0   }   # turns 48-71
+
+# Aliases map to fractional ranges for use in stat_weight_overrides etc.
+phase_aliases:
+  early_game: { start: 0.0,   end: 0.333 }   # turns 0-23
+  late_game:  { start: 0.694, end: 1.0   }   # turns 50-71
+
+# Scenario-specific features (used by has_feature() checks)
+features:
+  - shop
+  - grade_points
+  - race_heavy
+
+# Available actions on the turn action screen
+available_actions:
+  - rest
+  - training
+  - skills
+  - infirmary
+  - recreation
+  - shop
+  - races
+
+# Named event windows mapped to turn ranges
+event_calendar:
+  summer_camp:
+    - { start_turn: 12, end_turn: 15 }
+    - { start_turn: 36, end_turn: 39 }
+    - { start_turn: 60, end_turn: 63 }
+  twinkle_star:
+    - { start_turn: 69, end_turn: 71 }
+
+rest_threshold: 5
+
+# Race configuration
+race:
+  min_score: 1.0
+  race_interval: 2
+  skip_early_turns: 5
+  safe_race_chain: 2
+  energy_cost: 27
+
+  grade_points:
+    G1:     [100, 60, 40, 20, 10]
+    G2:     [80, 48, 32, 16, 8]
+    G3:     [60, 36, 24, 12, 6]
+    OP:     [40, 24, 16, 8, 4]
+    Pre-OP: [20, 12, 8, 4, 2]
+    Debut:  [10, 6, 4, 2, 1]
+
+  grade_value:
+    G1: 10.0
+    G2: 7.0
+    G3: 4.0
+    OP: 2.0
+    Pre-OP: 1.0
+    Debut: 0.5
+
+  grade_point_targets:
+    "1,turf": 60
+    "1,dirt": 30
+    "2,turf": 300
+    "2,dirt": 200
+    "3,turf": 300
+    "3,dirt": 300
+
+  fan_targets:
+    1: 5000
+    2: 60000
+    3: 120000
+
+  shop_coins: [100, 60, 30, 0]
+
+# Shop configuration (only for scenarios with the "shop" feature)
+shop:
+  refresh_interval: 6
+  unlock_turn: 6
+  exceptional_gain_threshold: 30

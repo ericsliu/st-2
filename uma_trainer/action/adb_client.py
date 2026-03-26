@@ -31,7 +31,24 @@ class ADBClient:
     # ------------------------------------------------------------------
 
     def connect(self) -> bool:
-        """Verify ADB device is available. Returns True on success."""
+        """Connect to ADB device. Auto-connects TCP devices if needed."""
+        # If device_serial looks like a TCP address, try adb connect first
+        if self.device_serial and ":" in self.device_serial:
+            try:
+                result = subprocess.run(
+                    ["adb", "connect", self.device_serial],
+                    capture_output=True, text=True, timeout=10,
+                )
+                out = result.stdout.strip()
+                if "connected" in out or "already connected" in out:
+                    logger.info("ADB auto-connected to %s", self.device_serial)
+                else:
+                    logger.warning("ADB connect attempt: %s", out)
+            except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+                logger.error("ADB connect command failed: %s", e)
+                return False
+
+        # Verify device is available
         try:
             result = self._run(["get-state"], timeout=5)
             if "device" in result.stdout:

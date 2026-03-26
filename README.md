@@ -127,6 +127,8 @@ python main.py run --preset speed_stam_ura
 
 ## Running the Bot
 
+Mumuplayer must be running for the following to work.
+
 ### Basic run (with web dashboard)
 
 ```bash

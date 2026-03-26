@@ -20,6 +20,7 @@ from uma_trainer.types import (
 
 if TYPE_CHECKING:
     from uma_trainer.knowledge.overrides import OverridesLoader
+    from uma_trainer.scenario.base import ScenarioHandler
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +28,15 @@ logger = logging.getLogger(__name__)
 class TrainingScorer:
     """Scores training tiles and decides the best action for a given game state."""
 
-    def __init__(self, config: ScorerConfig, overrides: "OverridesLoader | None" = None) -> None:
+    def __init__(
+        self,
+        config: ScorerConfig,
+        overrides: "OverridesLoader | None" = None,
+        scenario: "ScenarioHandler | None" = None,
+    ) -> None:
         self.config = config
         self.overrides = overrides
+        self.scenario = scenario
 
     # ------------------------------------------------------------------
     # Main decision entry points
@@ -75,20 +82,36 @@ class TrainingScorer:
         )
 
     def should_rest(self, state: GameState) -> bool:
-        """True if energy is too low to safely train."""
+        """True if energy is too low to safely train.
+
+        Priority: strategy.yaml override > scenario YAML > scorer config.
+        """
         threshold = self.config.rest_energy_threshold
+
+        # Scenario definition provides the base threshold
+        if self.scenario:
+            threshold = self.scenario.get_rest_threshold()
+
+        # strategy.yaml can override for live-tuning
         if self.overrides:
             strategy = self.overrides.get_strategy()
             if strategy.rest_energy_override is not None:
                 threshold = strategy.rest_energy_override
+
         return state.energy < threshold
 
     def _get_effective_weights(self, state: GameState) -> dict[str, float]:
         """Return stat weights merged with any active override weights."""
         if self.overrides is None:
             return self.config.stat_weights
+
+        phase_checker = None
+        if self.scenario:
+            phase_checker = lambda phase: self.scenario.is_phase(state.current_turn, phase)
+
         return self.overrides.get_stat_weights(
-            self.config.stat_weights, state.current_turn, state.max_turns
+            self.config.stat_weights, state.current_turn, state.max_turns,
+            phase_checker=phase_checker,
         )
 
     # ------------------------------------------------------------------
@@ -128,7 +151,12 @@ class TrainingScorer:
             score += 6.0
 
         # 6. Bond-building priority (early game: prefer tiles with low-bond cards)
-        if state.is_early_game:
+        is_early = (
+            self.scenario.is_phase(state.current_turn, "early_game")
+            if self.scenario
+            else state.is_early_game
+        )
+        if is_early:
             low_bond_cards = [
                 c for c in tile.support_cards
                 if self._get_card_bond(c, state) < 60

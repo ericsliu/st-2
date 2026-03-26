@@ -1,10 +1,20 @@
-"""Race entry decision logic."""
+"""Race selection logic for Career Mode.
+
+Handles race scoring on the race list screen and delegates
+scenario-specific race-vs-train decisions to the scenario handler.
+"""
 
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
-from uma_trainer.types import ActionType, BotAction, GameState
+from uma_trainer.types import ActionType, BotAction, GameState, RaceOption
+
+if TYPE_CHECKING:
+    from uma_trainer.knowledge.database import KnowledgeBase
+    from uma_trainer.knowledge.overrides import OverridesLoader
+    from uma_trainer.scenario.base import ScenarioHandler
 
 logger = logging.getLogger(__name__)
 
@@ -12,61 +22,227 @@ logger = logging.getLogger(__name__)
 class RaceSelector:
     """Decides whether to enter a race and which race to choose."""
 
-    def __init__(self, kb) -> None:
+    def __init__(
+        self,
+        kb: "KnowledgeBase",
+        overrides: "OverridesLoader | None" = None,
+        scenario: "ScenarioHandler | None" = None,
+    ) -> None:
         self.kb = kb
+        self.overrides = overrides
+        self.scenario = scenario
+
+    # ------------------------------------------------------------------
+    # Main entry point: race list screen
+    # ------------------------------------------------------------------
 
     def decide(self, state: GameState) -> BotAction:
-        """Determine the best race entry action.
+        """Pick the best race from the available race list.
 
-        Strategy:
-        1. If a mandatory career goal race is available → enter it
-        2. If fan count is below the next goal threshold → enter a fan race
-        3. Otherwise → skip / train instead
+        Called when the game is on the RACE_ENTRY screen.
         """
-        required_race = self._find_required_race(state)
-        if required_race:
-            logger.info("Race: entering required goal race '%s'", required_race)
+        if not state.available_races:
+            logger.info("Race list empty — going back")
             return BotAction(
-                action_type=ActionType.RACE,
-                target=required_race,
-                reason=f"Career goal race: {required_race}",
-                tier_used=1,
+                action_type=ActionType.WAIT,
+                reason="No races available",
             )
 
-        # Check if we need fans for the next goal
-        next_goal = self._next_incomplete_goal(state)
-        if next_goal and self._needs_fan_boost(state, next_goal):
-            logger.info("Race: fan boost race (need %d fans)", next_goal.required_fans)
+        scored = self.score_races(state)
+        if not scored:
             return BotAction(
-                action_type=ActionType.RACE,
-                target="any",
-                reason=f"Fan boost: need {next_goal.required_fans} fans",
-                tier_used=1,
+                action_type=ActionType.WAIT,
+                reason="No races scored",
             )
 
-        # Skip — prefer training
+        best_race, best_score = scored[0]
+
+        min_score = self.scenario.get_race_min_score() if self.scenario else 5.0
+        if best_score < min_score:
+            logger.info("Race: skipping, best score %.1f < %.1f", best_score, min_score)
+            return BotAction(
+                action_type=ActionType.WAIT,
+                reason=f"No worthwhile race (best={best_score:.1f})",
+            )
+
+        logger.info(
+            "Race: selecting '%s' (grade=%s, dist=%dm, score=%.1f)",
+            best_race.name, best_race.grade, best_race.distance, best_score,
+        )
+        if self.scenario:
+            self.scenario.on_race_completed()
         return BotAction(
-            action_type=ActionType.SKIP_SKILL,
-            reason="Skipping race — no goals require it",
+            action_type=ActionType.RACE,
+            target=best_race.name,
+            tap_coords=best_race.tap_coords,
+            reason=f"{best_race.name} ({best_race.grade}, score={best_score:.1f})",
             tier_used=1,
         )
 
+    # ------------------------------------------------------------------
+    # Turn action screen: should we race this turn?
+    # ------------------------------------------------------------------
+
+    def should_race_this_turn(self, state: GameState) -> BotAction | None:
+        """Called from the turn action screen to decide if the bot should
+        tap the Races button instead of training.
+
+        Returns a BotAction to tap the Races button, or None if training
+        is preferred.
+        """
+        from uma_trainer.perception.regions import TURN_ACTION_REGIONS, get_tap_center
+        races_btn = get_tap_center(TURN_ACTION_REGIONS["btn_races"])
+
+        # --- Always check for mandatory goal races ---
+        goal_race = self._find_required_race(state)
+        if goal_race:
+            logger.info("Race: goal race '%s' is due", goal_race)
+            return BotAction(
+                action_type=ActionType.RACE,
+                tap_coords=races_btn,
+                reason=f"Goal race due: {goal_race}",
+                tier_used=1,
+            )
+
+        # Delegate scenario-specific logic
+        if self.scenario:
+            return self.scenario.should_race_this_turn(state, races_btn)
+
+        # Fallback: only race for fan boosts
+        if self._needs_fan_boost(state):
+            return BotAction(
+                action_type=ActionType.RACE,
+                tap_coords=races_btn,
+                reason="Need fans for next goal",
+                tier_used=1,
+            )
+
+        return None
+
+    def on_non_race_action(self) -> None:
+        """Call when the bot takes a non-race action to reset counters."""
+        if self.scenario:
+            self.scenario.on_non_race_action()
+
+    # ------------------------------------------------------------------
+    # Scoring races on the race list screen
+    # ------------------------------------------------------------------
+
+    def score_races(
+        self, state: GameState,
+    ) -> list[tuple[RaceOption, float]]:
+        """Score all available races and return sorted best-first."""
+        scored = [(race, self._score_race(race, state)) for race in state.available_races]
+        return sorted(scored, key=lambda x: x[1], reverse=True)
+
+    def _score_race(self, race: RaceOption, state: GameState) -> float:
+        """Score a single race option."""
+        score = 0.0
+        strategy = self._get_race_strategy()
+
+        # 1. Goal race — highest priority
+        if race.is_goal_race:
+            score += 200.0
+
+        # 2. Grade value — G1 >> G2 >> G3
+        grade_value = (
+            self.scenario.get_grade_value(race.grade)
+            if self.scenario else 1.0
+        )
+        score += grade_value * 3.0
+
+        # 3. Grade Points value (how many points would winning give us?)
+        gp_list = (
+            self.scenario.get_grade_points(race.grade)
+            if self.scenario else []
+        )
+        gp = gp_list[0] if gp_list else 0
+        if gp > 0 and self.scenario:
+            year = self.scenario.current_year(state.current_turn)
+            surface = strategy.get("preferred_surface", "turf")
+            target = self.scenario.get_grade_point_target(year, surface)
+            if target > 0:
+                # TODO: track actual GP, not estimate
+                deficit = max(0, target // 3)
+                urgency = min(deficit / 100.0, 3.0)
+                score += gp * 0.3 * urgency
+
+        # 4. Fan reward
+        if race.fan_reward > 0:
+            score += min(race.fan_reward / 2000.0, 8.0)
+
+        # 5. Distance aptitude matching
+        preferred_distances = strategy.get("preferred_distances", [])
+        if preferred_distances and race.distance > 0:
+            best_fit = min(abs(race.distance - d) for d in preferred_distances)
+            if best_fit <= 200:
+                score += 10.0
+            elif best_fit <= 400:
+                score += 5.0
+            elif best_fit <= 800:
+                score += 1.0
+            else:
+                score -= 5.0  # Bad aptitude match
+
+        # 6. Surface preference
+        preferred_surface = strategy.get("preferred_surface", "turf")
+        if preferred_surface:
+            if race.surface == preferred_surface:
+                score += 5.0
+            else:
+                score -= 8.0  # Wrong surface is a significant penalty
+
+        return max(0.0, score)
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
     def _find_required_race(self, state: GameState) -> str | None:
-        """Return a race name if a career goal race must be entered this turn."""
+        """Return a race name if a career goal race must be entered."""
         for goal in state.career_goals:
             if not goal.completed and goal.race_name:
                 return goal.race_name
         return None
 
-    def _next_incomplete_goal(self, state: GameState):
-        """Return the next incomplete CareerGoal, or None."""
+    def _needs_fan_boost(self, state: GameState) -> bool:
+        """True if fan count is too low for the next goal."""
         for goal in state.career_goals:
-            if not goal.completed:
-                return goal
-        return None
+            if not goal.completed and goal.required_fans > 0:
+                if state.fan_count < goal.required_fans * 0.7:
+                    return True
+        return False
 
-    def _needs_fan_boost(self, state: GameState, goal) -> bool:
-        """True if we're well below the fan count needed for the next goal."""
-        # Heuristic: enter race if we're below 70% of the goal's fan requirement
-        # We don't track current fans yet — this will be populated by assembler
-        return False  # TODO: OCR current fan count
+    def _get_race_strategy(self) -> dict:
+        """Get race-related strategy settings from overrides."""
+        if not self.overrides:
+            return {}
+        strategy = self.overrides.get_strategy()
+        return strategy.raw.get("race_strategy", {})
+
+    def lookup_race_info(self, race_name: str) -> dict | None:
+        """Look up race metadata from the knowledge base."""
+        row = self.kb.query_one(
+            "SELECT * FROM race_calendar WHERE name = ?",
+            (race_name,),
+        )
+        if row:
+            return dict(row)
+
+        # Fuzzy match
+        try:
+            from rapidfuzz import fuzz
+            rows = self.kb.query_all("SELECT * FROM race_calendar")
+            best_match = None
+            best_ratio = 0
+            for r in rows:
+                ratio = fuzz.ratio(race_name.lower(), r["name"].lower())
+                if ratio > best_ratio:
+                    best_ratio = ratio
+                    best_match = r
+            if best_match and best_ratio >= 70:
+                return dict(best_match)
+        except ImportError:
+            pass
+
+        return None

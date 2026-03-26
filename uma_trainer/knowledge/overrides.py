@@ -12,7 +12,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import yaml
 
@@ -62,6 +62,7 @@ class StrategyOverrides:
     rest_energy_override: int | None = None
     energy_penalty_override: int | None = None
     bond_priority_turns_override: int | None = None
+    scenario_rest_thresholds: dict[str, int] = field(default_factory=dict)
     raw: dict = field(default_factory=dict)   # Raw YAML for the dashboard
 
     def is_priority_skill(self, name: str) -> SkillPriority | None:
@@ -167,8 +168,20 @@ class OverridesLoader:
         self._maybe_reload_strategy()
         return self._strategy
 
-    def get_stat_weights(self, base_weights: dict[str, float], turn: int, max_turns: int) -> dict[str, float]:
-        """Merge base weights with any applicable override weights."""
+    def get_stat_weights(
+        self,
+        base_weights: dict[str, float],
+        turn: int,
+        max_turns: int,
+        phase_checker: "Callable[[str], bool] | None" = None,
+    ) -> dict[str, float]:
+        """Merge base weights with any applicable override weights.
+
+        Args:
+            phase_checker: Optional function that takes a phase name
+                (e.g. "early_game") and returns True if currently active.
+                If not provided, falls back to fractional turn boundaries.
+        """
         strategy = self.get_strategy()
         weights = dict(base_weights)
 
@@ -176,10 +189,15 @@ class OverridesLoader:
             applies = False
             if override.condition == "always":
                 applies = True
-            elif override.condition == "early_game" and turn < 24:
-                applies = True
-            elif override.condition == "late_game" and turn > max_turns - 22:
-                applies = True
+            elif phase_checker:
+                applies = phase_checker(override.condition)
+            else:
+                # Fallback: fractional boundaries
+                frac = turn / max(max_turns, 1)
+                if override.condition == "early_game":
+                    applies = frac < 0.333
+                elif override.condition == "late_game":
+                    applies = frac > 0.694
 
             if applies:
                 weights.update(override.weights)
@@ -293,5 +311,10 @@ class OverridesLoader:
         s.rest_energy_override = raw.get("rest_energy_override")
         s.energy_penalty_override = raw.get("energy_penalty_override")
         s.bond_priority_turns_override = raw.get("bond_priority_turns_override")
+
+        # Per-scenario rest thresholds (e.g. trackblazer: 5)
+        scenario_rest = raw.get("scenario_rest_thresholds", {})
+        if isinstance(scenario_rest, dict):
+            s.scenario_rest_thresholds = {str(k): int(v) for k, v in scenario_rest.items()}
 
         return s

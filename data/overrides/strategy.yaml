@@ -47,3 +47,36 @@ allow_double_circle: false
 rest_energy_override: null         # e.g. 25 to rest earlier
 energy_penalty_override: null      # e.g. 35 to penalize sooner
 bond_priority_turns_override: null # e.g. 20 to shorten bond phase
+
+# Per-scenario rest thresholds. Trackblazer dips into low energy
+# during race sequences, so only rest when critically low.
+scenario_rest_thresholds:
+  trackblazer: 5
+
+# Race strategy (especially important for Trackblazer which has ~30 races)
+race_strategy:
+  # How often to proactively enter races in Trackblazer (every N turns).
+  # Lower = more aggressive. 2 = race every other turn.
+  race_interval: 2
+
+  # Skip racing for the first N turns to build base stats/bonds.
+  skip_early_turns: 5
+
+  # Preferred distance range (metres). Set to your trainee's aptitude.
+  # Mile=1600, Medium=2000/2400, Long=2500+, Sprint=1200
+  preferred_distances: [1600, 2000, 2400]
+
+  # Preferred surface. Wrong surface is a big penalty in race scoring.
+  preferred_surface: turf   # turf | dirt
+
+# Shop item strategy (Trackblazer only)
+shop_strategy:
+  # Total stat gain threshold for "exceptional training".
+  # Training with gains above this overrides non-urgent racing and
+  # triggers Good-Luck Charm usage. Set based on training level and
+  # support deck quality. ~30 is mid-career with decent cards.
+  exceptional_gain_threshold: 30
+
+  # Items to never buy regardless of tier (by item key).
+  # Notepads (+3 stat) are excluded by default in code.
+  blacklist: []

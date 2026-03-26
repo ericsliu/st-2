@@ -10,6 +10,7 @@ import uuid
 from typing import TYPE_CHECKING
 
 from uma_trainer.fsm.states import FSMState, TRANSITIONS, InvalidTransitionError
+from uma_trainer.decision.logger import DecisionLogger
 from uma_trainer.types import (
     ActionType,
     GameState,
@@ -146,6 +147,7 @@ class GameFSM:
 
         self.state: FSMState = FSMState.IDLE
         self.status = BotStatus()
+        self.decision_logger = DecisionLogger(kb, scenario=engine.scenario)
         self._stop_requested = threading.Event()
         self._consecutive_unknown = 0
         self._recovery_attempts = 0
@@ -248,6 +250,9 @@ class GameFSM:
             self._sleep(1.0 / self.config.capture.fps_passive)
             return
         elif self.state == FSMState.IN_RACE:
+            # Race just finished — notify scenario handler
+            if self.engine.scenario:
+                self.engine.scenario.on_race_completed()
             self._transition(FSMState.RUNNING_TURN)
 
         if screen == ScreenState.CAREER_SETUP:
@@ -267,8 +272,17 @@ class GameFSM:
             self._transition(FSMState.RUNNING_TURN)
 
         # Standard training/event decisions
-        # Compute tile scores for the dashboard before deciding
+        # On the stat selection screen, scan rainbow tiles for stat gains
+        # before scoring. This taps each rainbow tile and OCRs the preview.
         if game_state.screen == ScreenState.TRAINING and game_state.training_tiles:
+            rainbow_tiles = [t for t in game_state.training_tiles if t.is_rainbow]
+            unscanned = [t for t in rainbow_tiles if not t.stat_gains]
+            if unscanned:
+                self.sequences.scan_training_gains(
+                    game_state, self.capture, self.assembler,
+                )
+
+            # Compute tile scores for the dashboard and decision log
             try:
                 scored = self.engine.scorer.score_tiles(game_state)
                 tile_scores = [
@@ -277,7 +291,9 @@ class GameFSM:
                 ]
                 self.status.update(self.state, tile_scores=tile_scores)
             except Exception:
-                pass
+                tile_scores = []
+        else:
+            tile_scores = []
 
         action = self.engine.decide(game_state)
         self.status.update(
@@ -292,8 +308,21 @@ class GameFSM:
             action.reason,
         )
 
+        # Log every non-WAIT decision for training data
+        if action.action_type != ActionType.WAIT:
+            self.decision_logger.log_decision(
+                run_id=self._current_run_id,
+                state=game_state,
+                action=action,
+                tile_scores=tile_scores,
+            )
+
         if action.action_type == ActionType.WAIT:
             return
+
+        # Track consecutive races for fatigue management
+        if action.action_type != ActionType.RACE:
+            self.engine.race_selector.on_non_race_action()
 
         self._transition(FSMState.EXECUTING_ACTION)
         try:
@@ -310,10 +339,33 @@ class GameFSM:
         self.injector.wait_random_pause()
 
     def _handle_waiting_for_game(self, game_state: GameState) -> None:
-        """Wait until the game reaches a playable state."""
-        if game_state.screen == ScreenState.MAIN_MENU:
+        """Wait until the game reaches a playable state.
+
+        Handles mid-career resume: if the bot starts and the game is
+        already on any in-career screen, jump straight to RUNNING_TURN.
+        """
+        screen = game_state.screen
+
+        if screen == ScreenState.MAIN_MENU:
             logger.info("Game detected on main menu")
             self._transition(FSMState.STARTING_CAREER)
+            return
+
+        # Any in-career screen → resume mid-career
+        in_career_screens = {
+            ScreenState.TRAINING,
+            ScreenState.EVENT,
+            ScreenState.SKILL_SHOP,
+            ScreenState.RACE_ENTRY,
+            ScreenState.RESULT_SCREEN,
+            ScreenState.RACE,
+            ScreenState.CUTSCENE,
+        }
+        if screen in in_career_screens:
+            logger.info("Game detected mid-career on %s screen", screen.value)
+            self._current_run_id = str(uuid.uuid4())
+            self._run_start_time = time.time()
+            self._transition(FSMState.RUNNING_TURN)
 
     def _handle_starting_career(self, game_state: GameState) -> None:
         """Handle Career Mode setup screens."""
@@ -406,7 +458,7 @@ class GameFSM:
                     logger.info("Game detected: %s", state.screen.value)
                     return
             except Exception as e:
-                logger.debug("Waiting for game: %s", e)
+                logger.warning("Waiting for game — capture/assemble error: %s", e)
 
             time.sleep(poll_interval)
 

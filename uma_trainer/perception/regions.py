@@ -55,11 +55,35 @@ class ScreenAnchorSet:
 # These check distinctive, non-animated UI elements unique to each screen.
 # The colour ranges should be calibrated with scripts/calibrate_regions.py.
 #
-# NOTE: Placeholder colour ranges — must be calibrated against real screenshots.
-# The positions are based on the captured screenshots; colours are approximate.
+# Calibrated 2026-03-24 from MuMuPlayer portrait 1080×1920 screenshots.
+# Key sampled values (home screen):
+#   Home tab highlight (540,1890) → R=27  G=156 B=242 (bright blue)
+#   Nav bar edge (100,1870)       → R=101 G=94  B=125 (muted purple-grey)
+# Key sampled values (career turn action):
+#   Rest btn (187,1525)    → R=119 G=204 B=34  (bright green)
+#   Training btn (510,1525) → R=52  G=139 B=223 (blue)
+#   Turn counter (80,115)  → R=237 G=196 B=14  (gold)
+# Key sampled values (stat selection):
+#   Back btn text (110,1880)→ R=241 G=241 B=241 (white)
+#   Speed tile (130,1660)   → R=91  G=176 B=99  (green)
 
 SCREEN_ANCHORS: list[ScreenAnchorSet] = [
-    # Loading screen — usually has a solid or gradient background
+    # ── Main menu (game home screen) ──────────────────────────────────
+    # Bottom nav bar with "Home" tab highlighted in bright blue.
+    # Nav bar edges are a muted purple-grey unique to this screen.
+    ScreenAnchorSet(
+        screen=ScreenState.MAIN_MENU,
+        anchors=(
+            # "Home" tab highlight — bright blue (R≈27 G≈156 B≈242)
+            PixelAnchor(540, 1890, 0, 60, 125, 190, 210, 255),
+            # Nav bar left edge — muted purple-grey (R≈101 G≈94 B≈125)
+            PixelAnchor(100, 1870, 70, 135, 60, 130, 90, 160),
+            # Nav bar right edge — same muted purple-grey
+            PixelAnchor(1000, 1870, 70, 135, 60, 130, 90, 160),
+        ),
+        min_matches=2,
+    ),
+    # ── Loading screen ────────────────────────────────────────────────
     ScreenAnchorSet(
         screen=ScreenState.LOADING,
         anchors=(
@@ -68,32 +92,36 @@ SCREEN_ANCHORS: list[ScreenAnchorSet] = [
         ),
         min_matches=1,
     ),
-    # Turn action screen (main menu during career) — "Training" label is distinctive
-    # The header bar says "Career" in the top-left on a dark green/teal background
+    # ── Turn action screen (main menu during career) ──────────────────
+    # Identified by the green Rest button and blue Training button.
     ScreenAnchorSet(
         screen=ScreenState.TRAINING,
         anchors=(
-            # "Career" header background (top-left dark bar)
-            PixelAnchor(50, 20, 30, 80, 60, 120, 50, 110),
-            # The large action button area (bottom half has the circular buttons)
-            # Rest button area — green circle region (~150, ~1530)
-            PixelAnchor(150, 1530, 60, 150, 150, 255, 60, 150),
+            # Rest button — bright green (R≈119 G≈204 B≈34)
+            PixelAnchor(187, 1525, 90, 150, 175, 235, 10, 65),
+            # Training button — blue (R≈52 G≈139 B≈223)
+            PixelAnchor(510, 1525, 25, 80, 110, 170, 195, 255),
+            # Turn counter area — gold text (R≈237 G≈196 B≈14)
+            PixelAnchor(80, 115, 210, 255, 170, 225, 0, 45),
         ),
         min_matches=2,
     ),
-    # Training stat selection screen — has "Training" header and 5 stat tiles
-    # Distinguished from turn action by "Back" button at bottom-left
+    # ── Stat selection screen ─────────────────────────────────────────
+    # After tapping "Training" — also maps to TRAINING; the assembler
+    # uses is_stat_selection() to distinguish the sub-screen.
     ScreenAnchorSet(
-        screen=ScreenState.RACE,  # Reusing RACE temporarily; see note below
+        screen=ScreenState.TRAINING,
         anchors=(
-            # "Training" header (top-left, similar dark bar)
-            PixelAnchor(50, 20, 30, 80, 60, 120, 50, 110),
-            # "Back" button bottom-left (white text on dark bg)
-            PixelAnchor(100, 1870, 40, 100, 40, 100, 40, 100),
+            # Turn counter area — gold text (same as turn action)
+            PixelAnchor(80, 115, 210, 255, 170, 225, 0, 45),
+            # Speed tile center (130,1660) — green (R≈91 G≈176 B≈99)
+            PixelAnchor(130, 1660, 60, 125, 145, 210, 65, 130),
+            # Power tile center (540,1660) — dark green (R≈0 G≈132 B≈12)
+            PixelAnchor(540, 1660, 0, 35, 100, 165, 0, 45),
         ),
         min_matches=2,
     ),
-    # Event popup — semi-transparent dark overlay with popup in center
+    # ── Event popup ───────────────────────────────────────────────────
     ScreenAnchorSet(
         screen=ScreenState.EVENT,
         anchors=(
@@ -103,19 +131,20 @@ SCREEN_ANCHORS: list[ScreenAnchorSet] = [
         ),
         min_matches=2,
     ),
-    # Skill shop — distinctive header
+    # ── Skill shop ────────────────────────────────────────────────────
+    # Needs calibration — placeholder, requires 2 anchors to avoid
+    # false positives from other screens with similar header colours.
     ScreenAnchorSet(
         screen=ScreenState.SKILL_SHOP,
         anchors=(
+            # Header area
             PixelAnchor(540, 50, 40, 100, 70, 140, 50, 120),
+            # Turn counter gold (skill shop is within career, so this is present)
+            PixelAnchor(80, 115, 210, 255, 170, 225, 0, 45),
         ),
-        min_matches=1,
+        min_matches=2,
     ),
 ]
-
-# TODO: We need a dedicated ScreenState for STAT_SELECTION (the training tile
-# picker).  For now the FSM treats it as a sub-state of TRAINING.  When we add
-# STAT_SELECTION to ScreenState, update the anchor above.
 
 
 # ── Region definitions per screen ─────────────────────────────────────────────
@@ -209,7 +238,7 @@ STAT_SELECTION_REGIONS: dict[str, Region] = {
     "selected_label":    (30, 190, 350, 220),      # e.g. "Stamina Lvl 1"
     "selected_subtitle": (30, 220, 350, 250),      # e.g. "Breaststroke"
 
-    # Stat gain previews (small green "+X" above each stat)
+    # Stat gain previews (small green "+X" above each stat in the bottom bar)
     "gain_speed":        (38, 395, 155, 430),
     "gain_stamina":      (185, 395, 305, 430),
     "gain_power":        (335, 395, 455, 430),
@@ -224,6 +253,14 @@ STAT_SELECTION_REGIONS: dict[str, Region] = {
     "stat_guts":         (485, 445, 600, 490),
     "stat_wit":          (635, 445, 750, 490),
     "skill_pts":         (850, 445, 1000, 490),
+
+    # Stat gain preview in the right panel (vertical list for selected tile)
+    "panel_gain_speed":   (330, 285, 450, 320),
+    "panel_gain_stamina": (330, 335, 450, 370),
+    "panel_gain_power":   (330, 385, 450, 420),
+    "panel_gain_guts":    (330, 435, 450, 470),
+    "panel_gain_wit":     (330, 485, 450, 520),
+    "panel_gain_skill":   (330, 535, 450, 570),
 
     # Failure rate display
     "failure_rate":      (60, 1400, 280, 1450),    # "Failure 34%"
@@ -314,8 +351,43 @@ SKILL_SHOP_REGIONS: dict[str, Region] = {
 }
 
 
-# ── Race screen regions ──────────────────────────────────────────────────────
-# Placeholder — to be calibrated
+# ── Race list screen regions (after tapping "Races" button) ──────────────────
+# Placeholder — to be calibrated from a real race list screenshot.
+# The race list is a scrollable list of upcoming races.
+
+RACE_LIST_REGIONS: dict[str, Region] = {
+    "header":       (100, 30, 980, 80),        # "Race" header
+    "btn_back":     (30, 1850, 200, 1900),     # Back button
+
+    # Visible race slots (up to ~4–5 races visible at once)
+    # Each slot has: race name, grade badge, distance, surface, season
+    "race_0_name":     (200, 220, 850, 270),
+    "race_0_detail":   (200, 270, 850, 310),   # "G1 | 2400m | Turf"
+    "race_0_tap":      (100, 200, 980, 330),   # Full tap target
+
+    "race_1_name":     (200, 360, 850, 410),
+    "race_1_detail":   (200, 410, 850, 450),
+    "race_1_tap":      (100, 340, 980, 470),
+
+    "race_2_name":     (200, 500, 850, 550),
+    "race_2_detail":   (200, 550, 850, 590),
+    "race_2_tap":      (100, 480, 980, 610),
+
+    "race_3_name":     (200, 640, 850, 690),
+    "race_3_detail":   (200, 690, 850, 730),
+    "race_3_tap":      (100, 620, 980, 750),
+
+    "race_4_name":     (200, 780, 850, 830),
+    "race_4_detail":   (200, 830, 850, 870),
+    "race_4_tap":      (100, 760, 980, 890),
+}
+
+# Max visible race slots before scrolling is needed
+RACE_LIST_VISIBLE_SLOTS = 5
+
+
+# ── Race running screen regions ──────────────────────────────────────────────
+# Placeholder — for during-race screens (passive, mainly for detection)
 
 RACE_REGIONS: dict[str, Region] = {
     "btn_enter":    (600, 1700, 980, 1800),
@@ -330,6 +402,7 @@ SCREEN_REGION_MAP: dict[ScreenState, dict[str, Region]] = {
     ScreenState.TRAINING: TURN_ACTION_REGIONS,
     ScreenState.EVENT: EVENT_REGIONS,
     ScreenState.SKILL_SHOP: SKILL_SHOP_REGIONS,
+    ScreenState.RACE_ENTRY: RACE_LIST_REGIONS,
     ScreenState.RACE: RACE_REGIONS,
 }
 

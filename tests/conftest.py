@@ -3,9 +3,12 @@
 import pytest
 
 from uma_trainer.types import (
+    BotAction,
+    ActionType,
     EventChoice,
     GameState,
     Mood,
+    RaceOption,
     ScreenState,
     SkillOption,
     StatType,
@@ -13,6 +16,7 @@ from uma_trainer.types import (
     TrainingTile,
 )
 from uma_trainer.config import AppConfig, ScorerConfig
+from uma_trainer.scenario import load_scenario
 
 
 @pytest.fixture
@@ -134,3 +138,64 @@ def tmp_db(tmp_path):
     kb = KnowledgeBase(db_path)
     yield kb
     kb.close()
+
+
+@pytest.fixture
+def trackblazer():
+    """Trackblazer scenario handler."""
+    return load_scenario("trackblazer")
+
+
+@pytest.fixture
+def ura_finale():
+    """URA Finale scenario handler."""
+    return load_scenario("ura_finale")
+
+
+@pytest.fixture
+def trackblazer_state(sample_stats, sample_training_tiles) -> GameState:
+    """Game state mid-career in Trackblazer."""
+    return GameState(
+        screen=ScreenState.TRAINING,
+        stats=sample_stats,
+        energy=70,
+        mood=Mood.GOOD,
+        training_tiles=sample_training_tiles,
+        current_turn=15,
+        max_turns=72,
+        scenario="trackblazer",
+    )
+
+
+@pytest.fixture
+def race_options() -> list[RaceOption]:
+    """Sample race list for testing race selector."""
+    return [
+        RaceOption(
+            name="Takarazuka Kinen",
+            grade="G1",
+            distance=2200,
+            surface="turf",
+            fan_reward=15000,
+            position=0,
+            tap_coords=(540, 400),
+        ),
+        RaceOption(
+            name="Debut Race",
+            grade="Debut",
+            distance=1600,
+            surface="turf",
+            fan_reward=500,
+            position=1,
+            tap_coords=(540, 500),
+        ),
+        RaceOption(
+            name="Dirt G3",
+            grade="G3",
+            distance=1800,
+            surface="dirt",
+            fan_reward=3000,
+            position=2,
+            tap_coords=(540, 600),
+        ),
+    ]

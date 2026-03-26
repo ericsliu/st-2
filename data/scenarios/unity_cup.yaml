@@ -1,0 +1,35 @@
+# Unity Cup scenario definition
+# Standard 72-turn career with team-based mechanics. No shop system.
+
+name: unity_cup
+display_name: "Unity Cup"
+max_turns: 72
+
+phases:
+  junior:  { start: 0.0,    end: 0.333 }
+  classic: { start: 0.333,  end: 0.667 }
+  senior:  { start: 0.667,  end: 1.0   }
+
+phase_aliases:
+  early_game: { start: 0.0,   end: 0.333 }
+  late_game:  { start: 0.694, end: 1.0   }
+
+features: []
+
+available_actions:
+  - rest
+  - training
+  - skills
+  - infirmary
+  - recreation
+  - races
+
+event_calendar: {}
+
+rest_threshold: 20
+
+race:
+  min_score: 5.0
+  skip_early_turns: 5
+  safe_race_chain: 3
+  energy_cost: 27

@@ -23,6 +23,8 @@ from uma_trainer.perception.pixel_analysis import (
 )
 from uma_trainer.perception.regions import (
     EVENT_REGIONS,
+    RACE_LIST_REGIONS,
+    RACE_LIST_VISIBLE_SLOTS,
     STAT_REGION_KEYS,
     STAT_SELECTION_REGIONS,
     TILE_INDEX_TO_STAT,
@@ -34,6 +36,7 @@ from uma_trainer.perception.screen_identifier import ScreenIdentifier
 from uma_trainer.types import (
     EventChoice,
     GameState,
+    RaceOption,
     Mood,
     ScreenState,
     SkillOption,
@@ -82,6 +85,8 @@ class StateAssembler:
             self._parse_event_screen(frame, state)
         elif screen == ScreenState.SKILL_SHOP:
             self._parse_skill_shop(frame, state)
+        elif screen == ScreenState.RACE_ENTRY:
+            self._parse_race_list(frame, state)
 
         # Stats, mood, energy, and turn are visible on most screens
         if screen in (
@@ -136,7 +141,9 @@ class StateAssembler:
                 for tile in state.training_tiles:
                     tile.failure_rate = rate / 100.0
 
-        # Parse stat gain previews
+        # Parse stat gain previews and store on all tiles
+        # (the gain preview shows what the selected tile would give)
+        parsed_gains: dict[str, int] = {}
         for stat_type, key_prefix in [
             ("speed", "gain_speed"),
             ("stamina", "gain_stamina"),
@@ -149,7 +156,63 @@ class StateAssembler:
                 text = self.ocr.read_region(frame, region)
                 match = re.search(r"\+?\s*(\d+)", text)
                 if match:
-                    logger.debug("Gain preview %s: +%s", stat_type, match.group(1))
+                    val = int(match.group(1))
+                    parsed_gains[stat_type] = val
+                    logger.debug("Gain preview %s: +%d", stat_type, val)
+
+        # Apply parsed gains to whichever tile is currently selected.
+        # The full per-tile scan is handled by FSM.scan_training_gains()
+        # which taps each rainbow tile and calls read_stat_gains().
+        if parsed_gains:
+            # Try to identify the selected tile from the label region
+            selected_idx = self._detect_selected_tile(frame)
+            if selected_idx is not None and selected_idx < len(state.training_tiles):
+                state.training_tiles[selected_idx].stat_gains = parsed_gains
+            else:
+                # Can't determine which tile — store on first tile as fallback
+                if state.training_tiles:
+                    state.training_tiles[0].stat_gains = parsed_gains
+
+    def _detect_selected_tile(self, frame: np.ndarray) -> int | None:
+        """Detect which training tile is currently raised/selected.
+
+        The selected tile is visually raised. We check the label region
+        for the stat name to identify which tile it is.
+        """
+        region = STAT_SELECTION_REGIONS.get("selected_label")
+        if not region:
+            return None
+        text = self.ocr.read_region(frame, region).lower()
+        for keyword, idx in [
+            ("speed", 0), ("stamina", 1), ("power", 2),
+            ("guts", 3), ("wit", 4), ("wisdom", 4),
+        ]:
+            if keyword in text:
+                return idx
+        return None
+
+    def read_stat_gains(self, frame: np.ndarray) -> dict[str, int]:
+        """OCR the stat gain preview from a single frame.
+
+        Returns {stat_name: gain_value} for all stats with visible gains.
+        Called by the FSM during per-tile scanning.
+        """
+        gains: dict[str, int] = {}
+        for stat_name, key in [
+            ("speed", "gain_speed"),
+            ("stamina", "gain_stamina"),
+            ("power", "gain_power"),
+            ("guts", "gain_guts"),
+            ("wit", "gain_wit"),
+        ]:
+            region = STAT_SELECTION_REGIONS.get(key)
+            if not region:
+                continue
+            text = self.ocr.read_region(frame, region)
+            match = re.search(r"\+?\s*(\d+)", text)
+            if match:
+                gains[stat_name] = int(match.group(1))
+        return gains
 
     def _parse_training_tiles(self, frame: np.ndarray) -> list[TrainingTile]:
         """Build TrainingTile list from fixed tile regions."""
@@ -232,6 +295,83 @@ class StateAssembler:
         # Individual skill parsing requires scrollable list handling
         # which is deferred to a later phase.
         state.available_skills = []
+
+    # ------------------------------------------------------------------
+    # Race list screen
+    # ------------------------------------------------------------------
+
+    def _parse_race_list(self, frame: np.ndarray, state: GameState) -> None:
+        """Parse visible races from the race list screen.
+
+        OCRs race name and detail text for each visible slot.  The detail
+        line typically contains grade, distance, and surface info
+        (e.g. "G1 | 2400m | Turf").
+        """
+        races: list[RaceOption] = []
+
+        for i in range(RACE_LIST_VISIBLE_SLOTS):
+            name_key = f"race_{i}_name"
+            detail_key = f"race_{i}_detail"
+            tap_key = f"race_{i}_tap"
+
+            name_region = RACE_LIST_REGIONS.get(name_key)
+            detail_region = RACE_LIST_REGIONS.get(detail_key)
+            tap_region = RACE_LIST_REGIONS.get(tap_key)
+
+            if name_region is None:
+                continue
+
+            name_text = self.ocr.read_region(frame, name_region).strip()
+            if not name_text:
+                continue  # Empty slot = no more races visible
+
+            race = RaceOption(
+                name=name_text,
+                position=i,
+                tap_coords=get_tap_center(tap_region) if tap_region else (0, 0),
+            )
+
+            # Parse detail line for grade, distance, surface
+            if detail_region:
+                detail_text = self.ocr.read_region(frame, detail_region).strip()
+                self._parse_race_detail(detail_text, race)
+
+            # Check if this is a career goal race
+            for goal in state.career_goals:
+                if goal.race_name and not goal.completed:
+                    if goal.race_name.lower() in name_text.lower():
+                        race.is_goal_race = True
+
+            races.append(race)
+            logger.debug(
+                "Race slot %d: '%s' (%s, %dm, %s)",
+                i, race.name, race.grade, race.distance, race.surface,
+            )
+
+        state.available_races = races
+
+    @staticmethod
+    def _parse_race_detail(text: str, race: RaceOption) -> None:
+        """Extract grade, distance, and surface from detail text.
+
+        Expected formats: "G1 | 2400m | Turf", "G2 2200m Dirt", etc.
+        """
+        # Grade
+        grade_match = re.search(r"(G[123]|OP|Pre-OP)", text, re.IGNORECASE)
+        if grade_match:
+            race.grade = grade_match.group(1).upper()
+
+        # Distance
+        dist_match = re.search(r"(\d{4,5})\s*m", text)
+        if dist_match:
+            race.distance = int(dist_match.group(1))
+
+        # Surface
+        text_lower = text.lower()
+        if "dirt" in text_lower:
+            race.surface = "dirt"
+        elif "turf" in text_lower:
+            race.surface = "turf"
 
     # ------------------------------------------------------------------
     # Common parsers
