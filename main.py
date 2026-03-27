@@ -109,11 +109,8 @@ def run(config: str, scenario: str | None, preset: str | None, runspec_name: str
     logger.info("Initializing Uma Trainer...")
 
     capture = get_capture_backend(cfg.capture)
-    screen_id = ScreenIdentifier(
-        template_dir=cfg.regions.template_dir,
-        tolerance=cfg.regions.screen_anchor_tolerance,
-    )
     ocr = OCREngine(cfg.ocr)
+    screen_id = ScreenIdentifier(ocr=ocr)
     assembler = StateAssembler(screen_id, ocr, cfg)
 
     kb = KnowledgeBase(cfg.db_path, master_mdb_path=cfg.master_mdb_path)

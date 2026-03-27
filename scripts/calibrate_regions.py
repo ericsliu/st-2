@@ -200,8 +200,11 @@ def main() -> None:
     # Test screen identification (templates + pixel anchor fallback)
     if args.anchors:
         from uma_trainer.perception.screen_identifier import ScreenIdentifier
+        from uma_trainer.perception.ocr import OCREngine
+        from uma_trainer.config import OCRConfig
 
-        sid = ScreenIdentifier()
+        ocr = OCREngine(OCRConfig())
+        sid = ScreenIdentifier(ocr=ocr)
         result, details = sid.identify_with_details(frame_bgr)
 
         if details:

@@ -9,9 +9,10 @@ from typing import TYPE_CHECKING
 from uma_trainer.action.input_injector import InputInjector
 
 if TYPE_CHECKING:
+    import numpy as np
     from uma_trainer.capture.base import CaptureBackend
     from uma_trainer.perception.assembler import StateAssembler
-    from uma_trainer.types import GameState
+    from uma_trainer.types import GameState, TrainingTile
 
 logger = logging.getLogger(__name__)
 
@@ -79,62 +80,159 @@ class ActionSequences:
         capture: "CaptureBackend",
         assembler: "StateAssembler",
     ) -> None:
-        """Tap each rainbow tile, OCR stat gains, store on the tile.
+        """Scan all training tiles for stat gains + failure rate.
 
-        Only scans tiles with is_rainbow=True. Non-rainbow tiles are
-        skipped. Modifies state.training_tiles in-place.
+        IMPORTANT: Tapping an already-raised tile CONFIRMS that training.
+        So we first detect which tile is currently raised, read its gains
+        directly, then only tap the OTHER tiles to preview them.
 
+        Modifies state.training_tiles in-place.
         Must be called while on the stat selection screen.
         """
-        tiles_to_scan = [
-            t for t in state.training_tiles
-            if t.is_rainbow and not t.stat_gains
-        ]
-
-        if not tiles_to_scan:
-            logger.debug("No rainbow tiles to scan")
+        if not state.training_tiles:
             return
 
         logger.info(
-            "Scanning stat gains for %d rainbow tile(s): %s",
-            len(tiles_to_scan),
-            [t.stat_type.value for t in tiles_to_scan],
+            "Scanning all %d training tiles for stat gains + failure rate",
+            len(state.training_tiles),
         )
 
-        # Settle time after tapping a tile before capturing
-        TILE_SETTLE_TIME = 0.6
+        # Settle time after tapping a tile before capturing.
+        # The tile raise animation takes ~0.4s; 0.7s gives margin.
+        TILE_SETTLE_TIME = 0.7
 
-        for tile in tiles_to_scan:
-            # Tap the tile to select it
+        # Clear stale data on all tiles
+        for tile in state.training_tiles:
+            tile.stat_gains = {}
+            tile.failure_rate = 0.0
+
+        # Step 1: Detect which tile is currently raised and read its gains.
+        # This avoids tapping it again (which would confirm the training).
+        try:
+            frame = capture.grab_frame()
+        except Exception as e:
+            logger.warning("Initial frame capture failed: %s", e)
+            return
+
+        currently_raised = assembler.detect_selected_tile(frame)
+        if currently_raised is not None:
+            logger.info(
+                "Currently raised tile: %d (%s)",
+                currently_raised,
+                state.training_tiles[currently_raised].stat_type.value
+                if currently_raised < len(state.training_tiles) else "?",
+            )
+
+        # Read gains from the currently displayed preview (already raised tile)
+        if currently_raised is not None and currently_raised < len(state.training_tiles):
+            self._read_tile_data(
+                state.training_tiles[currently_raised], frame, assembler,
+            )
+
+        # Step 2: Tap each OTHER tile to preview its gains.
+        scanned_count = sum(
+            1 for t in state.training_tiles if t.stat_gains
+        )
+
+        for tile in state.training_tiles:
+            if tile.position == currently_raised:
+                continue  # Already scanned above — do NOT re-tap
+
             self.injector.tap(tile.tap_coords[0], tile.tap_coords[1])
             time.sleep(TILE_SETTLE_TIME)
 
-            # Capture and read gains
             try:
                 frame = capture.grab_frame()
-                gains = assembler.read_stat_gains(frame)
-                if gains:
-                    tile.stat_gains = gains
-                    logger.info(
-                        "Tile %s gains: %s (total=%d)",
-                        tile.stat_type.value,
-                        gains,
-                        sum(gains.values()),
-                    )
-                else:
-                    logger.warning(
-                        "No gains read for tile %s", tile.stat_type.value
-                    )
             except Exception as e:
                 logger.warning(
-                    "Failed to scan tile %s: %s", tile.stat_type.value, e
+                    "Frame capture failed for tile %s: %s",
+                    tile.stat_type.value, e,
                 )
+                continue
+
+            if self._read_tile_data(tile, frame, assembler):
+                scanned_count += 1
+
+        logger.info(
+            "Scan complete: %d/%d tiles got stat gains",
+            scanned_count, len(state.training_tiles),
+        )
+
+    def _read_tile_data(
+        self,
+        tile: "TrainingTile",
+        frame: "np.ndarray",
+        assembler: "StateAssembler",
+    ) -> bool:
+        """Read stat gains + failure rate from the current frame for a tile.
+
+        Returns True if gains were successfully read.
+        """
+        # Read stat gains
+        ok = False
+        try:
+            gains = assembler.read_stat_gains(frame)
+            if gains:
+                tile.stat_gains = gains
+                ok = True
+                logger.info(
+                    "Tile %s gains: %s (total=%d)",
+                    tile.stat_type.value,
+                    gains,
+                    sum(gains.values()),
+                )
+            else:
+                logger.warning(
+                    "No gains read for tile %s", tile.stat_type.value
+                )
+        except Exception as e:
+            logger.warning(
+                "OCR failed for tile %s gains: %s",
+                tile.stat_type.value, e,
+            )
+
+        # Read failure rate
+        try:
+            failure = assembler.read_failure_rate(frame)
+            if failure is not None:
+                tile.failure_rate = failure
+                logger.debug(
+                    "Tile %s failure rate: %.0f%%",
+                    tile.stat_type.value, failure * 100,
+                )
+        except Exception as e:
+            logger.debug(
+                "Failed to read failure rate for %s: %s",
+                tile.stat_type.value, e,
+            )
+
+        return ok
 
     def attempt_error_recovery(self) -> None:
-        """Generic recovery: try back → home → wait."""
-        logger.info("Attempting error recovery: back → wait")
-        self.injector.back()
-        time.sleep(2.0)
-        # Try tapping confirm in case a dialog is blocking
+        """Generic recovery: tap common button positions to advance.
+
+        Tries multiple tap targets that cover common blocking screens:
+        - Bottom center for TAP prompts (post-race)
+        - Close button position for popups
+        - Green Next/confirm button for result screens
+        - Back button as last resort
+        """
+        logger.info("Attempting error recovery: tapping common positions")
+        # TAP prompt (post-race result/rival screens)
+        self.injector.tap(540, 1675)
+        time.sleep(1.5)
+        # Close button on popups (result pts, etc.)
+        self.injector.tap(520, 1250)
+        time.sleep(1.5)
+        # Green Next/confirm button (standings, rewards)
+        self.injector.tap(765, 1760)
+        time.sleep(1.5)
+        # Generic confirm button
         self.injector.tap(*COORDS["confirm_btn"])
+        time.sleep(1.0)
+        # Android back button — escapes photo mode, stuck dialogs
+        self.injector.back()
+        time.sleep(1.5)
+        # OK on "return to previous screen?" confirm that back may trigger
+        self.injector.tap(775, 1245)
         time.sleep(1.0)

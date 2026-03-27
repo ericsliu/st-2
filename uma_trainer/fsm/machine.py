@@ -263,6 +263,21 @@ class GameFSM:
             self.sequences.dismiss_result_screen()
             return
 
+        if screen == ScreenState.PRE_RACE:
+            # Tap "View Results" to skip race animation
+            logger.info("Pre-race screen: tapping View Results")
+            self.injector.tap(380, 1760)
+            time.sleep(2.0)
+            return
+
+        if screen == ScreenState.POST_RACE:
+            self._handle_post_race()
+            return
+
+        if screen == ScreenState.WARNING_POPUP:
+            self._handle_warning_popup(game_state)
+            return
+
         if screen == ScreenState.SKILL_SHOP:
             if self.state != FSMState.SKILL_SHOPPING:
                 self._transition(FSMState.SKILL_SHOPPING)
@@ -272,15 +287,13 @@ class GameFSM:
             self._transition(FSMState.RUNNING_TURN)
 
         # Standard training/event decisions
-        # On the stat selection screen, scan rainbow tiles for stat gains
-        # before scoring. This taps each rainbow tile and OCRs the preview.
+        # On the stat selection screen, scan ALL training tiles for stat gains
+        # before scoring. The preview only shows gains for the currently
+        # selected (raised) tile, so we must tap each one to compare.
         if game_state.screen == ScreenState.TRAINING and game_state.training_tiles:
-            rainbow_tiles = [t for t in game_state.training_tiles if t.is_rainbow]
-            unscanned = [t for t in rainbow_tiles if not t.stat_gains]
-            if unscanned:
-                self.sequences.scan_training_gains(
-                    game_state, self.capture, self.assembler,
-                )
+            self.sequences.scan_training_gains(
+                game_state, self.capture, self.assembler,
+            )
 
             # Compute tile scores for the dashboard and decision log
             try:
@@ -332,6 +345,16 @@ class GameFSM:
             self._transition(FSMState.ERROR_RECOVERY)
             return
 
+        # Race entry confirmation: after tapping the Race button on the
+        # race list, a "Race Details / Enter race?" dialog appears.
+        # Tap the green confirm button on the dialog.
+        if screen == ScreenState.RACE_ENTRY and action.action_type == ActionType.RACE:
+            time.sleep(1.5)
+            # Green "Race" confirm button on the dialog at ~(730, 1385)
+            self.injector.tap(730, 1385)
+            logger.debug("Tapped race confirmation dialog")
+            time.sleep(ANIMATION_SETTLE_TIME)
+
         self._transition(FSMState.WAITING_ANIMATION)
         time.sleep(ANIMATION_SETTLE_TIME)
         self._transition(FSMState.RUNNING_TURN)
@@ -358,6 +381,9 @@ class GameFSM:
             ScreenState.SKILL_SHOP,
             ScreenState.RACE_ENTRY,
             ScreenState.RESULT_SCREEN,
+            ScreenState.PRE_RACE,
+            ScreenState.POST_RACE,
+            ScreenState.WARNING_POPUP,
             ScreenState.RACE,
             ScreenState.CUTSCENE,
         }
@@ -391,10 +417,100 @@ class GameFSM:
         # Tap done
         self.sequences.confirm_dialog()
 
+    def _handle_warning_popup(self, game_state: GameState) -> None:
+        """Handle a warning popup (e.g. consecutive race warning).
+
+        OCRs the warning text to understand what it's about, then decides
+        whether to proceed (OK) or cancel based on game state.
+
+        For consecutive-race warnings: proceed if mood is GOOD/GREAT,
+        cancel if mood is BAD/TERRIBLE or energy is critically low.
+        """
+        from uma_trainer.types import Mood
+        from uma_trainer.perception.regions import WARNING_POPUP_REGIONS, get_tap_center
+
+        # OCR the warning text to understand it
+        try:
+            frame = self.capture.grab_frame()
+            text_region = WARNING_POPUP_REGIONS["text"]
+            x1, y1, x2, y2 = text_region
+            roi = frame[y1:y2, x1:x2]
+            warning_text = self.assembler.ocr.read_text(roi).lower()
+        except Exception as e:
+            logger.warning("Failed to OCR warning popup: %s", e)
+            warning_text = ""
+
+        logger.info("Warning popup text: '%s'", warning_text)
+
+        # Decide: proceed or cancel
+        proceed = True
+
+        if "consecutive" in warning_text or "in a row" in warning_text:
+            # Consecutive race warning — check mood
+            mood = game_state.mood
+            if mood in (Mood.BAD, Mood.TERRIBLE):
+                logger.info("Warning: cancelling race — mood is %s", mood.value)
+                proceed = False
+            else:
+                logger.info(
+                    "Warning: proceeding with consecutive race (mood=%s)",
+                    mood.value,
+                )
+        else:
+            # Unknown warning — default to proceeding
+            logger.info("Warning: unknown type, proceeding (OK)")
+
+        if proceed:
+            ok_btn = get_tap_center(WARNING_POPUP_REGIONS["btn_ok"])
+            self.injector.tap(*ok_btn)
+            logger.debug("Tapped OK on warning popup")
+        else:
+            cancel_btn = get_tap_center(WARNING_POPUP_REGIONS["btn_cancel"])
+            self.injector.tap(*cancel_btn)
+            logger.debug("Tapped Cancel on warning popup")
+
+        time.sleep(ANIMATION_SETTLE_TIME)
+
+    def _handle_post_race(self) -> None:
+        """Tap through post-race screens (results, rival, pts, standings, rewards).
+
+        Post-race flow has multiple screens that all need a tap to advance:
+        1. Race result placement — TAP prompt at bottom center
+        2. Rival comparison — TAP prompt at bottom center
+        3. Result Pts popup — Close button at ~(520, 1250)
+        4. Race standings — Next button (green) at ~(765, 1760)
+        5. Race rewards/fans — Next button (green) at ~(765, 1760)
+
+        Rather than identifying each sub-screen, we tap both the center
+        (for TAP prompts and Close) and the green Next button area.
+        The POST_RACE anchor detects the green Next button, so when we
+        land here we're usually on standings or rewards.
+        """
+        logger.info("Post-race screen: tapping Next")
+        # Tap green Next button (right side, not Try Again on left)
+        self.injector.tap(765, 1760)
+        time.sleep(2.0)
+
     def _handle_unknown_screen(self, game_state: GameState) -> None:
-        """Handle consecutive unknown screen readings."""
+        """Handle consecutive unknown screen readings.
+
+        When we've recently been in a race (IN_RACE state or just came from
+        a race action), unknown screens are likely post-race transitional
+        screens (TAP prompts, Close popups, rival comparisons). In that case,
+        aggressively tap through them instead of waiting for the threshold.
+        """
         self._consecutive_unknown += 1
-        logger.debug("Unknown screen #%d", self._consecutive_unknown)
+        logger.debug("Unknown screen #%d (fsm_state=%s)", self._consecutive_unknown, self.state.value)
+
+        # Post-race tap-through: if we were recently in a race, tap through
+        # unknown screens aggressively. These are likely TAP prompts, Close
+        # popups, or other post-race transitional screens.
+        if self._consecutive_unknown <= UNKNOWN_SCREEN_THRESHOLD:
+            # Tap bottom-center (for TAP prompts) and mid-center (for Close)
+            logger.debug("Tapping through unknown screen (possible post-race)")
+            self.injector.tap(540, 1675)  # Bottom center — TAP prompt area
+            time.sleep(1.5)
+            return
 
         if self._consecutive_unknown >= UNKNOWN_SCREEN_THRESHOLD:
             logger.warning("Too many unknown screens — entering error recovery")
@@ -444,9 +560,14 @@ class GameFSM:
         logger.info("Initialization complete")
 
     def _wait_for_game(self) -> None:
-        """Poll until the game screen is detected."""
+        """Poll until the game screen is detected.
+
+        If we see too many consecutive UNKNOWN screens, start tapping
+        to try to advance past transitional screens (post-race, popups).
+        """
         logger.info("Waiting for game to reach main menu...")
         poll_interval = 1.0 / self.config.capture.fps_passive
+        unknown_count = 0
 
         while not self._stop_requested.is_set():
             try:
@@ -457,6 +578,15 @@ class GameFSM:
                 if state.screen not in (ScreenState.UNKNOWN, ScreenState.LOADING):
                     logger.info("Game detected: %s", state.screen.value)
                     return
+
+                if state.screen == ScreenState.UNKNOWN:
+                    unknown_count += 1
+                    if unknown_count >= 5:
+                        logger.info("Tapping to advance past unknown screen during wait")
+                        self.injector.tap(540, 1675)
+                        unknown_count = 0
+                else:
+                    unknown_count = 0
             except Exception as e:
                 logger.warning("Waiting for game — capture/assemble error: %s", e)
 

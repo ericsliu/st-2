@@ -40,6 +40,7 @@ from uma_trainer.types import (
     Mood,
     ScreenState,
     SkillOption,
+    StatType,
     TraineeStats,
     TrainingTile,
 )
@@ -59,6 +60,9 @@ class StateAssembler:
         self.screen_id = screen_id
         self.ocr = ocr
         self.config = config
+        # Ensure screen identifier has access to OCR
+        if not screen_id._ocr:
+            screen_id.set_ocr(ocr)
 
     def assemble(self, frame: np.ndarray) -> GameState:
         """Full pipeline: identify screen → OCR fixed regions → build state."""
@@ -130,16 +134,8 @@ class StateAssembler:
         """Parse the 5 training tiles and failure rate."""
         state.training_tiles = self._parse_training_tiles(frame)
 
-        # Parse failure rate
-        region = STAT_SELECTION_REGIONS.get("failure_rate")
-        if region:
-            text = self.ocr.read_region(frame, region)
-            match = re.search(r"(\d+)\s*%", text)
-            if match:
-                rate = int(match.group(1))
-                # Apply failure rate to all tiles (it's for the selected tile)
-                for tile in state.training_tiles:
-                    tile.failure_rate = rate / 100.0
+        # Failure rate is read per-tile during scan_training_gains().
+        # It changes per training type so we don't assign it here.
 
         # Parse stat gain previews and store on all tiles
         # (the gain preview shows what the selected tile would give)
@@ -160,24 +156,21 @@ class StateAssembler:
                     parsed_gains[stat_type] = val
                     logger.debug("Gain preview %s: +%d", stat_type, val)
 
-        # Apply parsed gains to whichever tile is currently selected.
-        # The full per-tile scan is handled by FSM.scan_training_gains()
-        # which taps each rainbow tile and calls read_stat_gains().
+        # Don't pre-assign gains here — the FSM's scan_training_gains()
+        # will tap each tile and OCR gains individually. Pre-assigning
+        # caused the scorer to skip unscanned tiles.
         if parsed_gains:
-            # Try to identify the selected tile from the label region
-            selected_idx = self._detect_selected_tile(frame)
-            if selected_idx is not None and selected_idx < len(state.training_tiles):
-                state.training_tiles[selected_idx].stat_gains = parsed_gains
-            else:
-                # Can't determine which tile — store on first tile as fallback
-                if state.training_tiles:
-                    state.training_tiles[0].stat_gains = parsed_gains
+            logger.debug(
+                "Initial gain preview (selected tile only): %s", parsed_gains
+            )
 
-    def _detect_selected_tile(self, frame: np.ndarray) -> int | None:
+    def detect_selected_tile(self, frame: np.ndarray) -> int | None:
         """Detect which training tile is currently raised/selected.
 
-        The selected tile is visually raised. We check the label region
+        The selected tile is visually raised. We OCR the label region
         for the stat name to identify which tile it is.
+
+        Returns the tile index (0-4) or None if detection fails.
         """
         region = STAT_SELECTION_REGIONS.get("selected_label")
         if not region:
@@ -196,23 +189,81 @@ class StateAssembler:
 
         Returns {stat_name: gain_value} for all stats with visible gains.
         Called by the FSM during per-tile scanning.
+
+        Tries two sources for redundancy:
+        1. Bottom bar "+X" numbers above each stat column (gain_*)
+        2. Right panel vertical gain list (panel_gain_*)
+        Uses whichever source returns more stats.
         """
-        gains: dict[str, int] = {}
-        for stat_name, key in [
+        # Source 1: bottom bar gain numbers
+        bar_gains = self._read_gains_from_regions(frame, [
             ("speed", "gain_speed"),
             ("stamina", "gain_stamina"),
             ("power", "gain_power"),
             ("guts", "gain_guts"),
             ("wit", "gain_wit"),
-        ]:
+        ])
+
+        # Source 2: right panel gain list
+        panel_gains = self._read_gains_from_regions(frame, [
+            ("speed", "panel_gain_speed"),
+            ("stamina", "panel_gain_stamina"),
+            ("power", "panel_gain_power"),
+            ("guts", "panel_gain_guts"),
+            ("wit", "panel_gain_wit"),
+        ])
+
+        # Use whichever source got more results
+        if len(panel_gains) > len(bar_gains):
+            logger.debug("Using panel gains (%d stats) over bar gains (%d stats)",
+                         len(panel_gains), len(bar_gains))
+            gains = panel_gains
+        else:
+            gains = bar_gains
+
+        # Merge: fill in any stats that only one source found
+        for stat, val in panel_gains.items():
+            if stat not in gains:
+                gains[stat] = val
+        for stat, val in bar_gains.items():
+            if stat not in gains:
+                gains[stat] = val
+
+        return gains
+
+    def _read_gains_from_regions(
+        self,
+        frame: np.ndarray,
+        stat_region_keys: list[tuple[str, str]],
+    ) -> dict[str, int]:
+        """Read stat gain values from a list of (stat_name, region_key) pairs.
+
+        Uses read_number_region (with 3x upscale preprocessing) for better
+        accuracy on small green "+X" gain numbers.
+        """
+        gains: dict[str, int] = {}
+        for stat_name, key in stat_region_keys:
             region = STAT_SELECTION_REGIONS.get(key)
             if not region:
                 continue
-            text = self.ocr.read_region(frame, region)
-            match = re.search(r"\+?\s*(\d+)", text)
-            if match:
-                gains[stat_name] = int(match.group(1))
+            val = self.ocr.read_number_region(frame, region)
+            if val is not None and 0 < val <= 500:
+                gains[stat_name] = val
         return gains
+
+    def read_failure_rate(self, frame: np.ndarray) -> float | None:
+        """OCR the failure rate percentage for the currently selected tile.
+
+        Returns the failure rate as a fraction (0.0 to 1.0), or None on failure.
+        """
+        region = STAT_SELECTION_REGIONS.get("failure_rate")
+        if not region:
+            return None
+        text = self.ocr.read_region(frame, region)
+        match = re.search(r"(\d+)\s*%", text)
+        if match:
+            return int(match.group(1)) / 100.0
+        return None
 
     def _parse_training_tiles(self, frame: np.ndarray) -> list[TrainingTile]:
         """Build TrainingTile list from fixed tile regions."""
@@ -331,10 +382,15 @@ class StateAssembler:
                 tap_coords=get_tap_center(tap_region) if tap_region else (0, 0),
             )
 
-            # Parse detail line for grade, distance, surface
+            # The name region contains "G1 Venue Surface Distancem (Category)..."
+            # Parse grade, distance, surface from it directly
+            self._parse_race_detail(name_text, race)
+
+            # Also try the detail region for additional info
             if detail_region:
                 detail_text = self.ocr.read_region(frame, detail_region).strip()
-                self._parse_race_detail(detail_text, race)
+                if detail_text:
+                    self._parse_race_detail(detail_text, race)
 
             # Check if this is a career goal race
             for goal in state.career_goals:
@@ -383,9 +439,26 @@ class StateAssembler:
         regions: dict[str, tuple[int, int, int, int]],
         state: GameState,
     ) -> None:
-        """OCR the 5 stat values from fixed regions."""
+        """OCR the 5 stat values.
+
+        Reads the full stat block (labels + values + /max) as one region,
+        then parses individual stat values from the recognized text.
+        Apple Vision reads the gradient game font much more accurately when
+        it has the stat label text as context alongside the numbers.
+        """
         stats = TraineeStats()
 
+        # Try bulk OCR first — read the full stat block as one unit
+        bulk_parsed = self._parse_stats_bulk(frame, regions)
+        if bulk_parsed and sum(1 for v in bulk_parsed.values() if v > 0) >= 3:
+            for stat_type in StatType:
+                val = bulk_parsed.get(stat_type.value, 0)
+                if 0 <= val <= 9999:
+                    setattr(stats, stat_type.value, val)
+            state.stats = stats
+            return
+
+        # Fallback: OCR each stat individually
         for stat_type, region_key in STAT_REGION_KEYS.items():
             region = regions.get(region_key)
             if region is None:
@@ -395,6 +468,68 @@ class StateAssembler:
                 setattr(stats, stat_type.value, value)
 
         state.stats = stats
+
+    def _parse_stats_bulk(
+        self,
+        frame: np.ndarray,
+        regions: dict[str, tuple[int, int, int, int]],
+    ) -> dict[str, int] | None:
+        """Parse all stat values from a single OCR pass on the full stat block.
+
+        The game's gradient-colored italic font is poorly recognized when each
+        stat is cropped individually. Reading the full block with stat labels
+        provides context that dramatically improves accuracy.
+        """
+        # Determine the bounding box of the full stat block
+        # Includes labels row + values + /max text
+        stat_regions = [
+            regions.get(f"stat_{s.value}") for s in StatType
+        ]
+        stat_regions = [r for r in stat_regions if r is not None]
+        if not stat_regions:
+            return None
+
+        # Build a bounding box that covers labels + values + max
+        # Start 50px above the stat values for labels, extend 50px below for /max
+        x1 = min(r[0] for r in stat_regions) - 80  # include grade badges for context
+        y1 = min(r[1] for r in stat_regions) - 50   # include stat labels
+        x2 = max(r[2] for r in stat_regions) + 20
+        y2 = max(r[3] for r in stat_regions) + 50   # include /1200
+
+        # Clamp to frame bounds
+        h, w = frame.shape[:2]
+        x1 = max(0, x1)
+        y1 = max(0, y1)
+        x2 = min(w, x2)
+        y2 = min(h, y2)
+
+        text = self.ocr.read_region(frame, (x1, y1, x2, y2))
+        if not text:
+            return None
+
+        # Parse stat values from the recognized text.
+        # Apple Vision returns segments in reading order but may merge labels
+        # across columns (e.g. "Stamina l Power 285:").  The stat values
+        # always appear in left-to-right order: Speed, Stamina, Power, Guts, Wit.
+        # Strategy: extract all standalone 2-4 digit numbers (not part of /1200),
+        # then assign them to stats in order.
+        result: dict[str, int] = {}
+
+        # Remove "/1200" patterns so "1200" isn't picked up as a stat value
+        cleaned = re.sub(r'/\s*\d{3,4}', '', text)
+
+        # Find all 2-4 digit numbers (stat values range from ~50 to ~2000)
+        numbers = [int(m.group()) for m in re.finditer(r'(?<!\d)\d{2,4}(?!\d)', cleaned)]
+        # Filter to plausible stat values
+        numbers = [n for n in numbers if 10 <= n <= 2000]
+
+        stat_keys = ["speed", "stamina", "power", "guts", "wit"]
+        for i, val in enumerate(numbers):
+            if i < len(stat_keys):
+                result[stat_keys[i]] = val
+                logger.debug("Bulk stat parse: %s = %d", stat_keys[i], val)
+
+        return result if result else None
 
     def _parse_mood(
         self,
@@ -429,13 +564,21 @@ class StateAssembler:
 
         The energy bar is a coloured bar; we estimate energy as the
         proportion of the bar that is filled (coloured vs grey).
+        The filled portion has saturation > 0; the empty portion is
+        pure grey (saturation == 0, value ~132).
         """
         region = regions.get("energy_bar")
         if region is None:
             return
 
         x1, y1, x2, y2 = region
-        roi = frame[y1:y2, x1:x2]
+        # Shrink to inner bar area to avoid border artifacts
+        margin_x, margin_y = 5, 5
+        ix1 = x1 + margin_x
+        iy1 = y1 + margin_y
+        ix2 = x2 - margin_x
+        iy2 = y2 - margin_y
+        roi = frame[iy1:iy2, ix1:ix2]
         if roi.size == 0:
             return
 
@@ -445,14 +588,12 @@ class StateAssembler:
         except ImportError:
             return
 
-        # The filled portion of the energy bar is saturated (coloured).
-        # The empty portion is grey (low saturation).
-        bar_width = x2 - x1
+        # The filled portion is saturated (coloured); empty is pure grey.
+        bar_width = ix2 - ix1
         sat = hsv[:, :, 1]
-        # Average saturation per column
         col_sat = np.mean(sat, axis=0)
-        # Count columns above a saturation threshold as "filled"
-        filled_cols = int(np.sum(col_sat > 50))
+        # Columns with any meaningful saturation are "filled"
+        filled_cols = int(np.sum(col_sat > 20))
         energy = int(round(filled_cols / bar_width * 100))
         state.energy = max(0, min(100, energy))
 

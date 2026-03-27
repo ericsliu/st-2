@@ -1,319 +1,256 @@
-"""Screen identification via template matching.
+"""Screen identification via OCR text matching.
 
-Uses cv2.matchTemplate() to find distinctive UI elements (icons, buttons,
-labels) in each frame.  Each screen type has a set of template images —
-small crops of stable, non-animated UI elements.  If enough templates for
-a screen match above a confidence threshold, that screen is identified.
+Uses Apple Vision OCR to read text from key screen regions, then matches
+against known text patterns for each screen type.  This is more robust
+than pixel-anchor or template-matching approaches because it works
+regardless of colour theme, brightness, or minor UI layout changes.
 
-Templates are stored in data/templates/<screen_name>/<template>.png and
-extracted via scripts/extract_templates.py.
-
-Falls back to pixel-anchor checks if no templates are loaded (e.g. first
-run before any templates have been extracted).
+Apple Vision OCR is fast (~20-30ms per region on M1 Neural Engine) and
+highly accurate on the game's English UI text.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from pathlib import Path
+import time
 
-import cv2
 import numpy as np
 
+from uma_trainer.perception.ocr import OCREngine
 from uma_trainer.types import ScreenState
 
 logger = logging.getLogger(__name__)
 
-# Confidence threshold for cv2.matchTemplate (TM_CCOEFF_NORMED).
-# 0.8 is a good starting point — raise if false positives appear.
-DEFAULT_THRESHOLD = 0.8
+
+# ── OCR regions for screen identification ────────────────────────────────────
+# Each region is (x1, y1, x2, y2) at 1080×1920 resolution.
+# We read 3 strategic zones that together distinguish every screen.
+
+# Top header / title bar — captures screen titles like "Shop", "Race List"
+HEADER_REGION = (0, 0, 600, 120)
+
+# Left side of bottom button area — captures "Rest", "Back", etc.
+BUTTON_LEFT_REGION = (0, 1380, 550, 1770)
+
+# Right side / center of bottom button area — "Training", "Confirm", "Next", etc.
+BUTTON_RIGHT_REGION = (300, 1600, 1080, 1830)
+
+# Popup header area — captures "Warning" text on popup dialogs
+POPUP_REGION = (0, 550, 1080, 700)
+
+# Mid-screen area — captures event text markers, "View Results", etc.
+MID_REGION = (0, 1000, 1080, 1500)
 
 
-@dataclass
-class ScreenTemplate:
-    """A single template image associated with a screen state."""
-    screen: ScreenState
-    name: str
-    image: np.ndarray          # BGR template image
-    threshold: float = DEFAULT_THRESHOLD
+# ── Screen matching rules ────────────────────────────────────────────────────
+# Each rule is: (ScreenState, required_keywords, forbidden_keywords, region_hint)
+# A screen matches if ALL required keywords are found (case-insensitive) and
+# NONE of the forbidden keywords are found.
+#
+# Rules are evaluated in order; first match wins.  More specific rules first.
 
+ScreenRule = tuple[ScreenState, list[str], list[str]]
 
-@dataclass
-class ScreenTemplateSet:
-    """All templates for a single screen state."""
-    screen: ScreenState
-    templates: list[ScreenTemplate] = field(default_factory=list)
-    min_matches: int = 1       # How many templates must match
+SCREEN_RULES: list[ScreenRule] = [
+    # Warning popup — "Warning" in the popup header region is very distinctive
+    (ScreenState.WARNING_POPUP, ["warning"], []),
+
+    # Shop screen — "Shop" in header + "Confirm" or "Shop Coins" in buttons
+    (ScreenState.SKILL_SHOP, ["shop"], ["race", "training"]),
+
+    # Race list — "Race" in header area alongside list-style content
+    (ScreenState.RACE_ENTRY, ["race list"], []),
+
+    # Pre-race — has both "View Results" and "Race" buttons at bottom
+    (ScreenState.PRE_RACE, ["view results"], []),
+
+    # Post-race — "Next" button, often with "Try Again" or placement text
+    (ScreenState.POST_RACE, ["next"], ["race list", "view results", "rest",
+                                       "training", "shop"]),
+
+    # Event popup — choice buttons with event text
+    (ScreenState.EVENT, ["effect"], ["rest", "training", "shop", "race list"]),
+
+    # Skill shop / Learn screen
+    (ScreenState.SKILL_SHOP, ["learn", "skill"], []),
+
+    # Stat selection sub-screen — has "Back" button but no "Rest"
+    # (handled via is_stat_selection, but we detect TRAINING for both)
+
+    # Career home / turn action — has "Rest" and "Training" buttons
+    (ScreenState.TRAINING, ["rest"], []),
+    (ScreenState.TRAINING, ["training"], ["race list"]),
+
+    # Main menu — game home screen (not in career)
+    (ScreenState.MAIN_MENU, ["home"], []),
+
+    # Result screen
+    (ScreenState.RESULT_SCREEN, ["result"], ["race list", "rest"]),
+]
 
 
 class ScreenIdentifier:
-    """Identify the current game screen from a frame using template matching."""
+    """Identify the current game screen by OCR-ing key text regions.
+
+    Primary: Apple Vision OCR on 3-5 small regions, matched against
+    known text patterns per screen.
+    """
 
     def __init__(
         self,
+        ocr: OCREngine | None = None,
+        # Legacy params kept for backward compat — ignored
         template_dir: str = "data/templates",
-        threshold: float = DEFAULT_THRESHOLD,
-        tolerance: int = 30,  # kept for pixel-anchor fallback compat
+        threshold: float = 0.8,
+        tolerance: int = 30,
     ) -> None:
-        self.template_dir = Path(template_dir)
-        self.threshold = threshold
-        self.tolerance = tolerance
+        self._ocr = ocr
 
-        self._template_sets: list[ScreenTemplateSet] = []
-        self._loaded = False
-
-        self._load_templates()
-
-    # ------------------------------------------------------------------
-    # Template loading
-    # ------------------------------------------------------------------
-
-    def _load_templates(self) -> None:
-        """Load all template images from data/templates/<screen>/."""
-        if not self.template_dir.exists():
-            logger.warning("Template dir not found: %s", self.template_dir)
-            return
-
-        screen_map = {s.value: s for s in ScreenState}
-
-        for screen_dir in sorted(self.template_dir.iterdir()):
-            if not screen_dir.is_dir():
-                continue
-
-            screen_name = screen_dir.name
-            screen_state = screen_map.get(screen_name)
-            if screen_state is None:
-                # Also handle aliases like "stat_selection" → TRAINING
-                if screen_name == "stat_selection":
-                    screen_state = ScreenState.TRAINING
-                else:
-                    logger.debug("Skipping unknown screen dir: %s", screen_name)
-                    continue
-
-            ts = ScreenTemplateSet(screen=screen_state)
-
-            for img_path in sorted(screen_dir.glob("*.png")):
-                img = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
-                if img is None:
-                    logger.warning("Failed to load template: %s", img_path)
-                    continue
-
-                ts.templates.append(ScreenTemplate(
-                    screen=screen_state,
-                    name=img_path.stem,
-                    image=img,
-                    threshold=self.threshold,
-                ))
-
-            if ts.templates:
-                # Require at least half the templates to match (min 1)
-                ts.min_matches = max(1, len(ts.templates) // 2)
-                self._template_sets.append(ts)
-                logger.info(
-                    "Loaded %d templates for %s (need %d matches)",
-                    len(ts.templates), screen_state.value, ts.min_matches,
-                )
-
-        self._loaded = bool(self._template_sets)
-        if not self._loaded:
-            logger.warning(
-                "No templates loaded from %s — screen identification will "
-                "fall back to pixel anchors. Run scripts/extract_templates.py "
-                "to create templates.",
-                self.template_dir,
-            )
+    def set_ocr(self, ocr: OCREngine) -> None:
+        """Set the OCR engine (for deferred initialization)."""
+        self._ocr = ocr
 
     # ------------------------------------------------------------------
     # Identification
     # ------------------------------------------------------------------
 
     def identify(self, frame: np.ndarray) -> ScreenState:
-        """Determine which screen is currently displayed.
+        """Determine which screen is currently displayed via OCR.
 
-        Args:
-            frame: BGR numpy array (H, W, 3) at 1080x1920.
-
-        Returns:
-            The detected ScreenState, or ScreenState.UNKNOWN.
+        OCRs several key regions and matches text against known patterns.
+        Fast: ~50-80ms total on M1 with Apple Vision.
         """
-        if not self._loaded:
-            return self._identify_pixel_anchors(frame)
+        if self._ocr is None:
+            logger.error("OCR engine not set — cannot identify screen")
+            return ScreenState.UNKNOWN
 
-        best_screen = ScreenState.UNKNOWN
-        best_score = 0.0
+        t0 = time.monotonic()
 
-        for ts in self._template_sets:
-            matches = 0
-            total = len(ts.templates)
+        # Check for loading screen first (mostly dark = no text to read)
+        if self._is_loading_screen(frame):
+            logger.debug("Screen identified: loading (dark frame)")
+            return ScreenState.LOADING
 
-            for tmpl in ts.templates:
-                if self._match_template(frame, tmpl):
-                    matches += 1
+        # OCR the key regions
+        all_text = self._ocr_regions(frame)
+        all_lower = all_text.lower()
 
-            if matches >= ts.min_matches:
-                score = matches / total
-                if score > best_score:
-                    best_score = score
-                    best_screen = ts.screen
+        # Match against rules
+        for screen, required, forbidden in SCREEN_RULES:
+            if all(kw in all_lower for kw in required):
+                if not any(kw in all_lower for kw in forbidden):
+                    elapsed = (time.monotonic() - t0) * 1000
+                    logger.debug(
+                        "Screen identified: %s (%.1fms) text='%s'",
+                        screen.value, elapsed, all_text[:100],
+                    )
+                    return screen
 
-        if best_screen == ScreenState.UNKNOWN:
-            logger.debug("Template matching failed — no screen matched")
-        else:
-            logger.debug(
-                "Screen identified: %s (%.0f%% templates matched)",
-                best_screen.value, best_score * 100,
-            )
-
-        return best_screen
-
-    def _match_template(self, frame: np.ndarray, tmpl: ScreenTemplate) -> bool:
-        """Check if a single template exists in the frame."""
-        th, tw = tmpl.image.shape[:2]
-        fh, fw = frame.shape[:2]
-
-        if th > fh or tw > fw:
-            return False
-
-        result = cv2.matchTemplate(frame, tmpl.image, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, max_loc = cv2.minMaxLoc(result)
-
-        matched = max_val >= tmpl.threshold
-        if matched:
-            logger.debug(
-                "  Template '%s' matched at (%d,%d) conf=%.3f",
-                tmpl.name, max_loc[0], max_loc[1], max_val,
-            )
-        return matched
-
-    def identify_with_details(
-        self, frame: np.ndarray
-    ) -> tuple[ScreenState, dict[str, list[dict]]]:
-        """Like identify(), but also returns per-template match details.
-
-        Useful for calibration and debugging.
-
-        Returns:
-            (screen_state, details) where details maps screen names to
-            lists of {name, matched, confidence, location}.
-        """
-        details: dict[str, list[dict]] = {}
-
-        if not self._loaded:
-            screen = self._identify_pixel_anchors(frame)
-            return screen, details
-
-        best_screen = ScreenState.UNKNOWN
-        best_score = 0.0
-
-        for ts in self._template_sets:
-            matches = 0
-            total = len(ts.templates)
-            screen_details = []
-
-            for tmpl in ts.templates:
-                th, tw = tmpl.image.shape[:2]
-                fh, fw = frame.shape[:2]
-                if th > fh or tw > fw:
-                    screen_details.append({
-                        "name": tmpl.name, "matched": False,
-                        "confidence": 0.0, "location": None,
-                    })
-                    continue
-
-                result = cv2.matchTemplate(frame, tmpl.image, cv2.TM_CCOEFF_NORMED)
-                _, max_val, _, max_loc = cv2.minMaxLoc(result)
-                hit = max_val >= tmpl.threshold
-                if hit:
-                    matches += 1
-                screen_details.append({
-                    "name": tmpl.name,
-                    "matched": hit,
-                    "confidence": round(float(max_val), 4),
-                    "location": (int(max_loc[0]), int(max_loc[1])) if hit else None,
-                })
-
-            details[ts.screen.value] = screen_details
-
-            if matches >= ts.min_matches:
-                score = matches / total
-                if score > best_score:
-                    best_score = score
-                    best_screen = ts.screen
-
-        return best_screen, details
-
-    # ------------------------------------------------------------------
-    # Stat selection sub-screen check
-    # ------------------------------------------------------------------
+        elapsed = (time.monotonic() - t0) * 1000
+        logger.debug(
+            "Screen UNKNOWN (%.1fms) text='%s'",
+            elapsed, all_text[:120],
+        )
+        return ScreenState.UNKNOWN
 
     def is_stat_selection(self, frame: np.ndarray) -> bool:
-        """Check if the current screen is the training stat selection sub-screen.
+        """Check if the current TRAINING screen is the stat selection sub-screen.
 
-        If stat_selection templates exist, use template matching.
-        Otherwise fall back to checking for the absence of the Rest button.
+        The stat selection screen has a "Back" button at bottom-left and
+        shows training tiles.  The career home screen has "Rest" at bottom-left.
         """
-        # Check if we have stat_selection templates
-        for ts in self._template_sets:
-            if ts.screen == ScreenState.TRAINING:
-                # Look for templates from the stat_selection directory
-                stat_templates = [
-                    t for t in ts.templates
-                    if t.name.startswith("back_btn")
-                ]
-                if stat_templates:
-                    return any(self._match_template(frame, t) for t in stat_templates)
-
-        # Fallback: check for absence of green Rest button at (187, 1525)
-        h, w = frame.shape[:2]
-        if h < 1900 or w < 1000:
+        if self._ocr is None:
             return False
-        r, g, b = self.sample_pixel(frame, 187, 1525)
-        rest_btn_green = (90 <= r <= 150 and 175 <= g <= 235 and 10 <= b <= 65)
-        return not rest_btn_green
+
+        # OCR the bottom-left button area where "Rest" or "Back" appears
+        text = self._ocr.read_region(frame, BUTTON_LEFT_REGION).lower()
+
+        # "back" present and "rest" absent → stat selection
+        if "back" in text and "rest" not in text:
+            return True
+
+        # Also check: stat selection has "failure" text (failure rate display)
+        if "failure" in text or "lvl" in text:
+            return True
+
+        return False
+
+    def identify_with_details(
+        self, frame: np.ndarray,
+    ) -> tuple[ScreenState, dict[str, str]]:
+        """Like identify(), but returns the OCR text per region for debugging."""
+        if self._ocr is None:
+            return ScreenState.UNKNOWN, {}
+
+        details: dict[str, str] = {}
+
+        if self._is_loading_screen(frame):
+            return ScreenState.LOADING, {"note": "dark frame detected"}
+
+        regions = {
+            "header": HEADER_REGION,
+            "button_left": BUTTON_LEFT_REGION,
+            "button_right": BUTTON_RIGHT_REGION,
+            "popup": POPUP_REGION,
+            "mid": MID_REGION,
+        }
+
+        all_text_parts = []
+        for name, region in regions.items():
+            text = self._ocr.read_region(frame, region)
+            details[name] = text
+            all_text_parts.append(text)
+
+        all_lower = " ".join(all_text_parts).lower()
+
+        for screen, required, forbidden in SCREEN_RULES:
+            if all(kw in all_lower for kw in required):
+                if not any(kw in all_lower for kw in forbidden):
+                    return screen, details
+
+        return ScreenState.UNKNOWN, details
 
     # ------------------------------------------------------------------
-    # Pixel anchor fallback
+    # Internal helpers
     # ------------------------------------------------------------------
 
-    def _identify_pixel_anchors(self, frame: np.ndarray) -> ScreenState:
-        """Fallback screen identification using pixel colour anchors.
+    def _ocr_regions(self, frame: np.ndarray) -> str:
+        """OCR the key identification regions and concatenate the text."""
+        parts = []
+        for region in (
+            HEADER_REGION,
+            BUTTON_LEFT_REGION,
+            BUTTON_RIGHT_REGION,
+            POPUP_REGION,
+            MID_REGION,
+        ):
+            text = self._ocr.read_region(frame, region)
+            if text:
+                parts.append(text)
+        return " ".join(parts)
 
-        Used when no templates have been extracted yet.
+    @staticmethod
+    def _is_loading_screen(frame: np.ndarray) -> bool:
+        """Quick check: if the frame is mostly dark, it's a loading screen.
+
+        Samples a grid of pixels; if >80% are very dark, assume loading.
+        This avoids wasting OCR calls on blank frames.
         """
-        from uma_trainer.perception.regions import SCREEN_ANCHORS
+        h, w = frame.shape[:2]
+        dark_count = 0
+        total = 0
 
-        best_screen = ScreenState.UNKNOWN
-        best_score = 0.0
-
-        for anchor_set in SCREEN_ANCHORS:
-            matches = 0
-            total = len(anchor_set.anchors)
-
-            for anchor in anchor_set.anchors:
-                h, w = frame.shape[:2]
-                x = min(max(anchor.x, 0), w - 1)
-                y = min(max(anchor.y, 0), h - 1)
+        for y in range(100, h - 100, 200):
+            for x in range(100, w - 100, 200):
                 b, g, r = frame[y, x]
-                r, g, b = int(r), int(g), int(b)
-                if anchor.matches(r, g, b, self.tolerance):
-                    matches += 1
+                total += 1
+                if int(r) + int(g) + int(b) < 120:
+                    dark_count += 1
 
-            if matches >= anchor_set.min_matches:
-                score = matches / total
-                if score > best_score:
-                    best_score = score
-                    best_screen = anchor_set.screen
-
-        if best_screen == ScreenState.UNKNOWN:
-            logger.debug("Pixel anchor fallback — no screen matched")
-        else:
-            logger.debug("Pixel anchor fallback — %s (%.2f)", best_screen.value, best_score)
-
-        return best_screen
+        return total > 0 and (dark_count / total) > 0.80
 
     # ------------------------------------------------------------------
-    # Utility
+    # Deprecated — kept for backward compat, not used
     # ------------------------------------------------------------------
 
     def sample_pixel(self, frame: np.ndarray, x: int, y: int) -> tuple[int, int, int]:

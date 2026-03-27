@@ -25,6 +25,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Typical stat gains per training type when OCR data is unavailable.
+# Each training boosts multiple stats — the primary stat gets the largest
+# gain, but secondary/tertiary stats contribute meaningful value too.
+# Values are rough averages for mid-game with moderate support card stacking.
+ESTIMATED_TRAINING_GAINS: dict[str, dict[str, int]] = {
+    "speed":   {"speed": 12, "stamina": 0, "power": 5,  "guts": 0,  "wit": 0},
+    "stamina": {"speed": 0,  "stamina": 12, "power": 0, "guts": 5,  "wit": 0},
+    "power":   {"speed": 0,  "stamina": 5,  "power": 12, "guts": 0, "wit": 0},
+    "guts":    {"speed": 5,  "stamina": 0,  "power": 0, "guts": 12, "wit": 0},
+    "wit":     {"speed": 0,  "stamina": 0,  "power": 0, "guts": 0,  "wit": 12},
+}
+
 
 class TrainingScorer:
     """Scores training tiles and decides the best action for a given game state."""
@@ -142,15 +154,21 @@ class TrainingScorer:
                 current = state.stats.get(StatType(stat_name))
                 score += self.runspec.stat_utility(stat_name, current, gain)
         elif self.runspec:
-            # RunSpec available but no OCR'd stat gains — estimate from stat type
-            estimated_gain = 15  # rough average gain per training
-            current = state.stats.get(tile.stat_type)
-            score += self.runspec.stat_utility(tile.stat_type.value, current, estimated_gain)
+            # RunSpec available but no OCR'd stat gains — estimate from
+            # the typical multi-stat distribution for this training type.
+            estimated = ESTIMATED_TRAINING_GAINS.get(tile.stat_type.value, {})
+            for stat_name, gain in estimated.items():
+                if gain > 0:
+                    current = state.stats.get(StatType(stat_name))
+                    score += self.runspec.stat_utility(stat_name, current, gain)
         else:
-            # Legacy: flat stat weights
+            # Legacy: flat stat weights, applied to all stats this training boosts
             weights = self._get_effective_weights(state)
-            stat_weight = weights.get(tile.stat_type.value, 1.0)
-            score += stat_weight * 10.0
+            estimated = ESTIMATED_TRAINING_GAINS.get(tile.stat_type.value, {})
+            for stat_name, gain in estimated.items():
+                if gain > 0:
+                    stat_weight = weights.get(stat_name, 1.0)
+                    score += stat_weight * gain * 0.7
 
         # 2. Support card stacking bonus
         score += len(tile.support_cards) * self.config.card_stack_per_card * 5.0
