@@ -64,7 +64,26 @@ cp .env.example .env
 # Edit .env and fill in your ANTHROPIC_API_KEY
 ```
 
-### 5. Import the knowledge base
+### 5. Extract the game's master database
+
+The game ships with `master.mdb`, an SQLite database containing all static game data (events, skills, characters, races, support cards). Extracting it requires temporarily enabling root on MuMu:
+
+1. **Close Uma Musume** (it won't start while rooted)
+2. **Enable root** in MuMu: Settings → Other → Root Permission
+3. **Pull the database**:
+   ```bash
+   adb connect 127.0.0.1:5555
+   adb pull /data/data/com.cygames.umamusume/files/master/master.mdb data/master.mdb
+   ```
+4. **Disable root** in MuMu settings and restart the emulator
+5. **Verify** (optional):
+   ```bash
+   python scripts/pull_master_mdb.py --info
+   ```
+
+> **Re-extract after game updates** — Cygames patches `master.mdb` with new events, skills, and characters. Re-pull it after major game updates to keep the knowledge base current.
+
+### 6. Import the knowledge base
 
 Loads the bundled event, skill, support card, and race calendar data into SQLite:
 
