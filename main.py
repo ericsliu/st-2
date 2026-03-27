@@ -45,9 +45,10 @@ def cli() -> None:
 @click.option("--config", default="config/default.yaml", show_default=True, help="Config file")
 @click.option("--scenario", default=None, help="Scenario name (trackblazer, ura_finale, unity_cup)")
 @click.option("--preset", default=None, help="Training preset name (from data/presets/)")
+@click.option("--runspec", "runspec_name", default=None, help="RunSpec name (from data/runspecs/)")
 @click.option("--headless", is_flag=True, help="Run without web dashboard")
 @click.option("--log-level", default="INFO", show_default=True)
-def run(config: str, scenario: str | None, preset: str | None, headless: bool, log_level: str) -> None:
+def run(config: str, scenario: str | None, preset: str | None, runspec_name: str | None, headless: bool, log_level: str) -> None:
     """Start an autonomous Career Mode training run."""
     _setup_logging(log_level)
     logger = logging.getLogger("main")
@@ -76,6 +77,12 @@ def run(config: str, scenario: str | None, preset: str | None, headless: bool, l
     scenario_name = scenario or cfg.scenario
     scenario_handler = load_scenario(scenario_name)
     logger.info("Scenario: %s (%s)", scenario_handler.config.display_name, scenario_name)
+
+    # Load RunSpec
+    from uma_trainer.decision.runspec import load_runspec
+    rs_name = runspec_name or cfg.runspec
+    runspec = load_runspec(rs_name)
+    logger.info("RunSpec: %s (%s)", runspec.name, runspec.id)
 
     # Build the dependency graph
     from uma_trainer.capture import get_capture_backend
@@ -116,7 +123,7 @@ def run(config: str, scenario: str | None, preset: str | None, headless: bool, l
     local_llm = OllamaClient(cfg.llm, llm_cache, advice=advice)
     claude = ClaudeAPIClient(cfg.llm, llm_cache, advice=advice)
 
-    scorer = TrainingScorer(cfg.scorer, overrides=overrides, scenario=scenario_handler)
+    scorer = TrainingScorer(cfg.scorer, overrides=overrides, scenario=scenario_handler, runspec=runspec)
     if preset_data:
         scorer.apply_preset(preset_data)
 

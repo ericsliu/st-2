@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from uma_trainer.config import ScorerConfig
+from uma_trainer.decision.runspec import RunSpec
 from uma_trainer.types import (
     ActionType,
     BotAction,
@@ -33,10 +34,12 @@ class TrainingScorer:
         config: ScorerConfig,
         overrides: "OverridesLoader | None" = None,
         scenario: "ScenarioHandler | None" = None,
+        runspec: RunSpec | None = None,
     ) -> None:
         self.config = config
         self.overrides = overrides
         self.scenario = scenario
+        self.runspec = runspec
 
     # ------------------------------------------------------------------
     # Main decision entry points
@@ -84,13 +87,17 @@ class TrainingScorer:
     def should_rest(self, state: GameState) -> bool:
         """True if energy is too low to safely train.
 
-        Priority: strategy.yaml override > scenario YAML > scorer config.
+        Priority: strategy.yaml override > RunSpec constraints > scenario YAML > scorer config.
         """
         threshold = self.config.rest_energy_threshold
 
         # Scenario definition provides the base threshold
         if self.scenario:
             threshold = self.scenario.get_rest_threshold()
+
+        # RunSpec constraints override scenario defaults
+        if self.runspec:
+            threshold = self.runspec.constraints.rest_energy_threshold
 
         # strategy.yaml can override for live-tuning
         if self.overrides:
@@ -128,10 +135,22 @@ class TrainingScorer:
     def _score_tile(self, tile: TrainingTile, state: GameState) -> float:
         score = 0.0
 
-        # 1. Base stat alignment weight (from preset, merged with live overrides)
-        weights = self._get_effective_weights(state)
-        stat_weight = weights.get(tile.stat_type.value, 1.0)
-        score += stat_weight * 10.0
+        # 1. Base stat value — RunSpec piecewise utility if available, else flat weights
+        if self.runspec and tile.stat_gains:
+            # Use piecewise utility for each stat gain on this tile
+            for stat_name, gain in tile.stat_gains.items():
+                current = state.stats.get(StatType(stat_name))
+                score += self.runspec.stat_utility(stat_name, current, gain)
+        elif self.runspec:
+            # RunSpec available but no OCR'd stat gains — estimate from stat type
+            estimated_gain = 15  # rough average gain per training
+            current = state.stats.get(tile.stat_type)
+            score += self.runspec.stat_utility(tile.stat_type.value, current, estimated_gain)
+        else:
+            # Legacy: flat stat weights
+            weights = self._get_effective_weights(state)
+            stat_weight = weights.get(tile.stat_type.value, 1.0)
+            score += stat_weight * 10.0
 
         # 2. Support card stacking bonus
         score += len(tile.support_cards) * self.config.card_stack_per_card * 5.0
@@ -172,7 +191,14 @@ class TrainingScorer:
 
         # 9. Failure rate penalty
         if tile.failure_rate > 0:
-            score *= (1.0 - tile.failure_rate * 0.5)
+            if self.runspec:
+                penalty = self.runspec.policy.failure_risk_penalty
+                score *= (1.0 - tile.failure_rate * penalty)
+                # Hard constraint: reject tiles above max failure rate
+                if tile.failure_rate > self.runspec.constraints.max_failure_rate:
+                    score *= 0.1
+            else:
+                score *= (1.0 - tile.failure_rate * 0.5)
 
         return max(0.0, score)
 

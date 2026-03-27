@@ -241,6 +241,7 @@
   <button onclick="switchTab('strategy')">Strategy</button>
   <button onclick="switchTab('advice')">Advice</button>
   <button onclick="switchTab('events-override')">Event Overrides</button>
+  <button onclick="switchTab('runspec')">RunSpec</button>
   <button onclick="switchTab('kb')">Knowledge Base</button>
   <button onclick="switchTab('history')">Run History</button>
 </nav>
@@ -468,6 +469,66 @@
 </div>
 
 <!-- ═══════════════════════════════════════════
+     TAB — RUNSPEC
+════════════════════════════════════════════ -->
+<div id="tab-runspec" class="tab-panel">
+
+  <div class="controls">
+    <select id="runspec-select" onchange="loadRunspecDetail()" style="min-width:220px;padding:0.4rem 0.75rem;border-radius:8px">
+      <option value="">Loading...</option>
+    </select>
+    <button class="btn-save" onclick="setActiveRunspec()">Set Active</button>
+    <span id="runspec-active-badge" class="badge badge-running" style="display:none"></span>
+    <span id="runspec-status" style="font-size:0.8rem;color:var(--green)"></span>
+  </div>
+
+  <div id="runspec-detail" style="display:none">
+    <div class="grid-2 mb">
+      <div class="card">
+        <div class="card-title">Spec Info</div>
+        <div class="stat-row"><span class="stat-label">ID</span><span class="stat-value" id="rs-id">—</span></div>
+        <div class="stat-row"><span class="stat-label">Name</span><span class="stat-value" id="rs-name">—</span></div>
+        <div class="stat-row"><span class="stat-label">Type</span><span class="stat-value" id="rs-type">—</span></div>
+        <div class="stat-row"><span class="stat-label">Distance</span><span class="stat-value" id="rs-distance">—</span></div>
+        <div class="stat-row"><span class="stat-label">Style</span><span class="stat-value" id="rs-style">—</span></div>
+        <div style="margin-top:0.75rem;font-size:0.85rem;color:var(--muted)" id="rs-desc"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Policy Weights</div>
+        <div id="rs-policy"></div>
+      </div>
+    </div>
+
+    <div class="card mb">
+      <div class="card-title">Stat Targets</div>
+      <div style="overflow-x:auto">
+        <table id="rs-stats-table">
+          <thead>
+            <tr>
+              <th>Stat</th>
+              <th>Minimum</th>
+              <th>Target</th>
+              <th>Excellent</th>
+              <th>Below Min</th>
+              <th>To Target</th>
+              <th>To Excellent</th>
+              <th>Above Excellent</th>
+            </tr>
+          </thead>
+          <tbody id="rs-stats-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Constraints</div>
+      <div id="rs-constraints"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════
      TAB 5 — KNOWLEDGE BASE BROWSER
 ════════════════════════════════════════════ -->
 <div id="tab-kb" class="tab-panel">
@@ -561,7 +622,7 @@ function esc(s) {
 }
 
 // ── Tabs ────────────────────────────────────
-const TAB_IDS = ['monitor','strategy','advice','events-override','kb','history'];
+const TAB_IDS = ['monitor','strategy','advice','events-override','runspec','kb','history'];
 function switchTab(name) {
   TAB_IDS.forEach(id => {
     el('tab-'+id)?.classList.toggle('active', id === name);
@@ -572,6 +633,7 @@ function switchTab(name) {
   if (name === 'strategy') loadStrategy();
   if (name === 'advice') loadAdviceList();
   if (name === 'events-override') loadOverrides();
+  if (name === 'runspec') loadRunspecList();
   if (name === 'kb') loadKB();
   if (name === 'history') loadHistory();
 }
@@ -1037,6 +1099,71 @@ function renderKBPage() {
 function kbPrev() { if (_kbPage > 0) { _kbPage--; renderKBPage(); } }
 function kbNext() {
   if ((_kbPage+1)*KB_PAGE_SIZE < _kbFiltered.length) { _kbPage++; renderKBPage(); }
+}
+
+// ── RunSpec ──────────────────────────────────
+let _rsActive = '';
+async function loadRunspecList() {
+  const [specs, active] = await Promise.all([
+    api('/api/runspecs').catch(() => []),
+    api('/api/runspec/active').catch(() => ({runspec:''}))
+  ]);
+  _rsActive = active.runspec || '';
+  const sel = el('runspec-select');
+  sel.innerHTML = '<option value="">— select spec —</option>' +
+    specs.map(s => `<option value="${esc(s.id)}" ${s.id===_rsActive?'selected':''}>${esc(s.name)} (${esc(s.run_type)})</option>`).join('');
+  if (_rsActive) {
+    el('runspec-active-badge').style.display = '';
+    el('runspec-active-badge').textContent = 'Active: '+_rsActive;
+  }
+  if (sel.value) loadRunspecDetail();
+}
+
+async function loadRunspecDetail() {
+  const id = el('runspec-select').value;
+  if (!id) { el('runspec-detail').style.display = 'none'; return; }
+  const s = await api(`/api/runspecs/${id}`).catch(() => null);
+  if (!s) { toast('Failed to load spec', true); return; }
+  el('runspec-detail').style.display = '';
+  el('rs-id').textContent = s.id;
+  el('rs-name').textContent = s.name;
+  el('rs-type').textContent = s.run_type;
+  el('rs-distance').textContent = s.distance_target;
+  el('rs-style').textContent = s.style_target;
+  el('rs-desc').textContent = s.description || '(no description)';
+
+  // Policy
+  const pol = s.policy || {};
+  el('rs-policy').innerHTML = Object.entries(pol).map(([k,v]) =>
+    `<div class="stat-row"><span class="stat-label">${esc(k.replace(/_/g,' '))}</span><span class="stat-value">${v}</span></div>`
+  ).join('');
+
+  // Stat targets table
+  const stats = s.stat_targets || {};
+  el('rs-stats-body').innerHTML = Object.entries(stats).map(([name, t]) =>
+    `<tr><td style="font-weight:700;text-transform:capitalize">${esc(name)}</td>` +
+    `<td>${t.minimum}</td><td>${t.target}</td><td>${t.excellent}</td>` +
+    `<td>${(t.values||[])[0]??'—'}</td><td>${(t.values||[])[1]??'—'}</td>` +
+    `<td>${(t.values||[])[2]??'—'}</td><td>${(t.values||[])[3]??'—'}</td></tr>`
+  ).join('');
+
+  // Constraints
+  const con = s.constraints || {};
+  el('rs-constraints').innerHTML = Object.entries(con).map(([k,v]) =>
+    `<div class="stat-row"><span class="stat-label">${esc(k.replace(/_/g,' '))}</span><span class="stat-value">${v}</span></div>`
+  ).join('');
+}
+
+async function setActiveRunspec() {
+  const id = el('runspec-select').value;
+  if (!id) { toast('Select a spec first', true); return; }
+  await api('/api/runspec/active', 'PUT', {runspec: id});
+  _rsActive = id;
+  el('runspec-active-badge').style.display = '';
+  el('runspec-active-badge').textContent = 'Active: '+id;
+  el('runspec-status').textContent = 'Set!';
+  setTimeout(() => el('runspec-status').textContent = '', 2000);
+  toast('Active RunSpec: '+id);
 }
 
 // ── Run History ───────────────────────────────

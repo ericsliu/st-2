@@ -72,6 +72,7 @@ class AppConfig(BaseModel):
     ocr: OCRConfig = Field(default_factory=OCRConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     scorer: ScorerConfig = Field(default_factory=ScorerConfig)
+    runspec: str = "parent_balanced_v1"
     scenario: str = "trackblazer"
     db_path: str = "data/uma_trainer.db"
     master_mdb_path: str = "data/master.mdb"

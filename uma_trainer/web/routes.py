@@ -176,6 +176,40 @@ def create_router(
         return {"status": "saved"}
 
     # -----------------------------------------------------------------------
+    # RunSpecs
+    # -----------------------------------------------------------------------
+
+    @router.get("/api/runspecs")
+    async def list_runspecs_api() -> list[dict]:
+        """List available RunSpec files."""
+        from uma_trainer.decision.runspec import list_runspecs
+        return list_runspecs()
+
+    @router.get("/api/runspecs/{spec_id}")
+    async def get_runspec(spec_id: str) -> dict:
+        """Get full RunSpec details."""
+        from uma_trainer.decision.runspec import load_runspec
+        spec = load_runspec(spec_id)
+        return spec.summary()
+
+    @router.get("/api/runspec/active")
+    async def get_active_runspec() -> dict[str, str]:
+        """Get the currently configured RunSpec ID."""
+        return {"runspec": config.runspec}
+
+    @router.put("/api/runspec/active")
+    async def set_active_runspec(body: dict) -> dict[str, str]:
+        """Set the active RunSpec (runtime only, does not persist to YAML)."""
+        new_id = body.get("runspec", "")
+        if not new_id:
+            raise HTTPException(400, "Missing 'runspec' field")
+        from uma_trainer.decision.runspec import load_runspec
+        # Validate it loads
+        load_runspec(new_id)
+        config.runspec = new_id
+        return {"status": "ok", "runspec": new_id}
+
+    # -----------------------------------------------------------------------
     # Knowledge base browsing
     # -----------------------------------------------------------------------
 
