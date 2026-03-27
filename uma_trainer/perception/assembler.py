@@ -238,15 +238,15 @@ class StateAssembler:
     ) -> dict[str, int]:
         """Read stat gain values from a list of (stat_name, region_key) pairs.
 
-        Uses read_number_region (with 3x upscale preprocessing) for better
-        accuracy on small green "+X" gain numbers.
+        Uses read_gain_region (gain-aware '+N' parsing) to handle the '+'
+        symbol being misread as '4' or '$' by Apple Vision OCR.
         """
         gains: dict[str, int] = {}
         for stat_name, key in stat_region_keys:
             region = STAT_SELECTION_REGIONS.get(key)
             if not region:
                 continue
-            val = self.ocr.read_number_region(frame, region)
+            val = self.ocr.read_gain_region(frame, region)
             if val is not None and 0 < val <= 500:
                 gains[stat_name] = val
         return gains
@@ -572,13 +572,7 @@ class StateAssembler:
             return
 
         x1, y1, x2, y2 = region
-        # Shrink to inner bar area to avoid border artifacts
-        margin_x, margin_y = 5, 5
-        ix1 = x1 + margin_x
-        iy1 = y1 + margin_y
-        ix2 = x2 - margin_x
-        iy2 = y2 - margin_y
-        roi = frame[iy1:iy2, ix1:ix2]
+        roi = frame[y1:y2, x1:x2]
         if roi.size == 0:
             return
 
@@ -588,12 +582,12 @@ class StateAssembler:
         except ImportError:
             return
 
-        # The filled portion is saturated (coloured); empty is pure grey.
-        bar_width = ix2 - ix1
-        sat = hsv[:, :, 1]
-        col_sat = np.mean(sat, axis=0)
-        # Columns with any meaningful saturation are "filled"
-        filled_cols = int(np.sum(col_sat > 20))
+        # The energy bar is rainbow-coloured (filled) vs grey (empty).
+        # Use per-column saturation to distinguish filled from empty.
+        bar_width = x2 - x1
+        col_sat = np.mean(hsv[:, :, 1], axis=0)
+        # Rainbow fill has saturation > 50; grey empty area is < 20.
+        filled_cols = int(np.sum(col_sat > 50))
         energy = int(round(filled_cols / bar_width * 100))
         state.energy = max(0, min(100, energy))
 

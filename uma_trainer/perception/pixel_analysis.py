@@ -170,26 +170,106 @@ def count_support_cards(frame: np.ndarray, region: Region) -> int:
 
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
-    # Use Canny edge detection to find card boundaries
-    edges = cv2.Canny(gray, 50, 150)
+    # Use Canny edge detection to find card boundaries.
+    # Stricter thresholds to reduce noise from tile backgrounds and labels.
+    edges = cv2.Canny(gray, 80, 200)
     edge_ratio = float(np.mean(edges > 0))
 
-    # More edges = more cards.  Rough heuristic calibrated against screenshots.
-    # An empty tile has very few edges; each card adds ~3-5% edge density.
-    if edge_ratio < 0.02:
+    # Thresholds recalibrated 2026-03-27.
+    # Background noise (tile borders, labels) produces ~0.05-0.09 edge ratio
+    # even with zero cards. Each actual card adds ~0.04-0.06.
+    if edge_ratio < 0.05:
         return 0
-    elif edge_ratio < 0.06:
-        return 1
     elif edge_ratio < 0.10:
-        return 2
+        return 1
     elif edge_ratio < 0.15:
-        return 3
+        return 2
     elif edge_ratio < 0.20:
-        return 4
+        return 3
     elif edge_ratio < 0.25:
+        return 4
+    elif edge_ratio < 0.30:
         return 5
     else:
         return 6
+
+
+def count_panel_portraits(frame: np.ndarray, region: Region) -> int:
+    """Count support card character portraits on the right panel.
+
+    When a training tile is selected, the support cards assigned to that
+    training appear as circular character portraits stacked vertically
+    along the right side of the screen. Each portrait is ~120px tall
+    (circle + bond gauge) with the first starting near the top of the panel.
+
+    Detection: check fixed vertical slots for colour variance.
+    Background (classroom walls, empty space) has low variance;
+    a character portrait has high variance from the detailed art.
+
+    Args:
+        frame: BGR numpy array (1080x1920).
+        region: (x1, y1, x2, y2) of the right panel area.
+
+    Returns:
+        Number of detected portraits (0–6).
+    """
+    x1, y1, x2, y2 = region
+    roi = frame[y1:y2, x1:x2]
+    if roi.size == 0:
+        return 0
+
+    try:
+        import cv2
+    except ImportError:
+        return 0
+
+    # Portrait slots: each ~140px tall, starting from y=0 in the ROI.
+    # The first portrait center is at ~y=80, subsequent ones ~140px apart.
+    SLOT_HEIGHT = 140
+    SLOT_START = 10
+    MAX_SLOTS = 6
+
+    panel_h = y2 - y1
+    count = 0
+
+    for slot in range(MAX_SLOTS):
+        slot_y1 = SLOT_START + slot * SLOT_HEIGHT
+        slot_y2 = slot_y1 + SLOT_HEIGHT
+        if slot_y2 > panel_h:
+            break
+
+        slot_roi = roi[slot_y1:slot_y2, :]
+        if slot_roi.size == 0:
+            break
+
+        # Convert to HSV and check saturation variance.
+        # Character portraits are colourful (high sat variance);
+        # background is mostly uniform (low sat variance).
+        hsv = cv2.cvtColor(slot_roi, cv2.COLOR_BGR2HSV)
+        sat = hsv[:, :, 1].astype(float)
+        sat_std = float(np.std(sat))
+
+        # Also check edge density as a secondary signal
+        gray_slot = cv2.cvtColor(slot_roi, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray_slot, 60, 150)
+        edge_ratio = float(np.mean(edges > 0))
+
+        has_portrait = sat_std > 40 and edge_ratio > 0.08
+
+        logger.debug(
+            "Portrait slot %d (y=%d-%d): sat_std=%.1f, edge=%.3f -> %s",
+            slot, y1 + slot_y1, y1 + slot_y2,
+            sat_std, edge_ratio,
+            "YES" if has_portrait else "no",
+        )
+
+        if has_portrait:
+            count += 1
+        else:
+            # Portraits stack from the top; once we hit an empty slot, stop
+            break
+
+    return count
 
 
 def region_has_content(frame: np.ndarray, region: Region, threshold: float = 0.15) -> bool:

@@ -19,6 +19,9 @@ class ScreenState(str, Enum):
     RACE_ENTRY = "race_entry"
     SKILL_SHOP = "skill_shop"
     RESULT_SCREEN = "result_screen"
+    PRE_RACE = "pre_race"
+    POST_RACE = "post_race"
+    WARNING_POPUP = "warning_popup"
     LOADING = "loading"
     CUTSCENE = "cutscene"
     UNKNOWN = "unknown"
@@ -143,6 +146,9 @@ class RaceOption:
     is_goal_race: bool = False   # Part of career goals
     position: int = 0            # Index in the visible list (for tapping)
     tap_coords: tuple[int, int] = (0, 0)
+    # True if the distance/surface text is highlighted yellow on the race list,
+    # indicating B or better aptitude. White text = C or worse.
+    is_aptitude_ok: bool = True
 
 
 @dataclass
@@ -183,6 +189,9 @@ class GameState:
     event_choices: list[EventChoice] = field(default_factory=list)
     available_skills: list[SkillOption] = field(default_factory=list)
     available_races: list[RaceOption] = field(default_factory=list)
+    # Trainee aptitudes read from the stats page at run start.
+    # Keys: short, mile, medium, long, turf, dirt. Values: S/A/B/C/D/E/F/G.
+    trainee_aptitudes: dict[str, str] = field(default_factory=dict)
     confidence: float = 1.0  # Assembler confidence in this reading
     raw_detections: list[Any] = field(default_factory=list)
     timestamp: float = field(default_factory=time.time)

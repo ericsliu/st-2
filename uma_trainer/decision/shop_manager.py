@@ -24,6 +24,35 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# Training boost effects for items that modify training output.
+# multiplier: multiplicative bonus to stat gains (1.5 = +50%)
+# zero_failure: if True, failure rate is treated as 0%
+# duration: how many turns the effect lasts after activation
+ITEM_TRAINING_EFFECTS: dict[str, dict] = {
+    "ankle_weights":    {"multiplier": 1.5, "duration": 1},
+    "coaching_mega":    {"multiplier": 1.2, "duration": 4},
+    "motivating_mega":  {"multiplier": 1.4, "duration": 3},
+    "empowering_mega":  {"multiplier": 1.6, "duration": 2},
+    "good_luck_charm":  {"multiplier": 1.0, "duration": 1, "zero_failure": True},
+}
+
+
+@dataclass
+class ActiveEffect:
+    """An item effect currently active on the trainee."""
+    item_key: str
+    turns_remaining: int
+    multiplier: float = 1.0
+    zero_failure: bool = False
+
+
+@dataclass
+class TrainingBoost:
+    """Combined training boost from all active/pending item effects."""
+    multiplier: float = 1.0
+    zero_failure: bool = False
+
+
 class ItemTier(str, Enum):
     """Purchase priority tier."""
     SS = "SS"   # Buy on sight
@@ -111,6 +140,10 @@ class ShopManager:
         self.scenario = scenario
         # Track owned items: {item_key: count}
         self._inventory: dict[str, int] = {}
+        # Currently active item effects (used items with remaining duration)
+        self._active_effects: list[ActiveEffect] = []
+        # Last turn effects were ticked (prevents double-tick in same turn)
+        self._last_tick_turn: int = -1
 
     # ------------------------------------------------------------------
     # Scenario-delegated decisions
@@ -214,6 +247,74 @@ class ShopManager:
     def _use_item(self, item_key: str) -> None:
         if self._inventory.get(item_key, 0) > 0:
             self._inventory[item_key] -= 1
+
+    # ------------------------------------------------------------------
+    # Active item effects (Trackblazer shop items)
+    # ------------------------------------------------------------------
+
+    def activate_item(self, item_key: str) -> None:
+        """Register an item as active after USE_ITEM is executed.
+
+        Only items in ITEM_TRAINING_EFFECTS have training-relevant effects.
+        """
+        effect_def = ITEM_TRAINING_EFFECTS.get(item_key)
+        if not effect_def:
+            return
+        effect = ActiveEffect(
+            item_key=item_key,
+            turns_remaining=effect_def["duration"],
+            multiplier=effect_def.get("multiplier", 1.0),
+            zero_failure=effect_def.get("zero_failure", False),
+        )
+        self._active_effects.append(effect)
+        logger.info(
+            "Item activated: %s (×%.1f, %d turns%s)",
+            item_key, effect.multiplier, effect.turns_remaining,
+            ", 0%% failure" if effect.zero_failure else "",
+        )
+
+    def tick_effects(self, current_turn: int) -> None:
+        """Decrement active effect durations. Call once per turn.
+
+        Uses current_turn to prevent double-ticking when the FSM sees
+        the TRAINING screen multiple times in the same turn.
+        """
+        if current_turn <= self._last_tick_turn:
+            return
+        self._last_tick_turn = current_turn
+        expired = []
+        for effect in self._active_effects:
+            effect.turns_remaining -= 1
+            if effect.turns_remaining <= 0:
+                expired.append(effect)
+                logger.debug("Item effect expired: %s", effect.item_key)
+        for e in expired:
+            self._active_effects.remove(e)
+
+    def get_training_boost(self, state: GameState) -> TrainingBoost:
+        """Get the combined training boost from active item effects.
+
+        Includes both currently active effects (from items used on prior
+        turns) and the pending item that get_item_to_use() would return
+        this turn (so the scorer can factor it in before execution).
+        """
+        multiplier = 1.0
+        zero_failure = False
+
+        # Active effects from items already used
+        for effect in self._active_effects:
+            multiplier *= effect.multiplier
+            zero_failure = zero_failure or effect.zero_failure
+
+        # Pending: check what item would be used this turn (without side effects)
+        if self.scenario:
+            pending = self.scenario.get_item_to_use(state, self._inventory)
+            if pending and pending.target in ITEM_TRAINING_EFFECTS:
+                effect_def = ITEM_TRAINING_EFFECTS[pending.target]
+                multiplier *= effect_def.get("multiplier", 1.0)
+                zero_failure = zero_failure or effect_def.get("zero_failure", False)
+
+        return TrainingBoost(multiplier=multiplier, zero_failure=zero_failure)
 
     # ------------------------------------------------------------------
     # Helpers

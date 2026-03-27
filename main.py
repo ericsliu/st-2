@@ -120,14 +120,17 @@ def run(config: str, scenario: str | None, preset: str | None, runspec_name: str
     local_llm = OllamaClient(cfg.llm, llm_cache, advice=advice)
     claude = ClaudeAPIClient(cfg.llm, llm_cache, advice=advice)
 
-    scorer = TrainingScorer(cfg.scorer, overrides=overrides, scenario=scenario_handler, runspec=runspec)
+    shop_manager = ShopManager(overrides=overrides, scenario=scenario_handler)
+    scorer = TrainingScorer(
+        cfg.scorer, overrides=overrides, scenario=scenario_handler,
+        runspec=runspec, shop_manager=shop_manager,
+    )
     if preset_data:
         scorer.apply_preset(preset_data)
 
     event_handler = EventHandler(kb, local_llm, claude, overrides=overrides)
     skill_buyer = SkillBuyer(kb, scorer, overrides=overrides)
     race_selector = RaceSelector(kb, overrides=overrides, scenario=scenario_handler)
-    shop_manager = ShopManager(overrides=overrides, scenario=scenario_handler)
     engine = DecisionEngine(
         scorer, event_handler, skill_buyer, race_selector, shop_manager,
         scenario=scenario_handler,

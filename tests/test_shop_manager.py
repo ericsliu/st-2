@@ -4,8 +4,11 @@ import pytest
 
 from uma_trainer.decision.shop_manager import (
     ITEM_CATALOGUE,
+    ITEM_TRAINING_EFFECTS,
+    ActiveEffect,
     ItemTier,
     ShopManager,
+    TrainingBoost,
 )
 from uma_trainer.types import GameState, Mood, TrainingTile, StatType
 
@@ -126,3 +129,68 @@ class TestPurchasePriorities:
         state = GameState(current_turn=8, scenario="trackblazer")
         priorities = sm.get_purchase_priorities(state)
         assert priorities[0].name == "Grilled Carrots"
+
+
+class TestActiveEffects:
+    def test_activate_item_registers_effect(self):
+        sm = ShopManager()
+        sm.activate_item("ankle_weights")
+        assert len(sm._active_effects) == 1
+        assert sm._active_effects[0].multiplier == 1.5
+        assert sm._active_effects[0].turns_remaining == 1
+
+    def test_activate_non_training_item_ignored(self):
+        sm = ShopManager()
+        sm.activate_item("scroll")  # Not in ITEM_TRAINING_EFFECTS
+        assert len(sm._active_effects) == 0
+
+    def test_tick_decrements_and_expires(self):
+        sm = ShopManager()
+        sm.activate_item("ankle_weights")  # 1 turn
+        sm.tick_effects(current_turn=1)
+        assert len(sm._active_effects) == 0  # Expired
+
+    def test_tick_multi_turn_effect(self):
+        sm = ShopManager()
+        sm.activate_item("motivating_mega")  # 3 turns
+        sm.tick_effects(current_turn=1)
+        assert len(sm._active_effects) == 1
+        assert sm._active_effects[0].turns_remaining == 2
+        sm.tick_effects(current_turn=2)
+        assert sm._active_effects[0].turns_remaining == 1
+        sm.tick_effects(current_turn=3)
+        assert len(sm._active_effects) == 0
+
+    def test_tick_deduplicates_same_turn(self):
+        sm = ShopManager()
+        sm.activate_item("motivating_mega")  # 3 turns
+        sm.tick_effects(current_turn=5)
+        sm.tick_effects(current_turn=5)  # Same turn — should not double-tick
+        assert sm._active_effects[0].turns_remaining == 2
+
+    def test_good_luck_charm_zero_failure(self):
+        sm = ShopManager()
+        sm.activate_item("good_luck_charm")
+        assert sm._active_effects[0].zero_failure is True
+
+    def test_get_training_boost_no_effects(self):
+        sm = ShopManager()
+        state = GameState()
+        boost = sm.get_training_boost(state)
+        assert boost.multiplier == 1.0
+        assert boost.zero_failure is False
+
+    def test_get_training_boost_active_effects(self):
+        sm = ShopManager()
+        sm.activate_item("empowering_mega")  # 1.6x
+        sm.activate_item("ankle_weights")    # 1.5x
+        state = GameState()
+        boost = sm.get_training_boost(state)
+        assert abs(boost.multiplier - 2.4) < 0.01  # 1.6 * 1.5
+
+    def test_get_training_boost_with_zero_failure(self):
+        sm = ShopManager()
+        sm.activate_item("good_luck_charm")
+        state = GameState()
+        boost = sm.get_training_boost(state)
+        assert boost.zero_failure is True

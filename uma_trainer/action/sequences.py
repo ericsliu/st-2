@@ -6,6 +6,8 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+from pathlib import Path
+
 from uma_trainer.action.input_injector import InputInjector
 
 if TYPE_CHECKING:
@@ -181,6 +183,12 @@ class ActionSequences:
                     gains,
                     sum(gains.values()),
                 )
+                # Save a debug screenshot if any single gain looks suspicious
+                # (individual stat gains rarely exceed 50 in normal play)
+                if any(v > 50 for v in gains.values()):
+                    self._save_suspicious_frame(
+                        frame, tile.stat_type.value, gains,
+                    )
             else:
                 logger.warning(
                     "No gains read for tile %s", tile.stat_type.value
@@ -206,7 +214,48 @@ class ActionSequences:
                 tile.stat_type.value, e,
             )
 
+        # Read support card count from right panel portraits
+        try:
+            from uma_trainer.perception.pixel_analysis import count_panel_portraits
+            from uma_trainer.perception.regions import STAT_SELECTION_REGIONS
+
+            panel_region = STAT_SELECTION_REGIONS.get("support_panel")
+            if panel_region is not None:
+                card_count = count_panel_portraits(frame, panel_region)
+                tile.support_cards = [f"card_{j}" for j in range(card_count)]
+                logger.info(
+                    "Tile %s: %d support cards (panel portraits)",
+                    tile.stat_type.value, card_count,
+                )
+        except Exception as e:
+            logger.debug(
+                "Failed to read panel portraits for %s: %s",
+                tile.stat_type.value, e,
+            )
+
         return ok
+
+    @staticmethod
+    def _save_suspicious_frame(
+        frame: "np.ndarray",
+        stat_name: str,
+        gains: dict[str, int],
+    ) -> None:
+        """Save a screenshot when OCR returns a suspiciously high gain value."""
+        try:
+            from PIL import Image
+
+            out_dir = Path("screenshots/suspicious_ocr")
+            out_dir.mkdir(parents=True, exist_ok=True)
+            ts = int(time.time())
+            filename = f"{ts}_{stat_name}_{'_'.join(f'{s}{v}' for s, v in gains.items())}.png"
+            Image.fromarray(frame[:, :, ::-1]).save(out_dir / filename)
+            logger.warning(
+                "Suspicious gain for %s: %s — saved %s",
+                stat_name, gains, filename,
+            )
+        except Exception as e:
+            logger.debug("Failed to save suspicious frame: %s", e)
 
     def attempt_error_recovery(self) -> None:
         """Generic recovery: tap common button positions to advance.

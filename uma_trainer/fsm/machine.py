@@ -287,6 +287,10 @@ class GameFSM:
             self._transition(FSMState.RUNNING_TURN)
 
         # Standard training/event decisions
+        # Tick active item effects at the start of each training turn
+        if game_state.screen == ScreenState.TRAINING and self.engine.shop_manager:
+            self.engine.shop_manager.tick_effects(game_state.current_turn)
+
         # On the stat selection screen, scan ALL training tiles for stat gains
         # before scoring. The preview only shows gains for the currently
         # selected (raised) tile, so we must tap each one to compare.
@@ -344,6 +348,10 @@ class GameFSM:
             logger.error("Tap failed: %s", e)
             self._transition(FSMState.ERROR_RECOVERY)
             return
+
+        # Register item training effects when a shop item is used
+        if action.action_type == ActionType.USE_ITEM and self.engine.shop_manager:
+            self.engine.shop_manager.activate_item(action.target)
 
         # Race entry confirmation: after tapping the Race button on the
         # race list, a "Race Details / Enter race?" dialog appears.

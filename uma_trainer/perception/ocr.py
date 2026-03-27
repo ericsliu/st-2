@@ -98,15 +98,93 @@ class OCREngine:
             return ""
         return self.read_text(region)
 
-    def read_number_region(
+    def read_gain_number(self, image: np.ndarray | Image.Image) -> int | None:
+        """Extract a stat gain value from a '+N' image.
+
+        The game displays gains as '+N' where the '+' is a bold cross symbol.
+        Apple Vision sometimes misreads the '+' as '4', '$', or other characters.
+        This method handles those known misreads.
+        """
+        text = self.read_text(image)
+        cleaned = text.replace(",", "").replace(".", "").strip()
+
+        # 1. Correct read: '+' followed by digits
+        m = re.search(r"[+＋]\s*(\d+)", cleaned)
+        if m:
+            return int(m.group(1))
+
+        # 2. Known misreads: '+' read as '$' or '4'
+        m = re.search(r"[$]\s*(\d+)", cleaned)
+        if m:
+            return int(m.group(1))
+
+        # 3. '+' misread as '4' merged with the digit (e.g., '+5' → '45')
+        #    If text is just digits and starts with '4', strip the leading '4'.
+        m = re.match(r"4(\d+)$", cleaned)
+        if m:
+            return int(m.group(1))
+
+        # 4. Fallback: plain number extraction
+        m = re.search(r"\d+", cleaned)
+        if m:
+            return int(m.group())
+
+        return None
+
+    def read_gain_region(
         self, frame: np.ndarray, bbox: tuple[int, int, int, int]
     ) -> int | None:
-        """Extract a number from a specific region of a frame."""
+        """Extract a stat gain value from a '+N' region of a frame.
+
+        Like read_number_region but uses gain-aware parsing to handle
+        the '+' symbol being misread as '4' or '$'.
+        """
         x1, y1, x2, y2 = bbox
         region = frame[y1:y2, x1:x2]
         if region.size == 0:
             return None
+
+        preprocessed = self._preprocess_number_region(region)
+        result = self.read_gain_number(preprocessed)
+        if result is not None:
+            return result
+
+        return self.read_gain_number(region)
+
+    def read_number_region(
+        self, frame: np.ndarray, bbox: tuple[int, int, int, int]
+    ) -> int | None:
+        """Extract a number from a specific region of a frame.
+
+        Applies preprocessing (upscale + threshold) to improve OCR
+        accuracy on the game's gradient/shadowed stat font.
+        """
+        x1, y1, x2, y2 = bbox
+        region = frame[y1:y2, x1:x2]
+        if region.size == 0:
+            return None
+
+        # Preprocess: upscale 3x and binarize for cleaner digit recognition
+        preprocessed = self._preprocess_number_region(region)
+        result = self.read_number(preprocessed)
+        if result is not None:
+            return result
+
+        # Fallback: try raw region
         return self.read_number(region)
+
+    @staticmethod
+    def _preprocess_number_region(region: np.ndarray) -> np.ndarray:
+        """Upscale a region for better digit OCR.
+
+        The game uses gradient-colored stat numbers with shadows.
+        Simple 3x upscale preserves the original colors which Apple Vision
+        handles better than binarized versions.
+        """
+        import cv2
+
+        h, w = region.shape[:2]
+        return cv2.resize(region, (w * 3, h * 3), interpolation=cv2.INTER_LANCZOS4)
 
 
 class AppleVisionOCR:

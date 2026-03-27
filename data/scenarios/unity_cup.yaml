@@ -24,7 +24,11 @@ available_actions:
   - recreation
   - races
 
-event_calendar: {}
+event_calendar:
+  summer_camp:
+    - { start_turn: 12, end_turn: 15 }
+    - { start_turn: 36, end_turn: 39 }
+    - { start_turn: 60, end_turn: 63 }
 
 rest_threshold: 20
 

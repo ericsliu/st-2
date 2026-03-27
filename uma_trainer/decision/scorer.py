@@ -20,6 +20,7 @@ from uma_trainer.types import (
 )
 
 if TYPE_CHECKING:
+    from uma_trainer.decision.shop_manager import ShopManager
     from uma_trainer.knowledge.overrides import OverridesLoader
     from uma_trainer.scenario.base import ScenarioHandler
 
@@ -47,11 +48,13 @@ class TrainingScorer:
         overrides: "OverridesLoader | None" = None,
         scenario: "ScenarioHandler | None" = None,
         runspec: RunSpec | None = None,
+        shop_manager: "ShopManager | None" = None,
     ) -> None:
         self.config = config
         self.overrides = overrides
         self.scenario = scenario
         self.runspec = runspec
+        self.shop_manager = shop_manager
 
     # ------------------------------------------------------------------
     # Main decision entry points
@@ -147,28 +150,38 @@ class TrainingScorer:
     def _score_tile(self, tile: TrainingTile, state: GameState) -> float:
         score = 0.0
 
+        # 0. Get item training boost (Trackblazer shop items)
+        boost_mult = 1.0
+        boost_zero_failure = False
+        if self.shop_manager:
+            from uma_trainer.decision.shop_manager import TrainingBoost
+            boost = self.shop_manager.get_training_boost(state)
+            boost_mult = boost.multiplier
+            boost_zero_failure = boost.zero_failure
+
         # 1. Base stat value — RunSpec piecewise utility if available, else flat weights
+        #    Item boost (Megaphones, Ankle Weights) scales the effective gain.
         if self.runspec and tile.stat_gains:
-            # Use piecewise utility for each stat gain on this tile
             for stat_name, gain in tile.stat_gains.items():
                 current = state.stats.get(StatType(stat_name))
-                score += self.runspec.stat_utility(stat_name, current, gain)
+                score += self.runspec.stat_utility(
+                    stat_name, current, int(gain * boost_mult),
+                )
         elif self.runspec:
-            # RunSpec available but no OCR'd stat gains — estimate from
-            # the typical multi-stat distribution for this training type.
             estimated = ESTIMATED_TRAINING_GAINS.get(tile.stat_type.value, {})
             for stat_name, gain in estimated.items():
                 if gain > 0:
                     current = state.stats.get(StatType(stat_name))
-                    score += self.runspec.stat_utility(stat_name, current, gain)
+                    score += self.runspec.stat_utility(
+                        stat_name, current, int(gain * boost_mult),
+                    )
         else:
-            # Legacy: flat stat weights, applied to all stats this training boosts
             weights = self._get_effective_weights(state)
             estimated = ESTIMATED_TRAINING_GAINS.get(tile.stat_type.value, {})
             for stat_name, gain in estimated.items():
                 if gain > 0:
                     stat_weight = weights.get(stat_name, 1.0)
-                    score += stat_weight * gain * 0.7
+                    score += stat_weight * int(gain * boost_mult) * 0.7
 
         # 2. Support card stacking bonus
         score += len(tile.support_cards) * self.config.card_stack_per_card * 5.0
@@ -187,18 +200,19 @@ class TrainingScorer:
         if tile.has_director:
             score += 6.0
 
-        # 6. Bond-building priority (early game: prefer tiles with low-bond cards)
-        is_early = (
-            self.scenario.is_phase(state.current_turn, "early_game")
-            if self.scenario
-            else state.is_early_game
-        )
-        if is_early:
+        # 6. Bond-building priority: maximize friendship before Classic summer camp.
+        #    Friendship activates at bond >= 80. The bonus scales with urgency
+        #    as the deadline approaches (turn 36 = Classic year summer camp).
+        bond_deadline = self._get_friendship_deadline(state)
+        turns_left = max(1, bond_deadline - state.current_turn)
+        if state.current_turn < bond_deadline:
             low_bond_cards = [
                 c for c in tile.support_cards
-                if self._get_card_bond(c, state) < 60
+                if self._get_card_bond(c, state) < 80
             ]
-            score += len(low_bond_cards) * 4.0
+            # Urgency: bonus ramps from ~4 to ~12 as deadline nears
+            urgency = min(3.0, bond_deadline / turns_left)
+            score += len(low_bond_cards) * 4.0 * urgency
 
         # 7. Mood multiplier (good/great moods boost value of training)
         score *= state.mood.multiplier
@@ -207,18 +221,34 @@ class TrainingScorer:
         if state.energy < self.config.energy_penalty_threshold:
             score -= (self.config.energy_penalty_threshold - state.energy) * 0.5
 
-        # 9. Failure rate penalty
-        if tile.failure_rate > 0:
+        # 9. Failure rate penalty (Good-Luck Charm zeroes this out)
+        effective_failure = 0.0 if boost_zero_failure else tile.failure_rate
+        if effective_failure > 0:
             if self.runspec:
                 penalty = self.runspec.policy.failure_risk_penalty
-                score *= (1.0 - tile.failure_rate * penalty)
-                # Hard constraint: reject tiles above max failure rate
-                if tile.failure_rate > self.runspec.constraints.max_failure_rate:
+                score *= (1.0 - effective_failure * penalty)
+                if effective_failure > self.runspec.constraints.max_failure_rate:
                     score *= 0.1
             else:
-                score *= (1.0 - tile.failure_rate * 0.5)
+                score *= (1.0 - effective_failure * 0.5)
 
         return max(0.0, score)
+
+    # Default friendship deadline: Classic year summer camp (turn 36).
+    # Used when no scenario calendar is available.
+    _DEFAULT_FRIENDSHIP_DEADLINE = 36
+
+    def _get_friendship_deadline(self, state: GameState) -> int:
+        """Turn by which all support cards should be at friendship (bond 80).
+
+        Uses the second summer_camp window (Classic year) from the scenario
+        calendar if available, otherwise falls back to turn 36.
+        """
+        if self.scenario:
+            camps = self.scenario.config.event_calendar.get("summer_camp", [])
+            if len(camps) >= 2:
+                return camps[1].start_turn
+        return self._DEFAULT_FRIENDSHIP_DEADLINE
 
     def _get_card_bond(self, card_id: str, state: GameState) -> int:
         """Look up bond level for a card from state.support_cards."""

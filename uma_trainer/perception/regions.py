@@ -307,7 +307,7 @@ STAT_SELECTION_REGIONS: dict[str, Region] = {
     "period_text":       (20, 50, 380, 100),        # "Senior Year Late Jun"
     "turn_counter":      (15, 100, 200, 270),       # "13 turn(s) left"
     "result_pts":        (180, 100, 500, 140),      # "300 Result Pts"
-    "energy_bar":        (160, 200, 450, 230),      # Energy bar
+    "energy_bar":        (365, 220, 715, 226),      # Energy bar inner (trimmed past rounded caps)
     "mood_label":        (470, 195, 540, 230),      # "GREAT"
 
     # Selected training info (appears when a tile is selected/raised)
@@ -329,8 +329,12 @@ STAT_SELECTION_REGIONS: dict[str, Region] = {
     "stat_stamina":      (180, 1260, 320, 1370),
     "stat_power":        (340, 1260, 500, 1370),
     "stat_guts":         (510, 1260, 660, 1370),
-    "stat_wit":          (680, 1260, 830, 1370),
+    "stat_wit":          (680, 1260, 860, 1370),
     "skill_pts":         (870, 1290, 1050, 1370),
+
+    # Right panel: support card character portraits (stacked vertically)
+    # Portraits appear here for the currently selected/raised tile.
+    "support_panel":     (850, 280, 1070, 1200),
 
     # Failure rate display — below stat values
     "failure_rate":      (10, 1360, 280, 1460),     # "Failure 8%"
