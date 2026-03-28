@@ -35,6 +35,7 @@ class OCREngine:
         self.config = config
         self._primary: AppleVisionOCR | None = None
         self._fallback: EasyOCROCR | None = None
+        self._template_reader = None
         self._initialized = False
 
     def _ensure_initialized(self) -> None:
@@ -142,18 +143,30 @@ class OCREngine:
         text = self.read_text(image)
         return self._parse_gain_text(text)
 
+    def _get_template_reader(self):
+        """Lazy-load the template digit reader."""
+        if self._template_reader is None:
+            try:
+                from uma_trainer.perception.template_digits import (
+                    TemplateDigitReader,
+                )
+                self._template_reader = TemplateDigitReader()
+                logger.info("Template digit reader loaded")
+            except Exception as e:
+                logger.warning("Template digit reader unavailable: %s", e)
+                self._template_reader = False  # sentinel: tried and failed
+        return self._template_reader if self._template_reader else None
+
     def read_gain_region(
         self, frame: np.ndarray, bbox: tuple[int, int, int, int]
     ) -> int | None:
         """Extract a stat gain value from a '+N' region of a frame.
 
-        Like read_number_region but uses gain-aware parsing to handle
-        the '+' symbol being misread as '4' or '$'.
-
-        Strategy (three attempts, best-of):
-        1. Gain-hinted OCR on 3x upscale (Apple Vision with "+1".."+50" hints)
-        2. Regular OCR on 3x upscale
-        3. Regular OCR on raw region
+        Strategy:
+        1. Template matching against game sprite digits (fast, accurate)
+        2. Gain-hinted OCR on 3x upscale (Apple Vision with "+1".."+50" hints)
+        3. Regular OCR on 3x upscale
+        4. Regular OCR on raw region
         Prefers whichever read detected a '+' symbol.
 
         Every read is logged to data/gain_ocr_samples/ with the crop image
@@ -164,6 +177,17 @@ class OCREngine:
         if region.size == 0:
             return None
 
+        # Attempt 0: template matching (most reliable for gain digits)
+        tmpl_reader = self._get_template_reader()
+        if tmpl_reader is not None:
+            tmpl_result = tmpl_reader.read_gain_region(frame, bbox)
+            if tmpl_result is not None:
+                self._log_gain_sample(region, bbox, "", "", "",
+                                     tmpl_result, "template")
+                return tmpl_result
+
+        # Fall back to OCR-based approaches
+        self._ensure_initialized()
         preprocessed = self._preprocess_number_region(region)
 
         # Attempt 1: gain-hinted OCR (custom vocabulary "+1".."+50")
