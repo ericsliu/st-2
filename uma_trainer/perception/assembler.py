@@ -60,6 +60,7 @@ class StateAssembler:
         self.screen_id = screen_id
         self.ocr = ocr
         self.config = config
+        self.trainee_aptitudes: dict[str, str] = {}  # Set once at run start
         # Ensure screen identifier has access to OCR
         if not screen_id._ocr:
             screen_id.set_ocr(ocr)
@@ -115,6 +116,11 @@ class StateAssembler:
             state.max_turns,
             elapsed_ms,
         )
+
+        # Inject trainee aptitudes (set once at run start from overrides)
+        if self.trainee_aptitudes:
+            state.trainee_aptitudes = self.trainee_aptitudes
+
         return state
 
     # ------------------------------------------------------------------
@@ -397,6 +403,15 @@ class StateAssembler:
                 if goal.race_name and not goal.completed:
                     if goal.race_name.lower() in name_text.lower():
                         race.is_goal_race = True
+
+            # Detect rival race — "RIVAL RACER!" badge
+            rival_key = f"race_{i}_rival"
+            rival_region = RACE_LIST_REGIONS.get(rival_key)
+            if rival_region:
+                rival_text = self.ocr.read_region(frame, rival_region).lower()
+                if "rival" in rival_text:
+                    race.is_rival_race = True
+                    logger.debug("Race slot %d: RIVAL race detected", i)
 
             races.append(race)
             logger.debug(

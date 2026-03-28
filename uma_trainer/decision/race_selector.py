@@ -72,20 +72,11 @@ class RaceSelector:
         if self.scenario:
             self.scenario.on_race_completed()
 
-        # The race list UI requires:
-        # 1. Tap a race entry to select it (green brackets highlight)
-        # 2. Tap the green "Race" button at the bottom to confirm
-        # For now, the first race is pre-selected by default, so we just
-        # tap the "Race" button. If we need a non-first race, we'd tap
-        # the entry first, then the button.
-        from uma_trainer.perception.regions import RACE_LIST_REGIONS, get_tap_center
-        race_btn = RACE_LIST_REGIONS.get("btn_race")
-        tap = get_tap_center(race_btn) if race_btn else best_race.tap_coords
-
+        # tap_coords = the race ROW to select it (not the Race button)
         return BotAction(
             action_type=ActionType.RACE,
             target=best_race.name,
-            tap_coords=tap,
+            tap_coords=best_race.tap_coords,
             reason=f"{best_race.name} ({best_race.grade}, score={best_score:.1f})",
             tier_used=1,
         )
@@ -178,7 +169,11 @@ class RaceSelector:
                 urgency = min(deficit / 100.0, 3.0)
                 score += gp * 0.3 * urgency
 
-        # 4. Fan reward
+        # 4. Rival race bonus (Trackblazer: rival races give extra GP)
+        if race.is_rival_race:
+            score += 15.0
+
+        # 5. Fan reward
         if race.fan_reward > 0:
             score += min(race.fan_reward / 2000.0, 8.0)
 

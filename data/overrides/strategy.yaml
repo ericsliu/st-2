@@ -53,6 +53,16 @@ bond_priority_turns_override: null # e.g. 20 to shorten bond phase
 scenario_rest_thresholds:
   trackblazer: 5
 
+# Trainee aptitudes — set per run. Used to filter races by surface/distance.
+# Values: S, A, B, C, D, E, F, G. Races with C or worse aptitude score 0.
+trainee_aptitudes:
+  turf: A
+  dirt: G
+  short: E
+  mile: A
+  medium: B
+  long: C
+
 # Race strategy (especially important for Trackblazer which has ~30 races)
 race_strategy:
   # How often to proactively enter races in Trackblazer (every N turns).

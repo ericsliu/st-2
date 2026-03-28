@@ -162,6 +162,7 @@ class RaceOption:
     # True if the distance/surface text is highlighted yellow on the race list,
     # indicating B or better aptitude. White text = C or worse.
     is_aptitude_ok: bool = True
+    is_rival_race: bool = False  # Trackblazer "VS" rival race
 
 
 @dataclass

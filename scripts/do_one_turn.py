@@ -207,6 +207,21 @@ def wait_for_career_home(capture, assembler, screen_id, injector, sequences, eng
             time.sleep(2.0)
             continue
 
+        # Check for Claw Machine minigame (Go Out special event) — pause for human
+        from uma_trainer.perception.ocr import OCREngine
+        unknown_text = assembler.ocr.read_region(frame, (0, 0, 1080, 960)).lower()
+        if "claw" in unknown_text or "crane" in unknown_text:
+            logger.warning("CLAW MACHINE MINIGAME detected — pausing for human input")
+            print("\n*** CLAW MACHINE MINIGAME — please play manually, then press Enter ***")
+            input()
+            continue
+
+        # Claw Machine results screen ("BIG WIN", "Cuties Obtained") — tap OK
+        if "cuties" in unknown_text or "big win" in unknown_text:
+            logger.info("Claw Machine results — tapping OK at (540, 1810)")
+            injector.tap(540, 1810)
+            continue
+
         # Unknown screen — tap bottom center (TAP prompt) then center (Close)
         logger.info("Unknown screen (%s) — tapping to advance", state.screen.value)
         injector.tap(540, 1675)
@@ -339,19 +354,17 @@ def execute_race_entry(injector, capture, assembler, screen_id, race_selector=No
     else:
         logger.info("No race selector or no races parsed — entering first race")
 
-    # Tap the green Race button to confirm entry
+    # Tap the green Race button at bottom of list
     from uma_trainer.perception.regions import RACE_LIST_REGIONS
     race_btn = get_tap_center(RACE_LIST_REGIONS["btn_race"])
     logger.info("Tapping Race button on list at %s", race_btn)
     injector.tap(*race_btn)
     time.sleep(2.0)
 
-    # Handle the "Enter race?" confirmation dialog
-    frame = capture.grab_frame()
-    state = assembler.assemble(frame)
-
-    logger.info("Tapping race confirmation dialog")
-    injector.tap(660, 1420)
+    # Handle the race details confirmation popup
+    # Green "Race" confirm button is at (810, 1370) per screen_coordinates.json
+    logger.info("Tapping race confirmation at (810, 1370)")
+    injector.tap(810, 1370)
     time.sleep(3.0)
 
     return True
@@ -716,6 +729,15 @@ def main():
     ocr = OCREngine(config.ocr)
     screen_id = ScreenIdentifier(ocr=ocr)
     assembler = StateAssembler(screen_id, ocr, config)
+
+    # Load trainee aptitudes from strategy overrides
+    from uma_trainer.knowledge.overrides import OverridesLoader
+    _overrides = OverridesLoader()
+    _strategy_raw = _overrides.get_strategy_raw()
+    apt = _strategy_raw.get("trainee_aptitudes", {})
+    if apt:
+        assembler.trainee_aptitudes = apt
+        logger.info("Trainee aptitudes: %s", apt)
 
     # Initialize action
     adb = ADBClient(device_serial=DEVICE)

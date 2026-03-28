@@ -452,20 +452,17 @@ RACE_LIST_REGIONS: dict[str, Region] = {
     "btn_agenda":   (810, 1640, 1050, 1720),   # Agenda button
 
     # Race list entries. Each entry is ~220px tall.
-    # The "name" region captures the grade badge + venue/distance detail line.
-    # The "detail" line has "Venue Surface Distancem (Category) Track / Position".
-    "race_0_name":     (370, 1080, 1060, 1130),  # "G1 Nakayama Turf 1200m..."
-    "race_0_detail":   (370, 1130, 1060, 1200),  # Reward line: "+100 pts..."
-    "race_0_tap":      (50, 1060, 1060, 1240),   # Full tap target
+    # Calibrated 2026-03-27 from MuMuPlayer 1080x1920.
+    # Name line: "G1 Tokyo Dirt 1600m (Mile) Left"
+    # Detail line: "+100 pts +100, +10,000 fans, Dirt, Mile"
+    "race_0_name":     (250, 1080, 1060, 1150),
+    "race_0_detail":   (250, 1150, 1060, 1260),
+    "race_0_tap":      (50, 1060, 1060, 1270),
 
-    "race_1_name":     (370, 1300, 1060, 1350),
-    "race_1_detail":   (370, 1350, 1060, 1420),
-    "race_1_tap":      (50, 1280, 1060, 1460),
-
-    # Races 2+ may require scrolling; keep them but they may not be visible
-    "race_2_name":     (370, 1520, 1060, 1570),
-    "race_2_detail":   (370, 1570, 1060, 1640),
-    "race_2_tap":      (50, 1500, 1060, 1680),
+    "race_1_name":     (250, 1300, 1060, 1380),
+    "race_1_detail":   (250, 1380, 1060, 1480),
+    "race_1_tap":      (50, 1270, 1060, 1490),
+    "race_1_rival":    (700, 1270, 1060, 1320),  # "RIVAL RACER!" badge area
 }
 
 # Max visible race slots before scrolling is needed
