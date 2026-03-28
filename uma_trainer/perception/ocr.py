@@ -177,10 +177,37 @@ class OCREngine:
         if region.size == 0:
             return None
 
-        # Attempt 0: template matching (most reliable for gain digits)
+        h = y2 - y1
+
+        # For tall regions (boosted gains with two rows), try OCR first.
+        # Apple Vision reads multi-line "+13 +33" natively and reliably.
+        # The template reader struggles with split half-height regions.
+        if h > 100:
+            self._ensure_initialized()
+            raw_text = self.read_text(region).strip()
+            plus_matches = re.findall(r"[+＋]\s*(\d+)", raw_text)
+            if len(plus_matches) >= 2:
+                total = sum(int(m) for m in plus_matches)
+                if 1 <= total <= 99:
+                    logger.debug(
+                        "Boosted OCR: '%s' -> %s -> sum=%d",
+                        raw_text, plus_matches, total,
+                    )
+                    self._log_gain_sample(region, bbox, "", "", raw_text,
+                                         total, "boosted_ocr")
+                    return total
+            # Single "+N" from OCR on tall region
+            if len(plus_matches) == 1:
+                val = int(plus_matches[0])
+                if 1 <= val <= 99:
+                    self._log_gain_sample(region, bbox, "", "", raw_text,
+                                         val, "tall_single_ocr")
+                    return val
+
+        # Attempt 0: template matching (most reliable for single-row gain digits)
         tmpl_reader = self._get_template_reader()
         if tmpl_reader is not None:
-            tmpl_result = tmpl_reader.read_gain_region(frame, bbox)
+            tmpl_result = tmpl_reader.read_gain(region)
             if tmpl_result is not None:
                 self._log_gain_sample(region, bbox, "", "", "",
                                      tmpl_result, "template")
