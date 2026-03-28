@@ -22,5 +22,15 @@
     "choice_effects": ["Power +8, Energy -10", "Rest and skip"],
     "source": "manual",
     "confidence": 0.85
+  },
+  {
+    "event_text": "Which Curren Do You Like?",
+    "character_id": "curren_chan",
+    "choices": ["Something bold.", "Something stylish."],
+    "best_choice_index": 0,
+    "choice_effects": ["Speed +10, Power +10", "Stamina +10, Guts +10"],
+    "source": "gametora",
+    "confidence": 1.0,
+    "notes": "For speed/power builds pick bold; for stamina/guts builds pick stylish"
   }
 ]

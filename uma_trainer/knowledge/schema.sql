@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS events (
     event_text TEXT NOT NULL,
     character_id TEXT DEFAULT NULL,      -- NULL = generic event
     best_choice_index INTEGER NOT NULL DEFAULT 0,
+    choices TEXT NOT NULL DEFAULT '[]',          -- JSON array of choice text strings
     choice_effects TEXT NOT NULL DEFAULT '[]',  -- JSON array of effect descriptions
     source TEXT NOT NULL DEFAULT 'manual',       -- manual | llm | claude | scraper
     confidence REAL NOT NULL DEFAULT 1.0,

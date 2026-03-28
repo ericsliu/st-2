@@ -61,8 +61,9 @@ SCREEN_RULES: list[ScreenRule] = [
     # Race list — "Race" in header area alongside list-style content
     (ScreenState.RACE_ENTRY, ["race list"], []),
 
-    # Pre-race — has both "View Results" and "Race" buttons at bottom
-    (ScreenState.PRE_RACE, ["view results"], []),
+    # Pre-race — has "View Results" button + race info. OCR sometimes
+    # misreads "Results" as "Resulte" or "Result", so match loosely.
+    (ScreenState.PRE_RACE, ["view result"], []),
 
     # Post-race — "Next" button, often with "Try Again" or placement text
     (ScreenState.POST_RACE, ["next"], ["race list", "view results", "rest",
@@ -84,8 +85,9 @@ SCREEN_RULES: list[ScreenRule] = [
     # Main menu — game home screen (not in career)
     (ScreenState.MAIN_MENU, ["home"], []),
 
-    # Result screen
-    (ScreenState.RESULT_SCREEN, ["result"], ["race list", "rest"]),
+    # Result screen — but NOT pre-race which also contains "result" in
+    # "View Results". Exclude "view result" and "race" to avoid overlap.
+    (ScreenState.RESULT_SCREEN, ["result"], ["race list", "rest", "view result", "race"]),
 ]
 
 
@@ -163,14 +165,23 @@ class ScreenIdentifier:
             return False
 
         # OCR the bottom-left button area where "Rest" or "Back" appears
-        text = self._ocr.read_region(frame, BUTTON_LEFT_REGION).lower()
+        btn_text = self._ocr.read_region(frame, BUTTON_LEFT_REGION).lower()
 
         # "back" present and "rest" absent → stat selection
-        if "back" in text and "rest" not in text:
+        if "back" in btn_text and "rest" not in btn_text:
             return True
 
-        # Also check: stat selection has "failure" text (failure rate display)
-        if "failure" in text or "lvl" in text:
+        # "rest" present → career home, not stat selection
+        if "rest" in btn_text:
+            return False
+
+        # Check both button area and mid-screen for "Failure" text (failure rate
+        # display) which only appears on stat selection. OCR sometimes truncates
+        # to "Fail" so match the shorter form.
+        mid_text = self._ocr.read_region(frame, MID_REGION).lower()
+        all_text = btn_text + " " + mid_text
+
+        if "fail" in all_text or "lvl" in all_text:
             return True
 
         return False

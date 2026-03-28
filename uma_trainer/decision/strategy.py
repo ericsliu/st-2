@@ -59,17 +59,32 @@ class DecisionEngine:
             # Check if we should race instead of train
             race_action = self.race_selector.should_race_this_turn(state)
             if race_action:
+                is_goal_race = "Goal race" in race_action.reason
+                can_train = train_action.action_type == ActionType.TRAIN
+
                 # Exceptional training (high raw stat gains) beats
                 # non-urgent racing. Goal races always take priority.
                 if (
-                    train_action.action_type == ActionType.TRAIN
-                    and "Goal race" not in race_action.reason
+                    can_train
+                    and not is_goal_race
                     and self.shop_manager.is_exceptional_training(state)
                 ):
                     best_gain = self.shop_manager._best_training_gain(state)
                     logger.info(
                         "Exceptional training (gain=%d) overrides race",
                         best_gain,
+                    )
+                    return train_action
+
+                # High bond urgency (hint + low-bond cards) also beats
+                # non-goal rhythm races — friendship is critical.
+                if (
+                    can_train
+                    and not is_goal_race
+                    and self.scorer.has_high_bond_urgency(state)
+                ):
+                    logger.info(
+                        "High bond urgency overrides race — friendship building"
                     )
                     return train_action
 

@@ -1,0 +1,73 @@
+{
+  "_note": "Button coordinates for 1080x1920 portrait resolution. Discovered via pixel scanning.",
+  "career_home": {
+    "rest": {"x": 162, "y": 1540},
+    "training": {"x": 540, "y": 1540},
+    "skills": {"x": 918, "y": 1540},
+    "infirmary": {"x": 162, "y": 1660},
+    "recreation": {"x": 378, "y": 1660},
+    "shop": {"x": 620, "y": 1640, "note": "Small target, green pixels at x=600-640 y=1630-1650"},
+    "races": {"x": 918, "y": 1660}
+  },
+  "race_list": {
+    "race_entry_1": {"x": 540, "y": 1050, "note": "First race row, tap to select"},
+    "race_entry_2": {"x": 540, "y": 1250, "note": "Second race row"},
+    "race_button": {"x": 700, "y": 1640, "note": "Green button, x=340-750 y=1600-1680"},
+    "predictions": {"x": 162, "y": 1640},
+    "agenda": {"x": 918, "y": 1640},
+    "back": {"x": 100, "y": 1870}
+  },
+  "race_details_popup": {
+    "cancel": {"x": 270, "y": 1370},
+    "race": {"x": 810, "y": 1370}
+  },
+  "pre_race": {
+    "view_results": {"x": 380, "y": 1730, "note": "White button, x=260-500 at y=1730"},
+    "race": {"x": 690, "y": 1730, "note": "Green button, x=560-830 at y=1730"}
+  },
+  "post_race": {
+    "tap_overlay": {"x": 540, "y": 960, "note": "Tap anywhere"},
+    "result_pts_dismiss": {"x": 540, "y": 400, "note": "MUST tap background, Close button does NOT work"},
+    "next_button": {"x": 700, "y": 1770, "note": "Green Next, NOT at y=1870"},
+    "watch_concert": {"x": 270, "y": 1810},
+    "next_rewards": {"x": 810, "y": 1810}
+  },
+  "rest_confirm": {
+    "cancel": {"x": 270, "y": 1260},
+    "ok": {"x": 810, "y": 1260}
+  },
+  "event": {
+    "choice_1": {"x": 540, "y": 1170},
+    "choice_2": {"x": 540, "y": 1340},
+    "effects": {"x": 855, "y": 1490, "note": "Approximate, may vary by event text length"}
+  },
+  "effects_popup": {
+    "close": {"x": 540, "y": 1780}
+  },
+  "training": {
+    "speed_tile": {"x": 162, "y": 1660},
+    "stamina_tile": {"x": 324, "y": 1660},
+    "power_tile": {"x": 540, "y": 1660},
+    "guts_tile": {"x": 756, "y": 1660},
+    "wit_tile": {"x": 918, "y": 1660},
+    "back": {"x": 100, "y": 1870}
+  },
+  "shop": {
+    "confirm": {"x": 540, "y": 1640, "note": "Green Confirm button"},
+    "reset": {"x": 810, "y": 1640},
+    "back": {"x": 50, "y": 1870},
+    "checkbox_area_x": 950,
+    "_note": "Checkboxes are gray when unselected, fill in blue when selected. Tap the checkbox to toggle."
+  },
+  "consecutive_race_warning": {
+    "cancel": {"x": 270, "y": 1390},
+    "ok": {"x": 810, "y": 1390}
+  },
+  "shop_refresh_popup": {
+    "cancel": {"x": 270, "y": 1360},
+    "shop": {"x": 810, "y": 1360}
+  },
+  "goal_complete": {
+    "next": {"x": 540, "y": 1640}
+  }
+}

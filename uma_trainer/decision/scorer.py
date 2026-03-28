@@ -102,8 +102,15 @@ class TrainingScorer:
     def should_rest(self, state: GameState) -> bool:
         """True if energy is too low to safely train.
 
-        Priority: strategy.yaml override > RunSpec constraints > scenario YAML > scorer config.
+        NEVER rests during summer camp — use wit training for energy recovery
+        and items (energy drinks) instead. Resting wastes a precious summer turn.
+
+        Priority: summer camp check > strategy.yaml override > RunSpec > scenario > config.
         """
+        # During summer camp, never rest — wit training recovers energy
+        if self._is_summer_camp(state):
+            return False
+
         threshold = self.config.rest_energy_threshold
 
         # Scenario definition provides the base threshold
@@ -121,6 +128,16 @@ class TrainingScorer:
                 threshold = strategy.rest_energy_override
 
         return state.energy < threshold
+
+    def _is_summer_camp(self, state: GameState) -> bool:
+        """True if the current turn is within a summer camp window."""
+        if not self.scenario:
+            return False
+        camps = self.scenario.config.event_calendar.get("summer_camp", [])
+        for window in camps:
+            if window.start_turn <= state.current_turn <= window.end_turn:
+                return True
+        return False
 
     def _get_effective_weights(self, state: GameState) -> dict[str, float]:
         """Return stat weights merged with any active override weights."""
@@ -186,15 +203,19 @@ class TrainingScorer:
         # 2. Support card stacking bonus
         score += len(tile.support_cards) * self.config.card_stack_per_card * 5.0
 
-        # 3. Special tile indicator multipliers
+        # 3. Rainbow/gold indicators — the stat gains already reflect the
+        #    boosted values from the preview, so we only add a small flat
+        #    bonus for the "this is an unusually good turn" signal rather
+        #    than multiplying (which would double-count the inflated gains).
         if tile.is_rainbow:
-            score *= self.config.rainbow_bonus
+            score += 8.0
         elif tile.is_gold:
-            score *= self.config.gold_bonus
+            score += 4.0
 
-        # 4. Hint bonus (unlocks a new skill)
+        # 4. Hint bonus — hints unlock skills AND boost friendship gauge increase.
+        #    Base value for skill unlock, plus friendship amplification in step 6.
         if tile.has_hint:
-            score += self.config.hint_bonus * 8.0
+            score += self.config.hint_bonus * 10.0
 
         # 5. Director bonus (special NPC that boosts training)
         if tile.has_director:
@@ -212,13 +233,32 @@ class TrainingScorer:
             ]
             # Urgency: bonus ramps from ~4 to ~12 as deadline nears
             urgency = min(3.0, bond_deadline / turns_left)
-            score += len(low_bond_cards) * 4.0 * urgency
+            bond_score = len(low_bond_cards) * 4.0 * urgency
 
-        # 7. Mood multiplier (good/great moods boost value of training)
+            # Hint icon means extra friendship gauge increase on this tile,
+            # so low-bond cards benefit more from hint training.
+            if tile.has_hint and low_bond_cards:
+                bond_score *= 1.5
+
+            score += bond_score
+
+        # 7. Summer camp wit energy recovery bonus.
+        #    During summer camp, wit training recovers ~5 energy per use.
+        #    When energy is low, this makes wit significantly more valuable
+        #    because resting wastes a precious summer turn.
+        if self._is_summer_camp(state) and tile.stat_type == StatType.WIT:
+            if state.energy < 50:
+                score += 15.0  # Strong push toward wit when energy is critical
+            elif state.energy < 80:
+                score += 8.0   # Moderate push when energy is moderate
+
+        # 8. Mood multiplier (good/great moods boost value of training)
         score *= state.mood.multiplier
 
-        # 8. Energy penalty — high-risk tile if energy is moderate-low
-        if state.energy < self.config.energy_penalty_threshold:
+        # 9. Energy penalty — high-risk tile if energy is moderate-low.
+        #    During summer camp, suppress this penalty — we don't want energy
+        #    concerns to penalize training when we should be maxing gains.
+        if state.energy < self.config.energy_penalty_threshold and not self._is_summer_camp(state):
             score -= (self.config.energy_penalty_threshold - state.energy) * 0.5
 
         # 9. Failure rate penalty (Good-Luck Charm zeroes this out)
@@ -233,6 +273,35 @@ class TrainingScorer:
                 score *= (1.0 - effective_failure * 0.5)
 
         return max(0.0, score)
+
+    def has_high_bond_urgency(self, state: GameState) -> bool:
+        """True if the best training tile has significant bond-building value.
+
+        Used by the strategy engine to override non-goal races when friendship
+        building is critical (hint tiles with low-bond cards present).
+        """
+        bond_deadline = self._get_friendship_deadline(state)
+        if state.current_turn >= bond_deadline:
+            return False
+
+        turns_left = max(1, bond_deadline - state.current_turn)
+        urgency = min(3.0, bond_deadline / turns_left)
+
+        for tile in state.training_tiles:
+            low_bond_cards = [
+                c for c in tile.support_cards
+                if self._get_card_bond(c, state) < 80
+            ]
+            if not low_bond_cards:
+                continue
+            # A tile with hint + low-bond cards is high-urgency (hint boosts
+            # friendship gain). Without hint, need 3+ low-bond cards.
+            if tile.has_hint and len(low_bond_cards) >= 1:
+                return True
+            if len(low_bond_cards) >= 3:
+                return True
+
+        return False
 
     # Default friendship deadline: Classic year summer camp (turn 36).
     # Used when no scenario calendar is available.

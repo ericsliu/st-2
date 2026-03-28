@@ -47,7 +47,13 @@ def print_state_summary(state):
     print("=" * 75)
     print(f"  Screen: {state.screen.value}")
     print(f"  Turn:   {state.current_turn} / {state.max_turns}")
-    print(f"  Energy: {state.energy}   Mood: {state.mood.value}")
+    energy_str = f"  Energy: {state.energy}"
+    if state.energy_post_training is not None:
+        energy_str += f" → {state.energy_post_training} after training"
+    if state.energy_recovery > 0:
+        energy_str += f" (+{state.energy_recovery} recovery)"
+    energy_str += f"   Mood: {state.mood.value}"
+    print(energy_str)
     s = state.stats
     print(f"  Stats:  Spd={s.speed} Sta={s.stamina} Pow={s.power} Gut={s.guts} Wit={s.wit} (total={s.total()})")
     if state.support_cards:

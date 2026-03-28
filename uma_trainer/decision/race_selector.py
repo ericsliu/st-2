@@ -71,10 +71,21 @@ class RaceSelector:
         )
         if self.scenario:
             self.scenario.on_race_completed()
+
+        # The race list UI requires:
+        # 1. Tap a race entry to select it (green brackets highlight)
+        # 2. Tap the green "Race" button at the bottom to confirm
+        # For now, the first race is pre-selected by default, so we just
+        # tap the "Race" button. If we need a non-first race, we'd tap
+        # the entry first, then the button.
+        from uma_trainer.perception.regions import RACE_LIST_REGIONS, get_tap_center
+        race_btn = RACE_LIST_REGIONS.get("btn_race")
+        tap = get_tap_center(race_btn) if race_btn else best_race.tap_coords
+
         return BotAction(
             action_type=ActionType.RACE,
             target=best_race.name,
-            tap_coords=best_race.tap_coords,
+            tap_coords=tap,
             reason=f"{best_race.name} ({best_race.grade}, score={best_score:.1f})",
             tier_used=1,
         )
@@ -171,32 +182,76 @@ class RaceSelector:
         if race.fan_reward > 0:
             score += min(race.fan_reward / 2000.0, 8.0)
 
-        # 5. Distance aptitude matching
-        preferred_distances = strategy.get("preferred_distances", [])
-        if preferred_distances and race.distance > 0:
-            best_fit = min(abs(race.distance - d) for d in preferred_distances)
-            if best_fit <= 200:
-                score += 10.0
-            elif best_fit <= 400:
-                score += 5.0
-            elif best_fit <= 800:
-                score += 1.0
-            else:
-                score -= 5.0  # Bad aptitude match
+        # 5. Aptitude gating — the most important filter.
+        # Two sources of truth:
+        #   a) is_aptitude_ok: from race list screen color (yellow = B+, white = C-)
+        #   b) trainee_aptitudes: from stats page OCR (S/A/B/C/D/E/F/G)
+        #
+        # If is_aptitude_ok is False, the game itself is telling us the trainee
+        # can't compete — hard block, no exceptions except goal races.
 
-        # 6. Surface preference
-        preferred_surface = strategy.get("preferred_surface", "turf")
-        if preferred_surface:
-            if race.surface == preferred_surface:
+        if not race.is_aptitude_ok:
+            if not race.is_goal_race:
+                logger.info(
+                    "Race '%s' blocked: not highlighted (C or worse aptitude)",
+                    race.name,
+                )
+                return 0.0
+            score -= 100.0  # Goal race but bad aptitude
+
+        # If we have detailed aptitudes from the stats page, use them for
+        # finer scoring (prefer A/S over B).
+        aptitudes = state.trainee_aptitudes
+        if aptitudes and race.distance > 0:
+            dist_cat = self._distance_category(race.distance)
+            dist_apt = aptitudes.get(dist_cat, "")
+            surf_apt = aptitudes.get(race.surface, "")
+
+            blocked_grades = {"C", "D", "E", "F", "G"}
+
+            if dist_apt in blocked_grades:
+                if not race.is_goal_race:
+                    logger.info(
+                        "Race '%s' blocked: %s aptitude %s (distance %dm)",
+                        race.name, dist_cat, dist_apt, race.distance,
+                    )
+                    return 0.0
+                score -= 100.0
+            elif dist_apt == "B":
+                score -= 5.0
+            elif dist_apt in ("A", "S"):
+                score += 10.0
+
+            if surf_apt in blocked_grades:
+                if not race.is_goal_race:
+                    logger.info(
+                        "Race '%s' blocked: %s surface aptitude %s",
+                        race.name, race.surface, surf_apt,
+                    )
+                    return 0.0
+                score -= 100.0
+            elif surf_apt == "B":
+                score -= 3.0
+            elif surf_apt in ("A", "S"):
                 score += 5.0
-            else:
-                score -= 8.0  # Wrong surface is a significant penalty
 
         return max(0.0, score)
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _distance_category(distance_m: int) -> str:
+        """Map race distance in metres to aptitude category."""
+        if distance_m <= 1200:
+            return "short"
+        elif distance_m <= 1800:
+            return "mile"
+        elif distance_m <= 2400:
+            return "medium"
+        else:
+            return "long"
 
     def _find_required_race(self, state: GameState) -> str | None:
         """Return a race name if a career goal race must be entered."""

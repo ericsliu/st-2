@@ -21,8 +21,10 @@ _DEFAULT_TEMPLATE_DIR = Path(__file__).resolve().parent.parent.parent / "data" /
 # Normalize all glyphs to this height for IoU comparison
 _TARGET_H = 48
 
-# Minimum IoU score to accept a glyph match
-_MIN_IOU = 0.30
+# Minimum IoU score to accept a glyph match.
+# Raised from 0.30 to 0.40 to filter ghost glyphs from background noise
+# that were causing misreads like "+3" → "+37".
+_MIN_IOU = 0.40
 
 # Minimum glyph height as fraction of region height
 _MIN_HEIGHT_RATIO = 0.25
@@ -107,16 +109,29 @@ class TemplateDigitReader:
             return None
 
         results = []
-        for x, _y, _w, _h, mask in glyphs:
+        for i, (x, _y, _w, _h, mask) in enumerate(glyphs):
             label, score = self._match_glyph(mask)
             if score >= _MIN_IOU:
-                results.append((x, label, score))
+                results.append((x, label, score, i))
 
         if not results:
             return None
 
+        # The first glyph in a gain region is always "+".  Template matching
+        # sometimes confuses "+" with "4" or "3" due to similar shapes.
+        # Force the first glyph to "+" since we know the format is "+N".
+        if results[0][1] != "+":
+            logger.debug(
+                "Corrected leading '%s' to '+' (was iou=%.3f)",
+                results[0][1], results[0][2],
+            )
+            results[0] = (results[0][0], "+", results[0][2], results[0][3])
+
         text = "".join(r[1] for r in results)
-        return self._parse_gain_text(text)
+        val = self._parse_gain_text(text)
+        if val is not None:
+            logger.debug("Template read: '%s' -> %d", text, val)
+        return val
 
     @staticmethod
     def _get_orange_mask(bgr: np.ndarray) -> np.ndarray:
@@ -259,6 +274,41 @@ class TemplateDigitReader:
                 merged.append(s)
 
         return merged if merged else [(0, w - 1)]
+
+    def _match_glyph_against(self, glyph_mask: np.ndarray, label: str) -> float:
+        """Match a glyph against a single template, returning its IoU score."""
+        tmpl = self._templates.get(label)
+        if tmpl is None:
+            return 0.0
+        h, w = glyph_mask.shape
+        if h < 5 or w < 3:
+            return 0.0
+        scale = _TARGET_H / h
+        new_w = max(1, int(w * scale))
+        resized = cv2.resize(glyph_mask, (new_w, _TARGET_H),
+                             interpolation=cv2.INTER_AREA)
+        _, resized = cv2.threshold(resized, 128, 255, cv2.THRESH_BINARY)
+        max_w_pad = max(resized.shape[1], tmpl.shape[1]) + 8
+        glyph_padded = np.zeros((_TARGET_H, max_w_pad), dtype=np.uint8)
+        tmpl_padded = np.zeros((_TARGET_H, max_w_pad), dtype=np.uint8)
+        gx = (max_w_pad - resized.shape[1]) // 2
+        glyph_padded[:, gx:gx + resized.shape[1]] = resized
+        tx = (max_w_pad - tmpl.shape[1]) // 2
+        tmpl_padded[:, tx:tx + tmpl.shape[1]] = tmpl
+        best_iou = 0.0
+        for offset in range(-2, 3):
+            shifted = np.zeros_like(glyph_padded)
+            src_start = max(0, -offset)
+            dst_start = max(0, offset)
+            copy_w = min(max_w_pad - dst_start, max_w_pad - src_start)
+            shifted[:, dst_start:dst_start + copy_w] = (
+                glyph_padded[:, src_start:src_start + copy_w]
+            )
+            intersection = np.count_nonzero(shifted & tmpl_padded)
+            union = np.count_nonzero(shifted | tmpl_padded)
+            if union > 0:
+                best_iou = max(best_iou, intersection / union)
+        return best_iou
 
     def _match_glyph(self, glyph_mask: np.ndarray) -> tuple[str, float]:
         """Match a single glyph against all templates using IoU.

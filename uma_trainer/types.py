@@ -177,6 +177,8 @@ class GameState:
     screen: ScreenState = ScreenState.UNKNOWN
     stats: TraineeStats = field(default_factory=TraineeStats)
     energy: int = 100
+    energy_post_training: int | None = None  # Energy after selected training
+    energy_recovery: int = 0                 # Recovery preview (Wit-type training)
     mood: Mood = Mood.NORMAL
     training_tiles: list[TrainingTile] = field(default_factory=list)
     support_cards: list[SupportCard] = field(default_factory=list)

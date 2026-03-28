@@ -66,9 +66,13 @@ class TrackblazerHandler(ScenarioHandler):
         if turn < race_cfg.skip_early_turns:
             return None
 
-        # 3. Grade Point urgency — if behind schedule, race aggressively
+        # 3. Grade Point urgency — if behind schedule, race aggressively.
+        #    BUT: never race during summer camp — those turns are the most
+        #    valuable training turns in the entire run. GP can be caught up after.
+        summer_camp = self.get_event_turns("summer_camp")
+        in_summer = turn in summer_camp
         gp_deficit = self._grade_point_deficit(state)
-        if gp_deficit > 0:
+        if gp_deficit > 0 and not in_summer:
             turns_left = self.turns_left_in_year(turn)
             if turns_left <= 12 and gp_deficit > 60:
                 logger.info(
@@ -82,8 +86,9 @@ class TrackblazerHandler(ScenarioHandler):
                     tier_used=1,
                 )
 
-        # 4. Race rhythm: every N turns (configurable)
-        if turn % race_cfg.race_interval == 0:
+        # 4. Race rhythm: every N turns (configurable).
+        #    Skip during summer camp — training is far more valuable.
+        if turn % race_cfg.race_interval == 0 and not in_summer:
             return BotAction(
                 action_type=ActionType.RACE,
                 tap_coords=races_btn,
@@ -91,8 +96,9 @@ class TrackblazerHandler(ScenarioHandler):
                 tier_used=1,
             )
 
-        # 5. Energy too low to train effectively — might as well race
-        if energy < 30:
+        # 5. Energy too low to train effectively — might as well race.
+        #    During summer camp, use wit training for energy recovery instead.
+        if energy < 30 and not in_summer:
             return BotAction(
                 action_type=ActionType.RACE,
                 tap_coords=races_btn,

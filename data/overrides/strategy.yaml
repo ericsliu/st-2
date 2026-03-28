@@ -63,8 +63,9 @@ race_strategy:
   skip_early_turns: 5
 
   # Preferred distance range (metres). Set to your trainee's aptitude.
-  # Mile=1600, Medium=2000/2400, Long=2500+, Sprint=1200
-  preferred_distances: [1600, 2000, 2400]
+  # Sprint=1000-1200, Mile=1600, Medium=2000/2400, Long=2500+
+  # Curren Chan: Sprint A, Mile B — focus on short races
+  preferred_distances: [1200, 1600]
 
   # Preferred surface. Wrong surface is a big penalty in race scoring.
   preferred_surface: turf   # turf | dirt

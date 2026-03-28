@@ -1,0 +1,50 @@
+# Parent Builder — Balanced (v1)
+# Even stat spread, lowest risk. Good default for unknown characters.
+
+id: parent_balanced_v1
+name: "Parent Balanced"
+run_type: parent_builder
+description: "Balanced parent builder. Even stat spread with conservative play. Good starting point."
+distance_target: medium
+style_target: leader
+
+stat_targets:
+  speed:
+    minimum: 400
+    target: 650
+    excellent: 750
+    values: [1.0, 0.7, 0.2, 0.05]
+  stamina:
+    minimum: 400
+    target: 600
+    excellent: 700
+    values: [1.0, 0.7, 0.2, 0.05]
+  power:
+    minimum: 350
+    target: 550
+    excellent: 650
+    values: [0.9, 0.65, 0.15, 0.0]
+  guts:
+    minimum: 300
+    target: 450
+    excellent: 550
+    values: [0.8, 0.5, 0.1, 0.0]
+  wit:
+    minimum: 300
+    target: 450
+    excellent: 550
+    values: [0.8, 0.5, 0.1, 0.0]
+
+policy:
+  bond_future_value: 0.9
+  skill_point_value: 0.35
+  race_progress_value: 0.8
+  failure_risk_penalty: 1.4
+  energy_preservation: 0.8
+  overshoot_penalty: 0.7
+
+constraints:
+  must_complete_goal_races: true
+  max_failure_rate: 0.12
+  min_energy_for_training: 50
+  rest_energy_threshold: 25

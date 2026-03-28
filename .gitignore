@@ -31,13 +31,17 @@ models/*.bin
 
 # Data
 data/uma_trainer.db
+data/uma_trainer.db-shm
+data/uma_trainer.db-wal
 data/llm_cache.db
 data/master.mdb
 data/gain_ocr_samples/
 
 # Sprite assets (large, extracted from APK)
+*.png
 sprites/
 *.zip
+*.gz
 
 # Datasets (large)
 datasets/images/
@@ -49,13 +53,26 @@ datasets/labels/
 logs/
 *.log
 run_logs/
+runs/
 
 # Screenshots / captures
 captures/
+screenshots/
 *.png
 *.jpg
 *.jpeg
 !data/**/*.png
+
+# Debug glyph images (keep only templates + masks)
+data/digit_templates/glyphs/*_annotated.png
+data/digit_templates/glyphs/*_binary.png
+data/digit_templates/glyphs/*_color.png
+data/digit_templates/glyphs/*_lightness.png
+data/digit_templates/*_3x.png
+data/digit_templates/*_light_3x.png
+data/digit_templates/*_lightness*.png
+data/digit_templates/*_thresh.png
+data/digit_templates/*_gray.png
 
 # macOS
 .DS_Store

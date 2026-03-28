@@ -1,0 +1,50 @@
+# Parent Builder — Sprint (v1)
+# Speed+power priority, lower stamina needs.
+
+id: parent_sprint_v1
+name: "Parent Sprint"
+run_type: parent_builder
+description: "Sprint parent builder. Prioritizes speed and power with reduced stamina requirements."
+distance_target: sprint
+style_target: front
+
+stat_targets:
+  speed:
+    minimum: 550
+    target: 900
+    excellent: 1000
+    values: [1.2, 0.9, 0.25, 0.05]
+  stamina:
+    minimum: 200
+    target: 350
+    excellent: 450
+    values: [0.6, 0.4, 0.1, 0.0]
+  power:
+    minimum: 450
+    target: 700
+    excellent: 800
+    values: [1.0, 0.8, 0.2, 0.05]
+  guts:
+    minimum: 300
+    target: 450
+    excellent: 550
+    values: [0.8, 0.5, 0.15, 0.0]
+  wit:
+    minimum: 300
+    target: 400
+    excellent: 500
+    values: [0.7, 0.4, 0.1, 0.0]
+
+policy:
+  bond_future_value: 0.9
+  skill_point_value: 0.3
+  race_progress_value: 0.8
+  failure_risk_penalty: 1.2
+  energy_preservation: 0.7
+  overshoot_penalty: 0.9
+
+constraints:
+  must_complete_goal_races: true
+  max_failure_rate: 0.15
+  min_energy_for_training: 45
+  rest_energy_threshold: 20

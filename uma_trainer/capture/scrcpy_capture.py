@@ -81,10 +81,6 @@ class ScrcpyCapture(CaptureBackend):
 
         raw_bytes = result.stdout
 
-        # ADB on Windows emits \r\n line endings in binary streams — strip them
-        if b"\r\n" in raw_bytes[:32]:
-            raw_bytes = raw_bytes.replace(b"\r\n", b"\n")
-
         try:
             img = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
         except Exception as e:

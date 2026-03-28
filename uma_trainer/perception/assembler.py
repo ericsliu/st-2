@@ -489,10 +489,13 @@ class StateAssembler:
         if not stat_regions:
             return None
 
-        # Build a bounding box that covers labels + values + max
-        # Start 50px above the stat values for labels, extend 50px below for /max
+        # Build a bounding box that covers labels + values + max.
+        # Only extend 15px above to capture stat labels but NOT the gain
+        # preview numbers (+N) which sit above at y≈1185-1255 on the
+        # training screen. Including gains causes OCR to merge "+5" with
+        # "148" → "1481".
         x1 = min(r[0] for r in stat_regions) - 80  # include grade badges for context
-        y1 = min(r[1] for r in stat_regions) - 50   # include stat labels
+        y1 = min(r[1] for r in stat_regions) - 15   # labels only, not gain previews
         x2 = max(r[2] for r in stat_regions) + 20
         y2 = max(r[3] for r in stat_regions) + 50   # include /1200
 
@@ -562,10 +565,18 @@ class StateAssembler:
     ) -> None:
         """Parse energy from the energy bar region.
 
-        The energy bar is a coloured bar; we estimate energy as the
-        proportion of the bar that is filled (coloured vs grey).
-        The filled portion has saturation > 0; the empty portion is
-        pure grey (saturation == 0, value ~132).
+        The energy bar is a rainbow gradient (blue→cyan→green→yellow→orange→red).
+        Three visual zones when a training tile is selected:
+        - Bright rainbow (S>150, V>200): energy remaining after training
+        - Faded gradient (S>150, V~170): energy cost preview
+        - Gray (S<20, V~142): energy already missing
+
+        For Wit/recovery training, a 4th zone appears:
+        - Recovery preview (S~70, V>200): energy to be regained
+
+        Current energy = bright + faded (everything with S > 100).
+        The recovery preview (S~70) is excluded so it doesn't inflate
+        the reading.
         """
         region = regions.get("energy_bar")
         if region is None:
@@ -582,14 +593,33 @@ class StateAssembler:
         except ImportError:
             return
 
-        # The energy bar is rainbow-coloured (filled) vs grey (empty).
-        # Use per-column saturation to distinguish filled from empty.
         bar_width = x2 - x1
         col_sat = np.mean(hsv[:, :, 1], axis=0)
-        # Rainbow fill has saturation > 50; grey empty area is < 20.
-        filled_cols = int(np.sum(col_sat > 50))
+        col_val = np.mean(hsv[:, :, 2], axis=0)
+
+        # Zone classification by saturation + value:
+        #   Bright fill:      S > 100, V > 200  (post-training energy)
+        #   Faded cost:       S > 100, V <= 200  (energy to be consumed)
+        #   Recovery preview: 20 < S <= 100       (energy to be regained)
+        #   Gray/empty:       S <= 20             (missing energy)
+        bright = int(np.sum((col_sat > 100) & (col_val > 200)))
+        faded = int(np.sum((col_sat > 100) & (col_val <= 200)))
+        recovery = int(np.sum((col_sat > 20) & (col_sat <= 100)))
+
+        # Current energy = bright + faded (everything with real fill)
+        filled_cols = bright + faded
         energy = int(round(filled_cols / bar_width * 100))
         state.energy = max(0, min(100, energy))
+
+        # Post-training = bright only (excludes faded cost preview)
+        if faded > 0:
+            post = int(round(bright / bar_width * 100))
+            state.energy_post_training = max(0, min(100, post))
+        else:
+            state.energy_post_training = None
+
+        # Recovery amount (Wit-type training extends bar with low-sat fill)
+        state.energy_recovery = int(round(recovery / bar_width * 100))
 
     def _parse_turn(
         self,
@@ -604,13 +634,16 @@ class StateAssembler:
 
         text = self.ocr.read_region(frame, region)
 
-        # Try "12 turn(s) left" format
+        # Try "12 turn(s) left" format — game shows turns remaining.
+        # Convert to absolute turn number: max_turns - turns_left.
         match = re.search(r"(\d+)\s*turn", text, re.IGNORECASE)
         if match:
-            state.current_turn = int(match.group(1))
+            turns_left = int(match.group(1))
+            state.current_turn = state.max_turns - turns_left
             return
 
-        # Fallback: first number found
+        # Fallback: first number found (assume turns left)
         match = re.search(r"\d+", text)
         if match:
-            state.current_turn = int(match.group())
+            turns_left = int(match.group())
+            state.current_turn = state.max_turns - turns_left
