@@ -65,9 +65,11 @@ SCREEN_RULES: list[ScreenRule] = [
     # misreads "Results" as "Resulte" or "Result", so match loosely.
     (ScreenState.PRE_RACE, ["view result"], []),
 
-    # Post-race — "Next" button, often with "Try Again" or placement text
+    # Post-race — "Next" button, often with "Try Again" or placement text.
+    # Exclude "effect" so post-race events (which have "Effects" button and
+    # may contain "next" in choice text) are detected as EVENT instead.
     (ScreenState.POST_RACE, ["next"], ["race list", "view results", "rest",
-                                       "training", "shop"]),
+                                       "training", "shop", "effect"]),
 
     # Event popup — choice buttons with event text
     (ScreenState.EVENT, ["effect"], ["rest", "training", "shop", "race list"]),

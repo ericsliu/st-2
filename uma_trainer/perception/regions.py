@@ -410,9 +410,11 @@ STAT_REGION_KEYS: dict[StatType, str] = {
 
 EVENT_REGIONS: dict[str, Region] = {
     "event_text":  (100, 300, 980, 700),       # Main event description text
-    "choice_0":    (100, 1200, 980, 1300),     # First choice button
-    "choice_1":    (100, 1320, 980, 1420),     # Second choice button
-    "choice_2":    (100, 1440, 980, 1540),     # Third choice (if present)
+    # Choice buttons — calibrated 2026-03-28 from post-race event screenshot.
+    # Choices start higher than expected; y ranges allow for scroll variation.
+    "choice_0":    (60, 1040, 980, 1160),      # First choice button
+    "choice_1":    (60, 1260, 980, 1400),      # Second choice button
+    "choice_2":    (60, 1440, 980, 1540),      # Third choice (if present)
 }
 
 

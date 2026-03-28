@@ -27,19 +27,31 @@
   choice: 1
   note: "Avoid nightmare events that drain energy"
 
-# Post-race events — choice 0 is always the safe option (fixed energy cost)
+# Post-race events — 1st place gets option 2, otherwise option 1
+- text_contains: "impressive victory"
+  choice: 1
+  note: "1st place victory — option 2 gives better rewards"
+
+- text_contains: "magnificent"
+  choice: 1
+  note: "1st place victory — option 2 gives better rewards"
+
 - text_contains: "victory"
+  choice: 1
+  note: "Post-race victory event — option 2 for wins"
+
+- text_contains: "solid showing"
   choice: 0
-  note: "Post-race victory event — choice 0 is safe (fixed energy cost)"
+  note: "Non-1st place — option 1 is safe"
 
 - text_contains: "defeat"
   choice: 0
-  note: "Post-race defeat event — choice 0 is safe"
+  note: "Post-race defeat event — option 1 is safe"
 
-# Trainee-specific post-race
+# Trainee-specific post-race (fallback for non-matched post-race events)
 - text_contains: "trainee event"
   choice: 0
-  note: "Trainee post-race event — choice 0 is safe"
+  note: "Trainee post-race event — default to option 1"
 
 # Acupuncturist — Health Chakra is best
 - text_contains: "acupuncturist"
