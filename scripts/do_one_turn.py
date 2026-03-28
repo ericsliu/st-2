@@ -360,25 +360,231 @@ def display_training_scores(state, engine):
     return scored
 
 
-def execute_shop_visit(injector, capture, assembler, screen_id, sequences, engine):
-    """Navigate to the shop, and exit.
+def _build_shop_name_matcher():
+    """Build a fuzzy matcher for shop item names from ITEM_CATALOGUE."""
+    from rapidfuzz import fuzz, process
+    from uma_trainer.decision.shop_manager import ITEM_CATALOGUE, ItemTier
 
-    For now this is a minimal visit that prevents the "Shop lineup refreshed!"
-    popup from interrupting other actions. Full purchase automation is Phase 2.
+    # Map display name -> item_key for all purchasable items
+    name_to_key: dict[str, str] = {}
+    for key, item in ITEM_CATALOGUE.items():
+        if item.tier == ItemTier.NEVER:
+            continue
+        name_to_key[item.name] = key
+    return name_to_key
+
+
+def _match_shop_item(ocr_text, name_to_key):
+    """Fuzzy match OCR text against shop item names. Returns item_key or None."""
+    from rapidfuzz import fuzz, process
+
+    if not ocr_text or len(ocr_text) < 3:
+        return None
+
+    names = list(name_to_key.keys())
+    result = process.extractOne(
+        ocr_text, names,
+        scorer=fuzz.token_sort_ratio,
+        score_cutoff=65,
+    )
+    if result is None:
+        return None
+
+    matched_name, score, _idx = result
+    return name_to_key[matched_name]
+
+
+def _scan_shop_items(frame, ocr, name_to_key):
+    """Scan visible shop items. Returns list of (item_key, name_y, purchased)."""
+    import re
+    items = []
+    y = 700
+    while y < 1450:
+        name_text = ocr.read_region(frame, (130, y, 700, y + 45)).strip()
+        if not name_text or len(name_text) < 3:
+            y += 30
+            continue
+
+        # Skip cost/effect/UI lines
+        lower = name_text.lower()
+        if any(lower.startswith(w) for w in ("cost", "effect", "choose", "x1", "xl")):
+            y += 30
+            continue
+
+        item_key = _match_shop_item(name_text, name_to_key)
+        if item_key is None:
+            y += 30
+            continue
+
+        # Check for "Purchased" label on right side of row
+        right_text = ocr.read_region(frame, (700, y + 20, 1050, y + 80)).strip().lower()
+        is_purchased = "purchased" in right_text or "purch" in right_text
+
+        logger.info("  Shop item: '%s' → %s%s (y=%d)",
+                     name_text, item_key,
+                     " PURCHASED" if is_purchased else "", y)
+        items.append((item_key, y, is_purchased))
+        y += 150  # skip past this row
+
+    return items
+
+
+def _get_shop_coins(frame, ocr):
+    """Read coin balance from shop screen header."""
+    import re
+    coins_text = ocr.read_region(frame, (780, 590, 1060, 650)).strip()
+    match = re.search(r"(\d+)", coins_text)
+    return int(match.group(1)) if match else None
+
+
+def execute_shop_visit(injector, capture, assembler, screen_id, sequences, engine):
+    """Navigate to shop, buy priority items, and exit.
+
+    Purchase priority (from user guidance):
+    1. Empowering Megaphone (2-turn) — until 2 stockpiled for summer
+    2. Motivating Megaphone (3-turn) — for good random training days
+    3. Ankle Weights — for stats with support cards
+    4. Vita drinks — energy recovery
+    5. Good-Luck Charm — up to 2
+    6. Mood items — a couple
+    7. Miracle Cure — 1 to have
+    8. Rich Hand Cream — for 3-race strings
     """
     from uma_trainer.perception.regions import TURN_ACTION_REGIONS, get_tap_center
+    from uma_trainer.decision.shop_manager import ITEM_CATALOGUE, ItemTier
+
     shop_btn = get_tap_center(TURN_ACTION_REGIONS["btn_shop"])
     logger.info("Visiting shop at %s", shop_btn)
     injector.tap(*shop_btn)
     time.sleep(2.5)
 
-    # Take screenshot to verify we're in the shop
+    # Verify we're in the shop
     frame = capture.grab_frame()
     shop_text = assembler.ocr.read_region(frame, (0, 0, 300, 80)).lower()
-    if "shop" in shop_text:
-        logger.info("In shop screen — exiting")
+    if "shop" not in shop_text:
+        logger.warning("May not be in shop (header: '%s') — tapping Back", shop_text[:40])
+        injector.tap(50, 1870)
+        time.sleep(2.0)
+        return
+
+    coins = _get_shop_coins(frame, assembler.ocr)
+    logger.info("Shop coins: %s", coins)
+
+    if coins is not None and coins < 15:
+        logger.info("Not enough coins to buy anything — exiting")
+        injector.tap(50, 1870)
+        time.sleep(2.0)
+        return
+
+    # Build purchase want-list: items we'd like to buy, in priority order
+    # Filter by tier and max_stock
+    inventory = engine.shop_manager.inventory
+    want_keys: list[str] = []
+
+    # Priority order based on tier then manual ordering
+    tier_order = {ItemTier.SS: 0, ItemTier.S: 1, ItemTier.A: 2, ItemTier.B: 3}
+    buyable = []
+    for key, item in ITEM_CATALOGUE.items():
+        if item.tier == ItemTier.NEVER:
+            continue
+        owned = inventory.get(key, 0)
+        if owned >= item.max_stock:
+            continue
+        buyable.append((tier_order[item.tier], item.cost, key))
+
+    buyable.sort()
+    want_keys = [key for _, _, key in buyable]
+
+    if not want_keys:
+        logger.info("Nothing to buy (all at max stock) — exiting")
+        injector.tap(50, 1870)
+        time.sleep(2.0)
+        return
+
+    logger.info("Want list: %s", want_keys[:10])
+
+    # Scan shop and select items.
+    # Strategy: on page 0 scan full screen, after each scroll only process
+    # items in the lower half (y > 1000) to avoid re-tapping items that
+    # were already visible and tapped on the previous scroll position.
+    name_to_key = _build_shop_name_matcher()
+    selected_counts: dict[str, int] = {}  # item_key -> count selected
+    selected_keys: list[str] = []
+    spent = 0
+    max_scrolls = 4
+
+    for scroll in range(max_scrolls + 1):
+        if scroll > 0:
+            injector.swipe(540, 1100, 540, 750, duration_ms=400)
+            time.sleep(2.0)
+
+        frame = capture.grab_frame()
+        visible = _scan_shop_items(frame, assembler.ocr, name_to_key)
+
+        # After scrolling, only consider items in the lower portion
+        min_y = 700 if scroll == 0 else 1000
+
+        for item_key, name_y, is_purchased in visible:
+            if name_y < min_y:
+                continue
+            if is_purchased:
+                continue
+            if item_key not in want_keys:
+                continue
+
+            item = ITEM_CATALOGUE[item_key]
+
+            # Check max_stock: owned + already selected this visit
+            owned = inventory.get(item_key, 0)
+            already_selected = selected_counts.get(item_key, 0)
+            if owned + already_selected >= item.max_stock:
+                continue
+
+            if coins is not None and (spent + item.cost) > coins:
+                logger.info("  Can't afford %s (%d coins, %d remaining)",
+                            item.name, item.cost, coins - spent)
+                continue
+
+            # Tap the checkbox on the right side of the row
+            checkbox_x = 950
+            checkbox_y = name_y + 15
+            logger.info("  Selecting %s at (%d, %d)", item.name, checkbox_x, checkbox_y)
+            injector.tap(checkbox_x, checkbox_y)
+            time.sleep(0.5)
+
+            selected_keys.append(item_key)
+            selected_counts[item_key] = already_selected + 1
+            spent += item.cost
+
+    if selected_keys:
+        logger.info("Confirming purchase of %d items (total %d coins): %s",
+                     len(selected_keys), spent, selected_keys)
+        # Tap Confirm button (green, center bottom)
+        injector.tap(540, 1640)
+        time.sleep(2.0)
+
+        # Handle Exchange confirmation dialog — tap Exchange (green button, right side)
+        # The dialog shows "Confirm Exchange" header and Cancel/Exchange buttons
+        frame = capture.grab_frame()
+        confirm_text = assembler.ocr.read_region(frame, (0, 0, 1080, 200)).lower()
+        if "confirm" in confirm_text or "exchange" in confirm_text or "purchase" in confirm_text:
+            logger.info("Tapping Exchange to confirm purchase")
+            # Exchange button is bottom-right of the dialog
+            injector.tap(810, 1530)
+            time.sleep(2.0)
+        else:
+            logger.warning("Exchange dialog not detected — OCR: '%s'", confirm_text[:60])
+            # Try tapping Exchange anyway
+            injector.tap(810, 1530)
+            time.sleep(2.0)
+
+        # Update inventory
+        for key in selected_keys:
+            engine.shop_manager.add_item(key)
+        engine.shop_manager.save_inventory()
+        logger.info("Inventory updated: %s", engine.shop_manager.inventory)
     else:
-        logger.warning("May not be in shop (header: '%s') — tapping Back anyway", shop_text[:40])
+        logger.info("No items selected for purchase")
 
     # Exit shop
     injector.tap(50, 1870)

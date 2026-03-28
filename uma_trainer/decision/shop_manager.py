@@ -78,49 +78,52 @@ class ShopItem:
 ITEM_CATALOGUE: dict[str, ShopItem] = {
     # -- Stat Boosts --
     "notepad":              ShopItem("Notepad", 10, ItemTier.NEVER, effect="+3 stat"),
-    "manual":               ShopItem("Manual", 15, ItemTier.A, effect="+7 stat"),
-    "scroll":               ShopItem("Scroll", 30, ItemTier.SS, effect="+15 stat"),
+    "manual":               ShopItem("Manual", 15, ItemTier.B, effect="+7 stat"),
+    "scroll":               ShopItem("Scroll", 30, ItemTier.A, effect="+15 stat"),
 
     # -- Energy / Mood --
-    "vita_20":              ShopItem("Vita 20", 35, ItemTier.B, effect="Energy +20"),
+    "vita_20":              ShopItem("Vita 20", 35, ItemTier.A, effect="Energy +20"),
     "vita_40":              ShopItem("Vita 40", 55, ItemTier.A, effect="Energy +40"),
     "vita_65":              ShopItem("Vita 65", 75, ItemTier.A, effect="Energy +65"),
     "royal_kale":           ShopItem("Royal Kale Juice", 70, ItemTier.B, effect="Energy +100, Mood -1"),
     "energy_drink_max":     ShopItem("Energy Drink MAX", 30, ItemTier.A, effect="Max Energy +4"),
     "energy_drink_max_ex":  ShopItem("Energy Drink MAX EX", 50, ItemTier.A, effect="Max Energy +8"),
-    "plain_cupcake":        ShopItem("Plain Cupcake", 30, ItemTier.B, effect="Mood +1"),
-    "berry_cupcake":        ShopItem("Berry Sweet Cupcake", 55, ItemTier.B, effect="Mood +2"),
+    "plain_cupcake":        ShopItem("Plain Cupcake", 30, ItemTier.B, max_stock=2, effect="Mood +1"),
+    "berry_cupcake":        ShopItem("Berry Sweet Cupcake", 55, ItemTier.B, max_stock=2, effect="Mood +2"),
 
     # -- Training Items --
+    # Empowering (2-turn) is top priority until we have 2 stockpiled for summer
+    "empowering_mega":      ShopItem("Empowering Megaphone", 70, ItemTier.SS, max_stock=2, effect="+60% training, 2 turns", save_for="summer_camp"),
+    # Motivating (3-turn) useful for good random training days
+    "motivating_mega":      ShopItem("Motivating Megaphone", 55, ItemTier.S, effect="+40% training, 3 turns"),
     "coaching_mega":        ShopItem("Coaching Megaphone", 40, ItemTier.A, effect="+20% training, 4 turns"),
-    "motivating_mega":      ShopItem("Motivating Megaphone", 55, ItemTier.S, effect="+40% training, 3 turns", save_for="summer_camp"),
-    "empowering_mega":      ShopItem("Empowering Megaphone", 70, ItemTier.SS, effect="+60% training, 2 turns", save_for="summer_camp"),
+    # Ankle weights: only useful for stats with support cards
     "ankle_weights":        ShopItem("Ankle Weights", 50, ItemTier.A, effect="+50% stat / +20% energy, 1 turn", save_for="summer_camp"),
-    "training_application": ShopItem("Training Application", 150, ItemTier.S, effect="Training level +1"),
-    "good_luck_charm":      ShopItem("Good-Luck Charm", 40, ItemTier.SS, effect="0% failure, 1 turn", save_for="exceptional_training"),
-    "reset_whistle":        ShopItem("Reset Whistle", 20, ItemTier.S, effect="Rearrange support cards"),
+    "training_application": ShopItem("Training Application", 150, ItemTier.B, effect="Training level +1"),
+    "good_luck_charm":      ShopItem("Good-Luck Charm", 40, ItemTier.S, max_stock=2, effect="0% failure, 1 turn", save_for="exceptional_training"),
+    "reset_whistle":        ShopItem("Reset Whistle", 20, ItemTier.A, effect="Rearrange support cards"),
 
     # -- Race Items --
-    "artisan_hammer":       ShopItem("Artisan Cleat Hammer", 25, ItemTier.A, effect="+20% race stat gain"),
-    "master_hammer":        ShopItem("Master Cleat Hammer", 40, ItemTier.SS, max_stock=3, effect="+35% race stat gain", save_for="twinkle_star"),
+    "artisan_hammer":       ShopItem("Artisan Cleat Hammer", 25, ItemTier.B, effect="+20% race stat gain"),
+    "master_hammer":        ShopItem("Master Cleat Hammer", 40, ItemTier.A, max_stock=3, effect="+35% race stat gain", save_for="twinkle_star"),
     "glow_sticks":          ShopItem("Glow Sticks", 15, ItemTier.B, effect="+50% fan gain"),
 
     # -- Condition Cures --
-    "practice_dvd":         ShopItem("Practice Drills DVD", 15, ItemTier.S, effect="Cure Practice Poor"),
-    "pocket_planner":       ShopItem("Pocket Planner", 15, ItemTier.S, effect="Cure Slacker"),
-    "smart_scale":          ShopItem("Smart Scale", 15, ItemTier.S, effect="Cure Slow Metabolism"),
-    "rich_hand_cream":      ShopItem("Rich Hand Cream", 15, ItemTier.SS, effect="Cure Skin Outbreak"),
-    "aroma_diffuser":       ShopItem("Aroma Diffuser", 15, ItemTier.S, effect="Cure Migraine"),
-    "fluffy_pillow":        ShopItem("Fluffy Pillow", 15, ItemTier.S, effect="Cure Night Owl"),
-    "miracle_cure":         ShopItem("Miracle Cure", 40, ItemTier.S, effect="Cure all conditions"),
+    "rich_hand_cream":      ShopItem("Rich Hand Cream", 15, ItemTier.S, max_stock=1, effect="Cure Skin Outbreak"),
+    "miracle_cure":         ShopItem("Miracle Cure", 40, ItemTier.S, max_stock=1, effect="Cure all conditions"),
+    "practice_dvd":         ShopItem("Practice Drills DVD", 15, ItemTier.B, effect="Cure Practice Poor"),
+    "pocket_planner":       ShopItem("Pocket Planner", 15, ItemTier.B, effect="Cure Slacker"),
+    "smart_scale":          ShopItem("Smart Scale", 15, ItemTier.B, effect="Cure Slow Metabolism"),
+    "aroma_diffuser":       ShopItem("Aroma Diffuser", 15, ItemTier.B, effect="Cure Migraine"),
+    "fluffy_pillow":        ShopItem("Fluffy Pillow", 15, ItemTier.B, effect="Cure Night Owl"),
 
     # -- Bond / Status --
-    "grilled_carrots":      ShopItem("Grilled Carrots", 40, ItemTier.SS, effect="All bond +5"),
-    "cat_food":             ShopItem("Cat Food", 10, ItemTier.B, effect="Director bond +5"),
-    "practice_perfect":     ShopItem("Tips for Efficient Training", 150, ItemTier.S, effect="Grants Practice Perfect"),
-    "hot_topic":            ShopItem("Reporter's Binoculars", 150, ItemTier.A, effect="Grants Hot Topic"),
-    "charming":             ShopItem("Pretty Mirror", 150, ItemTier.A, effect="Grants Charming"),
-    "scholar_hat":          ShopItem("Scholar's Hat", 280, ItemTier.SS, effect="10% skill cost reduction"),
+    "grilled_carrots":      ShopItem("Grilled Carrots", 40, ItemTier.A, effect="All bond +5"),
+    "cat_food":             ShopItem("Cat Food", 10, ItemTier.NEVER, effect="Director bond +5"),
+    "practice_perfect":     ShopItem("Tips for Efficient Training", 150, ItemTier.B, effect="Grants Practice Perfect"),
+    "hot_topic":            ShopItem("Reporter's Binoculars", 150, ItemTier.NEVER, effect="Grants Hot Topic"),
+    "charming":             ShopItem("Pretty Mirror", 150, ItemTier.NEVER, effect="Grants Charming"),
+    "scholar_hat":          ShopItem("Scholar's Hat", 280, ItemTier.B, effect="10% skill cost reduction"),
 }
 
 
