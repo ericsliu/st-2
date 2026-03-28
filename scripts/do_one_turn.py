@@ -354,11 +354,12 @@ def execute_training(state, engine, injector, capture, assembler, sequences, scr
     return action
 
 
-def execute_race_entry(injector, capture, assembler, screen_id, race_selector=None):
-    """Navigate into the race list, pick the best race, and enter it.
+def execute_race_entry(injector, capture, assembler, screen_id, race_selector=None, sequences=None):
+    """Navigate into the race list, find the pre-selected race, and enter it.
 
     Called when DecisionEngine says to race. We're on career home.
-    Uses the RaceSelector to score races and filter by aptitude.
+    Uses the RaceSelector's pre-selected race from the calendar, then
+    navigates the in-game list (scrolling if needed) to find it.
     """
     from uma_trainer.perception.regions import TURN_ACTION_REGIONS, get_tap_center
 
@@ -395,31 +396,49 @@ def execute_race_entry(injector, capture, assembler, screen_id, race_selector=No
         logger.warning("Expected RACE_ENTRY, got %s — aborting race", state.screen.value)
         return False
 
-    # Use the race selector to pick the best race by aptitude/grade/GP value
-    if race_selector and state.available_races:
+    # Use pre-selected race from calendar, navigate to find it
+    pre_selected = race_selector._pre_selected if race_selector else None
+
+    if pre_selected and sequences:
+        estimated_pos = race_selector.estimate_race_position(
+            pre_selected, state.current_turn, state.max_turns,
+        )
+        logger.info(
+            "Looking for pre-selected race '%s' (grade=%s, est. position=%d)",
+            pre_selected.name, pre_selected.grade, estimated_pos,
+        )
+
+        tap_coords = sequences.navigate_to_race(
+            target_name=pre_selected.name,
+            estimated_position=estimated_pos,
+            capture=capture,
+            ocr=assembler.ocr,
+        )
+
+        if tap_coords:
+            logger.info("Found race — tapping at %s", tap_coords)
+            injector.tap(*tap_coords)
+            time.sleep(1.0)
+        else:
+            logger.warning(
+                "Could not find '%s' in race list — falling back to first visible",
+                pre_selected.name,
+            )
+    elif race_selector and state.available_races:
+        # Legacy fallback: score visible races via OCR
         action = race_selector.decide(state)
         if action.action_type == ActionType.WAIT:
             logger.warning("RaceSelector: no suitable race — %s. Going back.", action.reason)
-            injector.tap(75, 1870)  # Back button
+            injector.tap(75, 1870)
             time.sleep(1.5)
             return False
 
-        # Log what we're entering
-        for race in state.available_races:
-            logger.info(
-                "  Race option: '%s' grade=%s dist=%dm surface=%s apt_ok=%s",
-                race.name, race.grade, race.distance, race.surface, race.is_aptitude_ok,
-            )
-
-        # Tap the selected race entry to highlight it, then the Race button
         if action.tap_coords and action.tap_coords != (0, 0):
-            logger.info("Selecting race at %s", action.tap_coords)
+            logger.info("Selecting race at %s (legacy)", action.tap_coords)
             injector.tap(*action.tap_coords)
             time.sleep(1.0)
-
-        logger.info("Entering race: %s", action.reason)
     else:
-        logger.info("No race selector or no races parsed — entering first race")
+        logger.info("No race selector — entering first visible race")
 
     # Tap the green Race button at bottom of list
     from uma_trainer.perception.regions import RACE_LIST_REGIONS
@@ -429,7 +448,6 @@ def execute_race_entry(injector, capture, assembler, screen_id, race_selector=No
     time.sleep(2.0)
 
     # Handle the race details confirmation popup
-    # Green "Race" confirm button is at (810, 1370) per screen_coordinates.json
     logger.info("Tapping race confirmation at (810, 1370)")
     injector.tap(810, 1370)
     time.sleep(3.0)
@@ -669,6 +687,12 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
     # Racing doesn't cost energy, so it always takes priority over rest.
     race_action = engine.race_selector.should_race_this_turn(state)
 
+    # Pre-select the best race from the calendar so we know what to look for
+    if race_action:
+        pre = engine.race_selector.pre_select_race(state)
+        if pre:
+            logger.info("Pre-selected: %s (%s, %dm)", pre.name, pre.grade, pre.distance)
+
     # If race is a rhythm race (not goal), check bond urgency first.
     # Bond urgency can override non-goal races when friendship building is critical.
     if race_action and "Goal race" not in race_action.reason:
@@ -700,16 +724,19 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
             time.sleep(2.0)
 
     if race_action:
+        pre = engine.race_selector._pre_selected
         print(f"\nDecision: RACE")
         print(f"Reason: {race_action.reason}")
+        if pre:
+            print(f"Target: {pre.name} ({pre.grade}, {pre.distance}m, {pre.surface})")
 
         if not execute:
-            print("\n[DRY RUN] Would enter race list and pick best race.")
+            print("\n[DRY RUN] Would enter race list and find target race.")
             return True
 
         # Execute: tap Races, handle race list, race confirmation, post-race flow
         logger.info("STEP 3: Executing RACE")
-        success = execute_race_entry(injector, capture, assembler, screen_id, race_selector=engine.race_selector)
+        success = execute_race_entry(injector, capture, assembler, screen_id, race_selector=engine.race_selector, sequences=sequences)
         if not success:
             return False
 

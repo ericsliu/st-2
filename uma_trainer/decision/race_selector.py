@@ -33,6 +33,9 @@ def _load_race_calendar(path: str = "data/race_calendar.json") -> list[dict]:
         return []
 
 
+GRADE_SORT_ORDER = {"G1": 0, "G2": 1, "G3": 2, "OP": 3, "Pre-OP": 4}
+
+
 class RaceSelector:
     """Decides whether to enter a race and which race to choose."""
 
@@ -46,10 +49,118 @@ class RaceSelector:
         self.overrides = overrides
         self.scenario = scenario
         self._calendar = _load_race_calendar()
+        self._pre_selected: RaceOption | None = None
         logger.info("Race calendar loaded: %d races", len(self._calendar))
 
     # ------------------------------------------------------------------
-    # Main entry point: race list screen
+    # Calendar-driven race pre-selection
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def turn_to_month_half(turn: int, max_turns: int = 72) -> tuple[int, int, str]:
+        """Convert absolute turn to (year, month, half).
+
+        Each year has 24 turns (2 per month).
+        Returns (year_1based, month_1to12, "early"|"late").
+        """
+        turns_per_year = max_turns // 3
+        year = turn // turns_per_year + 1
+        year_turn = turn % turns_per_year
+        month = (year_turn // 2) + 1
+        half = "early" if year_turn % 2 == 0 else "late"
+        return year, month, half
+
+    def get_races_for_turn(self, turn: int, max_turns: int = 72) -> list[dict]:
+        """Return all calendar races available at the given turn."""
+        _, month, half = self.turn_to_month_half(turn, max_turns)
+        results = []
+        for entry in self._calendar:
+            grade = entry.get("grade", "")
+            if grade in ("OP", "Pre-OP"):
+                results.append(entry)
+                continue
+            if entry.get("month") == month and entry.get("half") == half:
+                results.append(entry)
+        return results
+
+    def pre_select_race(self, state: GameState) -> RaceOption | None:
+        """Pick the best race from the calendar for this turn.
+
+        Called BEFORE opening the race list. Uses calendar data +
+        trainee aptitudes to score all candidates without OCR.
+        Stores result in self._pre_selected for later navigation.
+        """
+        calendar_races = self.get_races_for_turn(
+            state.current_turn, state.max_turns,
+        )
+        if not calendar_races:
+            self._pre_selected = None
+            return None
+
+        candidates = []
+        for entry in calendar_races:
+            race = RaceOption(
+                name=entry["name"],
+                grade=entry.get("grade", ""),
+                distance=entry.get("distance", 0),
+                surface=entry.get("surface", "turf"),
+                fan_reward=entry.get("fan_reward", 0),
+            )
+            for goal in state.career_goals:
+                if goal.race_name and not goal.completed:
+                    if goal.race_name.lower() in race.name.lower():
+                        race.is_goal_race = True
+            candidates.append(race)
+
+        # Aptitude gating
+        if state.trainee_aptitudes:
+            blocked = {"C", "D", "E", "F", "G"}
+            for race in candidates:
+                if race.distance > 0:
+                    dist_cat = self._distance_category(race.distance)
+                    if state.trainee_aptitudes.get(dist_cat, "") in blocked:
+                        race.is_aptitude_ok = False
+                if state.trainee_aptitudes.get(race.surface, "") in blocked:
+                    race.is_aptitude_ok = False
+
+        scored = [(r, self._score_race(r, state)) for r in candidates]
+        scored = [(r, s) for r, s in scored if s > 0]
+        scored.sort(key=lambda x: x[1], reverse=True)
+
+        if not scored:
+            self._pre_selected = None
+            return None
+
+        min_score = self.scenario.get_race_min_score() if self.scenario else 5.0
+        best_race, best_score = scored[0]
+        if best_score < min_score:
+            self._pre_selected = None
+            return None
+
+        logger.info(
+            "Pre-selected race: '%s' (grade=%s, dist=%dm, score=%.1f)",
+            best_race.name, best_race.grade, best_race.distance, best_score,
+        )
+        self._pre_selected = best_race
+        return best_race
+
+    def estimate_race_position(self, target: RaceOption, turn: int, max_turns: int = 72) -> int:
+        """Estimate the 0-based position of a race in the in-game sorted list.
+
+        The game sorts G1 first, then G2, G3, OP, Pre-OP.
+        """
+        all_races = self.get_races_for_turn(turn, max_turns)
+        all_races.sort(key=lambda r: (
+            GRADE_SORT_ORDER.get(r.get("grade", ""), 99),
+            r.get("name", ""),
+        ))
+        for i, entry in enumerate(all_races):
+            if entry["name"].lower() == target.name.lower():
+                return i
+        return GRADE_SORT_ORDER.get(target.grade, 0) * 3
+
+    # ------------------------------------------------------------------
+    # Main entry point: race list screen (legacy OCR-based)
     # ------------------------------------------------------------------
 
     def decide(self, state: GameState) -> BotAction:

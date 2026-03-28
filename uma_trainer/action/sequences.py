@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     import numpy as np
     from uma_trainer.capture.base import CaptureBackend
     from uma_trainer.perception.assembler import StateAssembler
+    from uma_trainer.perception.ocr import OCREngine
     from uma_trainer.types import GameState, TrainingTile
 
 logger = logging.getLogger(__name__)
@@ -497,3 +498,82 @@ class ActionSequences:
         # OK on "return to previous screen?" confirm that back may trigger
         self.injector.tap(775, 1245)
         time.sleep(1.0)
+
+    # ------------------------------------------------------------------
+    # Race list navigation
+    # ------------------------------------------------------------------
+
+    # Race list layout constants (1080x1920 portrait)
+    _RACE_ROW_HEIGHT = 220
+    _RACE_VISIBLE_ROWS = 2
+    _RACE_NAME_REGION_Y_OFFSETS = [
+        (1080, 1150),  # row 0
+        (1300, 1380),  # row 1
+        (1510, 1580),  # row 2 (partially visible after scroll)
+    ]
+
+    def navigate_to_race(
+        self,
+        target_name: str,
+        estimated_position: int,
+        capture: "CaptureBackend",
+        ocr: "OCREngine",
+    ) -> tuple[int, int] | None:
+        """Scroll the race list to find the target race.
+
+        The in-game list is sorted by grade (G1 at top, Pre-OP at bottom).
+        Uses estimated_position to calculate how many scrolls are needed,
+        then OCR-verifies each visible row to find the exact match.
+
+        Returns (x, y) tap coordinates if found, None if not found.
+        """
+        from rapidfuzz import fuzz
+
+        # How many rows are off-screen above the target?
+        rows_to_scroll = max(0, estimated_position - self._RACE_VISIBLE_ROWS + 1)
+        swipes_needed = (rows_to_scroll + 1) // 2  # each swipe ~2 rows
+
+        for _ in range(swipes_needed):
+            self.injector.swipe(540, 1400, 540, 960, duration_ms=400)
+            time.sleep(1.0)
+
+        # Now search visible rows, with a few extra scroll attempts
+        target_lower = target_name.lower()
+        for attempt in range(5):
+            frame = capture.grab_frame()
+            coords = self._find_race_in_frame(frame, ocr, target_lower)
+            if coords:
+                return coords
+
+            # Scroll one more row down
+            self.injector.swipe(540, 1400, 540, 1180, duration_ms=300)
+            time.sleep(0.8)
+
+        logger.warning("Could not find race '%s' after scrolling", target_name)
+        return None
+
+    def _find_race_in_frame(
+        self,
+        frame: "np.ndarray",
+        ocr: "OCREngine",
+        target_lower: str,
+    ) -> tuple[int, int] | None:
+        """OCR visible race rows and return tap coords if target is found."""
+        from rapidfuzz import fuzz
+
+        for y_start, y_end in self._RACE_NAME_REGION_Y_OFFSETS:
+            region = (250, y_start, 1060, y_end)
+            text = ocr.read_region(frame, region).lower()
+            if not text.strip():
+                continue
+
+            score = fuzz.partial_ratio(target_lower, text)
+            if score >= 75:
+                y_center = (y_start + y_end) // 2
+                logger.info(
+                    "Found race '%s' in row (y=%d-%d, match=%d%%)",
+                    target_lower, y_start, y_end, score,
+                )
+                return (540, y_center)
+
+        return None
