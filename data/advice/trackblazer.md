@@ -251,15 +251,175 @@ Maximum: 30 VP. Distance/surface based on career race history.
 
 ---
 
+## Summer Camp Deep Dive
+
+Summer Camp occurs three times (Junior, Classic, Senior years) during
+Early July – Late August (4 turns each). All training facilities are
+forced to Level 5 regardless of actual level.
+
+### Why Summer Camp Is Critical
+
+- Training facility base values in Trackblazer are the same as Unity Cup
+  and **lower** than URA Finale. Since fewer turns are spent training
+  (most turns go to races), facilities level up slowly. Summer Camp's
+  forced Lv5 is often 2-3 levels above your natural facility level.
+- This is your **primary stat-building window**. The bulk of raw stat
+  gains from training happen here.
+
+### Summer Camp Checklist
+
+1. **Before camp**: Stockpile Megaphones, Ankle Weights, Good-Luck
+   Charms, Reset Whistles, and energy items (Vita 65, Royale Kale Juice)
+2. **Enter camp at 60+ energy** to avoid wasting turns resting
+3. **Deploy Empowering Megaphone (+60%)** on turns with rainbow/gold
+   training or 3+ stacked support cards
+4. **Stack Ankle Weights** on top of Megaphone for maximum gains
+5. **Use Good-Luck Charm** if energy is low but training is excellent —
+   allows training even at 0 energy with 0% failure
+6. **Use Reset Whistle** if support cards are poorly distributed — forces
+   them to rearrange for better stacking
+7. **Use Vita/Juice** to sustain multiple training turns without resting
+8. **Avoid racing during camp** unless it's a G1 that can't be skipped
+
+### Camp Priority by Year
+
+- **Junior Camp**: Less impactful (bonds still building, few friendship
+  trains). Use for stat training if bonds are ready, otherwise continue
+  bond building with lower-priority training.
+- **Classic Camp**: The **most important** camp. Bonds should be at
+  orange (80+) by now. Stack every megaphone and weight here.
+- **Senior Camp**: Second most important. Save some items for TS Climax
+  prep turns. Facilities may be naturally higher by now, but Lv5 forced
+  still helps.
+
+---
+
+## Parent Building in Trackblazer
+
+### Overview
+
+Parent building (creating strong Legacy Umas for inheritance) is one of
+the endgame loops. Parents are valued for their Blue Sparks (stat
+inheritance factors), not their final career performance.
+
+### What Is a "9-Star" Parent?
+
+- Blue sparks come in 1-star (+5 stat), 2-star (+12), or 3-star (+21)
+- A "9-star" Uma has 3-star blue spark herself + both parents have 3-star
+  blue sparks (3+3+3 = 9 stars)
+- Using 9-star parents gives ~160 free stats before training begins,
+  plus another 200+ across two Inspiration events
+
+### Blue Spark Requirements
+
+| Stat Level | Chance of 3-Star Blue |
+|------------|----------------------|
+| 1100       | ~20%                 |
+| 1150       | ~35%                 |
+| 1200+      | ~50% (cap)           |
+
+For guaranteed single blue factors, focus one stat to 1200. For multiple
+blue factors, aim for 1150 in 2-3 stats.
+
+### Parent Building Strategy
+
+1. **Start with any 2-star blue Uma** you have from normal play
+2. **Borrow 3-star guest parents** from friend list (3 attempts/day)
+3. **Raise new Umas** using that parent + guest — any 2-star result = 7-star
+4. **Upgrade gradually**: 2-star + 3-star guest → if you hit 3-star yourself = 8-star
+5. **Final step**: 8-star Uma + 3-star guest → hit 3-star = 9-star parent
+6. **URA Finale is faster for parents** since stats don't need to be as
+   high and runs are shorter. Use Trackblazer only when you need the run
+   for other purposes (like trophy farming).
+
+### Compatibility Score
+
+- Displayed as triangle (low) / circle (mid) / double-circle (high)
+- Hidden numeric score: 0–84
+- Shared distance, surface, and strategy give the biggest boosts
+- Winning the same G1 races as parents/grandparents adds +1 each
+- Target 60+ (double-circle) to ensure both Inspirations trigger
+
+### Pink Sparks (Aptitude Inheritance)
+
+- Up to 9 pink spark types, totaling 18 stars maximum
+- Critical for Trackblazer: Mile and Medium aptitude sparks let
+  characters with low base aptitude participate in the majority of races
+- Sprinters and Dirt-only characters benefit hugely from Mile/Turf sparks
+
+---
+
 ## Support Deck Building
 
-### Rule #1: Race Bonus ≥ 50%
+### Rule #1: Race Bonus >= 50%
 
 Every support card should contribute Race Bonus. This is the single
-most important deckbuilding constraint for Trackblazer.
+most important deckbuilding constraint for Trackblazer. Aim for 50-75%
+total Race Bonus across your deck.
 
 ### Recommended Archetypes
 
-- Speed + Wit: 2 Speed, 2 Wit, 2 flex
-- Wit + Guts: 3 Guts, 2 Wit, 1 flex
+- Speed + Wit: 2 Speed, 2 Wit, 2 flex (often 2 Power for skills)
+- Wit + Guts: 3 Guts, 2 Wit, 1 flex (buy Guts Anklets from shop)
 - Always include 2 Wit cards for energy management
+- F2P-friendly: reduced reliance on gacha supports due to race-heavy
+  stat income
+
+### Flex Slot Guidance
+
+- **Speed + Wit deck**: fill flex with 2 Power cards that have good
+  skill hints. Power training rarely happens but the passive skills and
+  race bonus are valuable.
+- **Guts deck**: 4th Guts or 1 Speed card depending on character growths
+  and skill needs.
+
+---
+
+## Alarm Clocks
+
+- Up to 5 alarm clocks per career (from shop and events)
+- Retries a race you just lost — restores the turn as if the race
+  never happened
+- **Priority**: Save for G1 races where you placed 2nd-3rd (losing
+  100 GP and 40+ coins vs winning)
+- **Never use on**: G3, OP, or Pre-OP races (not worth the limited
+  resource)
+- **Never use on TS Climax**: Victory Points system is forgiving; you
+  don't need to win all 3
+
+---
+
+## Rival Races
+
+Rival races appear randomly, marked with a VS icon on the race button.
+
+### Rewards
+
+| Result              | Reward                                      |
+|---------------------|---------------------------------------------|
+| 1st place           | Skill hint (distance/style) + chance of new shop items |
+| Beat rival (not 1st)| Draw — no skill hint, reduced shop chance    |
+| Lose to rival       | Nothing extra                                |
+
+### Strategy
+
+- Always enter Rival Races when they appear — the extra rewards are free
+- Rival Races don't cost extra energy or have special penalties
+- New shop items from Rival wins last 3 turns before disappearing
+
+---
+
+## Common Mistakes
+
+1. **Chaining 3+ races before Senior year** — mood/condition penalties
+   are devastating early when you need training efficiency
+2. **Ignoring the shop** — proper item usage is the difference between
+   A-rank and S-rank runs
+3. **Training during G1 windows** — the stat opportunity cost of
+   skipping a G1 with 50%+ Race Bonus is almost always worse than
+   training
+4. **Hoarding scrolls/manuals** — use immediately, no benefit to saving
+5. **Entering TS Climax without Hammers** — +10 ALL stats per race with
+   hammers means +60 total stats from 3 races at 50% RB
+6. **Neglecting Wit training** — energy recovery from Wit training
+   sustains the race-heavy schedule
