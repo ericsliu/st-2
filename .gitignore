@@ -33,6 +33,7 @@ models/*.bin
 data/uma_trainer.db
 data/llm_cache.db
 data/master.mdb
+data/gain_ocr_samples/
 
 # Datasets (large)
 datasets/images/

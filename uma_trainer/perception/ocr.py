@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import sys
+import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -16,6 +19,9 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+# Directory for gain OCR sample collection
+_GAIN_LOG_DIR = Path("data/gain_ocr_samples")
 
 
 class OCREngine:
@@ -149,6 +155,9 @@ class OCREngine:
         2. Regular OCR on 3x upscale
         3. Regular OCR on raw region
         Prefers whichever read detected a '+' symbol.
+
+        Every read is logged to data/gain_ocr_samples/ with the crop image
+        and all OCR variants for later review and training data collection.
         """
         x1, y1, x2, y2 = bbox
         region = frame[y1:y2, x1:x2]
@@ -163,6 +172,8 @@ class OCREngine:
 
         # If hinted OCR found a clean "+N" match, trust it immediately
         if hinted_result is not None and re.search(r"[+＋]", hinted_text):
+            self._log_gain_sample(region, bbox, hinted_text, "", "",
+                                 hinted_result, "hinted")
             return hinted_result
 
         # Attempt 2 & 3: regular OCR on upscaled and raw
@@ -176,16 +187,63 @@ class OCREngine:
         raw_has_plus = bool(re.search(r"[+＋]", raw_text))
 
         if raw_has_plus and not up_has_plus:
-            return raw_result if raw_result is not None else up_result
+            result = raw_result if raw_result is not None else up_result
+            self._log_gain_sample(region, bbox, hinted_text, up_text,
+                                 raw_text, result, "raw_plus")
+            return result
         if up_has_plus and not raw_has_plus:
-            return up_result if up_result is not None else raw_result
+            result = up_result if up_result is not None else raw_result
+            self._log_gain_sample(region, bbox, hinted_text, up_text,
+                                 raw_text, result, "up_plus")
+            return result
 
         # Use hinted result as tiebreaker if available
         if hinted_result is not None:
+            self._log_gain_sample(region, bbox, hinted_text, up_text,
+                                 raw_text, hinted_result, "hinted_fallback")
             return hinted_result
 
         # Both or neither have '+'; prefer upscaled
-        return up_result if up_result is not None else raw_result
+        result = up_result if up_result is not None else raw_result
+        if result is not None or up_text or raw_text:
+            self._log_gain_sample(region, bbox, hinted_text, up_text,
+                                 raw_text, result, "fallback")
+        return result
+
+    @staticmethod
+    def _log_gain_sample(
+        region: np.ndarray,
+        bbox: tuple[int, int, int, int],
+        hinted_text: str,
+        up_text: str,
+        raw_text: str,
+        parsed: int | None,
+        method: str,
+    ) -> None:
+        """Save a gain OCR sample for later review / training data."""
+        try:
+            import cv2
+
+            _GAIN_LOG_DIR.mkdir(parents=True, exist_ok=True)
+            ts = int(time.time() * 1000)
+            img_name = f"{ts}_{bbox[0]}_{bbox[1]}.png"
+            cv2.imwrite(str(_GAIN_LOG_DIR / img_name), region)
+
+            entry = {
+                "ts": ts,
+                "bbox": list(bbox),
+                "hinted": hinted_text,
+                "upscaled": up_text,
+                "raw": raw_text,
+                "parsed": parsed,
+                "method": method,
+                "img": img_name,
+            }
+            log_path = _GAIN_LOG_DIR / "log.jsonl"
+            with open(log_path, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except Exception:
+            pass  # never fail the OCR pipeline due to logging
 
     def _parse_gain_text(self, text: str) -> int | None:
         """Parse gain text using the same logic as read_gain_number but from a string."""
