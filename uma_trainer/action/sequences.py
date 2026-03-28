@@ -101,7 +101,7 @@ class ActionSequences:
 
         # Settle time after tapping a tile before capturing.
         # The tile raise animation takes ~0.4s; 0.7s gives margin.
-        TILE_SETTLE_TIME = 0.7
+        TILE_SETTLE_TIME = 1.2  # allow gain animation to fully render
 
         # Clear stale data on all tiles
         for tile in state.training_tiles:

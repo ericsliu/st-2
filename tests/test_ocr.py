@@ -29,7 +29,7 @@ class TestReadGainNumber:
         assert ocr.read_gain_number(MagicMock()) == 12
 
     def test_plus_misread_as_4(self, ocr):
-        """'+5' misread as '45' — most common misread."""
+        """'+5' misread as '45' — leading '4' is misread '+'."""
         _mock_text(ocr, "45")
         assert ocr.read_gain_number(MagicMock()) == 5
 
@@ -46,9 +46,15 @@ class TestReadGainNumber:
         _mock_text(ocr, "＋9")
         assert ocr.read_gain_number(MagicMock()) == 9
 
-    def test_plain_digit_fallback(self, ocr):
+    def test_bare_single_digit_rejected(self, ocr):
+        """Bare single digit is rejected — too ambiguous (could be icon/decoration)."""
         _mock_text(ocr, "7")
-        assert ocr.read_gain_number(MagicMock()) == 7
+        assert ocr.read_gain_number(MagicMock()) is None
+
+    def test_bare_two_digit_accepted(self, ocr):
+        """Bare two-digit number accepted — likely '+' was missed but value plausible."""
+        _mock_text(ocr, "12")
+        assert ocr.read_gain_number(MagicMock()) == 12
 
     def test_empty_returns_none(self, ocr):
         _mock_text(ocr, "")
@@ -56,4 +62,24 @@ class TestReadGainNumber:
 
     def test_no_digits_returns_none(self, ocr):
         _mock_text(ocr, "abc")
+        assert ocr.read_gain_number(MagicMock()) is None
+
+    def test_plus_misread_as_6(self, ocr):
+        """'+9' misread as '69' — value > 50, strip leading digit."""
+        _mock_text(ocr, "69")
+        assert ocr.read_gain_number(MagicMock()) == 9
+
+    def test_letter_digit_confusion(self, ocr):
+        """'+10' misread as '+IC' — letter→digit substitution."""
+        _mock_text(ocr, "+IC")
+        assert ocr.read_gain_number(MagicMock()) == 10
+
+    def test_plus_misread_as_4_large(self, ocr):
+        """'+12' misread as '412' — value > 50, strip leading digit."""
+        _mock_text(ocr, "412")
+        assert ocr.read_gain_number(MagicMock()) == 12
+
+    def test_trackblazer_icon_rejected(self, ocr):
+        """Trackblazer 'T' icon misread as '1)' — single digit with noise, rejected."""
+        _mock_text(ocr, "1)")
         assert ocr.read_gain_number(MagicMock()) is None

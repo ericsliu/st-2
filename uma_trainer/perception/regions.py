@@ -307,7 +307,7 @@ STAT_SELECTION_REGIONS: dict[str, Region] = {
     "period_text":       (20, 50, 380, 100),        # "Senior Year Late Jun"
     "turn_counter":      (15, 100, 200, 270),       # "13 turn(s) left"
     "result_pts":        (180, 100, 500, 140),      # "300 Result Pts"
-    "energy_bar":        (365, 220, 715, 226),      # Energy bar inner (trimmed past rounded caps)
+    "energy_bar":        (340, 220, 735, 226),      # Energy bar full extent including rounded caps
     "mood_label":        (470, 195, 540, 230),      # "GREAT"
 
     # Selected training info (appears when a tile is selected/raised)
@@ -316,12 +316,14 @@ STAT_SELECTION_REGIONS: dict[str, Region] = {
 
     # Stat gain previews (small green "+X" above each stat label)
     # Measured from OCR strip scan: gains at y=1190-1250.
-    # Regions are slightly wider than stat columns to catch full numbers.
-    "gain_speed":        (20, 1185, 175, 1255),
-    "gain_stamina":      (175, 1185, 335, 1255),
-    "gain_power":        (335, 1185, 510, 1255),
-    "gain_guts":         (510, 1185, 670, 1255),
-    "gain_wit":          (670, 1185, 845, 1255),
+    # Right edges extended +30px to capture double-digit gains (+11, +17, +19)
+    # that extend past the stat column boundary.  Left edges kept tight to
+    # avoid overlapping the previous column's gain number.
+    "gain_speed":        (20, 1185, 200, 1255),
+    "gain_stamina":      (175, 1185, 365, 1255),
+    "gain_power":        (335, 1185, 540, 1255),
+    "gain_guts":         (510, 1185, 700, 1255),
+    "gain_wit":          (670, 1185, 870, 1255),
     "gain_skill_pts":    (860, 1185, 1060, 1255),
 
     # Stat label + value row: labels at y=1250-1300, values at y=1300-1370

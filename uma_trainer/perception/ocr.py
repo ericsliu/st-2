@@ -51,14 +51,15 @@ class OCREngine:
 
         self._initialized = True
 
+    def _to_pil(self, image: np.ndarray | Image.Image) -> Image.Image:
+        if isinstance(image, np.ndarray):
+            return Image.fromarray(image[:, :, ::-1])  # BGR→RGB
+        return image
+
     def read_text(self, image: np.ndarray | Image.Image) -> str:
         """Extract all text from an image region."""
         self._ensure_initialized()
-
-        if isinstance(image, np.ndarray):
-            pil_image = Image.fromarray(image[:, :, ::-1])  # BGR→RGB
-        else:
-            pil_image = image
+        pil_image = self._to_pil(image)
 
         if self._primary is not None:
             try:
@@ -79,6 +80,26 @@ class OCREngine:
 
         return ""
 
+    def read_text_gain_hints(self, image: np.ndarray | Image.Image) -> str:
+        """Extract text using gain-specific vocabulary hints (+1 through +50).
+
+        Falls back to regular read_text if gain-hinted recognition fails.
+        """
+        self._ensure_initialized()
+        pil_image = self._to_pil(image)
+
+        if self._primary is not None:
+            try:
+                results = self._primary.recognize_gains(pil_image)
+                text = " ".join(t for t, _ in results).strip()
+                if text:
+                    return text
+            except Exception as e:
+                logger.debug("Apple Vision gain-hinted OCR failed: %s", e)
+
+        # Fall back to regular recognition
+        return self.read_text(image)
+
     def read_number(self, image: np.ndarray | Image.Image) -> int | None:
         """Extract an integer from an image (stat values, energy, etc.)."""
         text = self.read_text(image)
@@ -98,38 +119,22 @@ class OCREngine:
             return ""
         return self.read_text(region)
 
+    # Common OCR letter→digit substitutions (game font confusions)
+    _OCR_DIGIT_MAP = str.maketrans("OoIlCcSsZz", "0011000522")
+
     def read_gain_number(self, image: np.ndarray | Image.Image) -> int | None:
         """Extract a stat gain value from a '+N' image.
 
         The game displays gains as '+N' where the '+' is a bold cross symbol.
-        Apple Vision sometimes misreads the '+' as '4', '$', or other characters.
-        This method handles those known misreads.
+        Apple Vision sometimes misreads the '+' as '4', '$', '6', or other
+        characters. Digit glyphs can also be confused with letters (e.g.
+        '10' → 'IC', '0' → 'O').
+
+        Gains are always 1–50 in practice; values outside this range are
+        treated as misreads.
         """
         text = self.read_text(image)
-        cleaned = text.replace(",", "").replace(".", "").strip()
-
-        # 1. Correct read: '+' followed by digits
-        m = re.search(r"[+＋]\s*(\d+)", cleaned)
-        if m:
-            return int(m.group(1))
-
-        # 2. Known misreads: '+' read as '$' or '4'
-        m = re.search(r"[$]\s*(\d+)", cleaned)
-        if m:
-            return int(m.group(1))
-
-        # 3. '+' misread as '4' merged with the digit (e.g., '+5' → '45')
-        #    If text is just digits and starts with '4', strip the leading '4'.
-        m = re.match(r"4(\d+)$", cleaned)
-        if m:
-            return int(m.group(1))
-
-        # 4. Fallback: plain number extraction
-        m = re.search(r"\d+", cleaned)
-        if m:
-            return int(m.group())
-
-        return None
+        return self._parse_gain_text(text)
 
     def read_gain_region(
         self, frame: np.ndarray, bbox: tuple[int, int, int, int]
@@ -138,6 +143,12 @@ class OCREngine:
 
         Like read_number_region but uses gain-aware parsing to handle
         the '+' symbol being misread as '4' or '$'.
+
+        Strategy (three attempts, best-of):
+        1. Gain-hinted OCR on 3x upscale (Apple Vision with "+1".."+50" hints)
+        2. Regular OCR on 3x upscale
+        3. Regular OCR on raw region
+        Prefers whichever read detected a '+' symbol.
         """
         x1, y1, x2, y2 = bbox
         region = frame[y1:y2, x1:x2]
@@ -145,11 +156,66 @@ class OCREngine:
             return None
 
         preprocessed = self._preprocess_number_region(region)
-        result = self.read_gain_number(preprocessed)
-        if result is not None:
-            return result
 
-        return self.read_gain_number(region)
+        # Attempt 1: gain-hinted OCR (custom vocabulary "+1".."+50")
+        hinted_text = self.read_text_gain_hints(preprocessed).strip()
+        hinted_result = self._parse_gain_text(hinted_text)
+
+        # If hinted OCR found a clean "+N" match, trust it immediately
+        if hinted_result is not None and re.search(r"[+＋]", hinted_text):
+            return hinted_result
+
+        # Attempt 2 & 3: regular OCR on upscaled and raw
+        up_text = self.read_text(preprocessed).strip()
+        raw_text = self.read_text(region).strip()
+
+        up_result = self._parse_gain_text(up_text)
+        raw_result = self._parse_gain_text(raw_text)
+
+        up_has_plus = bool(re.search(r"[+＋]", up_text))
+        raw_has_plus = bool(re.search(r"[+＋]", raw_text))
+
+        if raw_has_plus and not up_has_plus:
+            return raw_result if raw_result is not None else up_result
+        if up_has_plus and not raw_has_plus:
+            return up_result if up_result is not None else raw_result
+
+        # Use hinted result as tiebreaker if available
+        if hinted_result is not None:
+            return hinted_result
+
+        # Both or neither have '+'; prefer upscaled
+        return up_result if up_result is not None else raw_result
+
+    def _parse_gain_text(self, text: str) -> int | None:
+        """Parse gain text using the same logic as read_gain_number but from a string."""
+        cleaned = text.replace(",", "").replace(".", "").strip()
+        if re.search(r"[\d+＋$]", cleaned):
+            cleaned_digits = cleaned.translate(self._OCR_DIGIT_MAP)
+        else:
+            cleaned_digits = cleaned
+
+        m = re.search(r"[+＋]\s*(\d+)", cleaned_digits)
+        if m:
+            return int(m.group(1))
+        m = re.search(r"[$]\s*(\d+)", cleaned_digits)
+        if m:
+            return int(m.group(1))
+        m = re.match(r"4(\d+)$", cleaned_digits)
+        if m:
+            return int(m.group(1))
+        m = re.search(r"\d+", cleaned_digits)
+        if m:
+            val = int(m.group())
+            digits = m.group()
+            if val > 50 and len(digits) >= 2:
+                stripped = int(digits[1:])
+                if 1 <= stripped <= 50:
+                    return stripped
+                return val
+            if val <= 50 and len(digits) >= 2:
+                return val
+        return None
 
     def read_number_region(
         self, frame: np.ndarray, bbox: tuple[int, int, int, int]
@@ -199,23 +265,21 @@ class AppleVisionOCR:
         self._Vision = Vision
         logger.debug("AppleVisionOCR ready")
 
-    def recognize(self, pil_image: Image.Image) -> list[tuple[str, float]]:
-        """Run text recognition.
+    # Pre-built custom words for gain regions: "+1" through "+50"
+    _GAIN_CUSTOM_WORDS = [f"+{i}" for i in range(1, 51)]
 
-        Returns:
-            List of (text, confidence) tuples.
-        """
+    def _pil_to_cgimage(self, pil_image: Image.Image):
+        """Convert PIL image to CGImage for Vision framework."""
         import Quartz
 
-        Vision = self._Vision
-
-        # Convert PIL to CGImage
         img_data = pil_image.tobytes("raw", "RGB")
         width, height = pil_image.size
         bytes_per_row = width * 3
         color_space = Quartz.CGColorSpaceCreateDeviceRGB()
-        data_provider = Quartz.CGDataProviderCreateWithData(None, img_data, len(img_data), None)
-        cg_image = Quartz.CGImageCreate(
+        data_provider = Quartz.CGDataProviderCreateWithData(
+            None, img_data, len(img_data), None
+        )
+        return Quartz.CGImageCreate(
             width, height, 8, 24, bytes_per_row,
             color_space,
             Quartz.kCGImageAlphaNone,
@@ -223,12 +287,22 @@ class AppleVisionOCR:
             Quartz.kCGRenderingIntentDefault,
         )
 
+    def _run_request(self, cg_image, custom_words=None):
+        """Run a VNRecognizeTextRequest and return results."""
+        Vision = self._Vision
         request = Vision.VNRecognizeTextRequest.alloc().init()
-        request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
+        request.setRecognitionLevel_(
+            Vision.VNRequestTextRecognitionLevelAccurate
+        )
         request.setUsesLanguageCorrection_(False)
 
-        handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
-            cg_image, {}
+        if custom_words:
+            request.setCustomWords_(custom_words)
+
+        handler = (
+            Vision.VNImageRequestHandler
+            .alloc()
+            .initWithCGImage_options_(cg_image, {})
         )
         handler.performRequests_error_([request], None)
 
@@ -239,8 +313,25 @@ class AppleVisionOCR:
             if candidate:
                 top = candidate[0]
                 results.append((str(top.string()), float(top.confidence())))
-
         return results
+
+    def recognize(self, pil_image: Image.Image) -> list[tuple[str, float]]:
+        """Run text recognition.
+
+        Returns:
+            List of (text, confidence) tuples.
+        """
+        cg_image = self._pil_to_cgimage(pil_image)
+        return self._run_request(cg_image)
+
+    def recognize_gains(self, pil_image: Image.Image) -> list[tuple[str, float]]:
+        """Run text recognition with gain-specific vocabulary hints.
+
+        Provides "+1" through "+50" as custom words so Apple Vision
+        is biased toward recognizing gain patterns like "+11", "+17", etc.
+        """
+        cg_image = self._pil_to_cgimage(pil_image)
+        return self._run_request(cg_image, custom_words=self._GAIN_CUSTOM_WORDS)
 
 
 class EasyOCROCR:
