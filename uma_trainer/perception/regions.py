@@ -469,6 +469,22 @@ RACE_LIST_REGIONS: dict[str, Region] = {
 RACE_LIST_VISIBLE_SLOTS = 2
 
 
+# ── Post-race result / reward screens ──────────────────────────────────────
+# After a race, the result screen shows placement, then a screen with
+# two options.  1st place → pick option 2, otherwise → pick option 1.
+
+POST_RACE_REGIONS: dict[str, Region] = {
+    # Placement text area — large text showing "1st", "2nd", etc.
+    # On the result screen, placement appears in the upper-center area.
+    "placement":    (200, 400, 880, 700),
+    # Two option buttons on the post-race choice screen.
+    # Option 1 (top/left) — conservative / safe choice
+    "option_1":     (100, 1200, 540, 1350),
+    # Option 2 (bottom/right) — better reward (pick if 1st place)
+    "option_2":     (540, 1200, 980, 1350),
+}
+
+
 # ── Race running screen regions ──────────────────────────────────────────────
 # Placeholder — for during-race screens (passive, mainly for detection)
 
@@ -487,6 +503,7 @@ SCREEN_REGION_MAP: dict[ScreenState, dict[str, Region]] = {
     ScreenState.SKILL_SHOP: SKILL_SHOP_REGIONS,
     ScreenState.RACE_ENTRY: RACE_LIST_REGIONS,
     ScreenState.RACE: RACE_REGIONS,
+    ScreenState.POST_RACE: POST_RACE_REGIONS,
     ScreenState.WARNING_POPUP: WARNING_POPUP_REGIONS,
 }
 

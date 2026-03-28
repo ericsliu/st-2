@@ -121,6 +121,7 @@ def wait_for_career_home(capture, assembler, screen_id, injector, sequences, eng
     """
     last_screen = None
     post_race_repeat = 0
+    last_race_placement = None  # Track placement for post-race option choice
     for i in range(max_screens):
         time.sleep(POST_RACE_TAP_DELAY)
         frame = capture.grab_frame()
@@ -170,7 +171,8 @@ def wait_for_career_home(capture, assembler, screen_id, injector, sequences, eng
             time.sleep(3.0)
             continue
 
-        # Post-race screen — tap Next (NOT Try Again)
+        # Post-race screen — pick option based on placement, then Next
+        # 1st place → option 2 (bottom/right), otherwise → option 1 (top/left)
         # Also handles Goal Complete (misidentified as post_race) — centered Next at (540, 1640)
         if state.screen == ScreenState.POST_RACE:
             if prev_screen == ScreenState.POST_RACE:
@@ -182,6 +184,20 @@ def wait_for_career_home(capture, assembler, screen_id, injector, sequences, eng
                 # Stuck — probably Goal Complete or similar screen with centered button
                 logger.info("Post-race stuck (%d repeats) — trying centered Next at (540, 1640)", post_race_repeat)
                 injector.tap(540, 1640)
+            elif last_race_placement is not None:
+                # We know the placement — choose the right option
+                from uma_trainer.perception.regions import POST_RACE_REGIONS, get_tap_center
+                if last_race_placement == 1:
+                    opt = get_tap_center(POST_RACE_REGIONS["option_2"])
+                    logger.info("Post-race 1st place — tapping option 2 at %s", opt)
+                else:
+                    opt = get_tap_center(POST_RACE_REGIONS["option_1"])
+                    logger.info("Post-race %s place — tapping option 1 at %s", last_race_placement, opt)
+                injector.tap(*opt)
+                time.sleep(1.0)
+                # Also tap Next to advance
+                injector.tap(765, 1760)
+                last_race_placement = None  # Reset after using it
             else:
                 logger.info("Post-race screen — tapping Next")
                 injector.tap(765, 1760)
@@ -193,8 +209,20 @@ def wait_for_career_home(capture, assembler, screen_id, injector, sequences, eng
             injector.tap(75, 1870)
             continue
 
-        # Result screen — tap center to advance (race results, stat gains, etc.)
+        # Result screen — detect placement, then tap to advance
         if state.screen == ScreenState.RESULT_SCREEN:
+            # Try to read race placement from the result screen
+            from uma_trainer.perception.regions import POST_RACE_REGIONS
+            placement_region = POST_RACE_REGIONS["placement"]
+            placement_text = assembler.ocr.read_region(frame, placement_region).lower()
+            if "1st" in placement_text:
+                last_race_placement = 1
+                logger.info("Result screen — placement: 1st")
+            elif any(p in placement_text for p in ("2nd", "3rd", "4th", "5th", "6th")):
+                import re
+                pm = re.search(r"(\d+)", placement_text)
+                last_race_placement = int(pm.group(1)) if pm else 2
+                logger.info("Result screen — placement: %s", last_race_placement)
             logger.info("Result screen — tapping to advance")
             injector.tap(540, 960)  # Center of screen
             time.sleep(1.0)

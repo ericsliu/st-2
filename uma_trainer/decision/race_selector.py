@@ -6,7 +6,9 @@ scenario-specific race-vs-train decisions to the scenario handler.
 
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from uma_trainer.types import ActionType, BotAction, GameState, RaceOption
@@ -17,6 +19,18 @@ if TYPE_CHECKING:
     from uma_trainer.scenario.base import ScenarioHandler
 
 logger = logging.getLogger(__name__)
+
+
+def _load_race_calendar(path: str = "data/race_calendar.json") -> list[dict]:
+    """Load race calendar from JSON file."""
+    p = Path(path)
+    if not p.exists():
+        return []
+    try:
+        return json.loads(p.read_text())
+    except Exception as e:
+        logger.warning("Failed to load race calendar: %s", e)
+        return []
 
 
 class RaceSelector:
@@ -31,6 +45,8 @@ class RaceSelector:
         self.kb = kb
         self.overrides = overrides
         self.scenario = scenario
+        self._calendar = _load_race_calendar()
+        logger.info("Race calendar loaded: %d races", len(self._calendar))
 
     # ------------------------------------------------------------------
     # Main entry point: race list screen
@@ -134,6 +150,9 @@ class RaceSelector:
         self, state: GameState,
     ) -> list[tuple[RaceOption, float]]:
         """Score all available races and return sorted best-first."""
+        # Enrich races with calendar data before scoring
+        for race in state.available_races:
+            self.enrich_race(race)
         scored = [(race, self._score_race(race, state)) for race in state.available_races]
         return sorted(scored, key=lambda x: x[1], reverse=True)
 
@@ -270,28 +289,82 @@ class RaceSelector:
         strategy = self.overrides.get_strategy()
         return strategy.raw.get("race_strategy", {})
 
+    def enrich_race(self, race: RaceOption) -> None:
+        """Fill in grade/distance/surface from the race calendar if OCR missed them.
+
+        Matches by searching for the race's proper name within the OCR'd text,
+        or by venue+distance+surface combo. Only overrides OCR values when
+        we have a high-confidence match (proper name or 3-field combo).
+        """
+        if not self._calendar:
+            return
+
+        ocr_lower = race.name.lower()
+
+        # Try matching by proper race name within the OCR text
+        best_match = None
+        for entry in self._calendar:
+            entry_name = entry["name"].lower()
+            # Direct substring match (e.g., "hopeful stakes" in OCR text)
+            if entry_name in ocr_lower:
+                best_match = entry
+                break
+
+        # Try venue + distance + surface triple match.
+        # If multiple races share the same triple, prefer one whose grade
+        # matches the OCR'd grade (avoid overriding a correctly-parsed grade).
+        if not best_match:
+            candidates = []
+            for entry in self._calendar:
+                venue = entry.get("venue", "").lower()
+                surface = entry.get("surface", "").lower()
+                dist_str = str(entry.get("distance", 0))
+                if (venue and venue in ocr_lower
+                        and dist_str in ocr_lower
+                        and surface in ocr_lower):
+                    candidates.append(entry)
+            if candidates:
+                # Only use the match if grade matches OCR (or OCR has no grade)
+                if race.grade:
+                    grade_matches = [c for c in candidates if c["grade"] == race.grade]
+                    if grade_matches:
+                        best_match = grade_matches[0]
+                    # If no grade match, don't enrich — OCR grade is probably right
+                else:
+                    best_match = candidates[0]
+
+        if best_match:
+            logger.debug(
+                "Race enriched: '%s' → %s (%s, %dm, %s)",
+                race.name, best_match["name"], best_match["grade"],
+                best_match["distance"], best_match["surface"],
+            )
+            if best_match.get("grade"):
+                race.grade = best_match["grade"]
+            if best_match.get("distance"):
+                race.distance = best_match["distance"]
+            if best_match.get("surface"):
+                race.surface = best_match["surface"]
+
     def lookup_race_info(self, race_name: str) -> dict | None:
-        """Look up race metadata from the knowledge base."""
-        row = self.kb.query_one(
-            "SELECT * FROM race_calendar WHERE name = ?",
-            (race_name,),
-        )
-        if row:
-            return dict(row)
+        """Look up race metadata from the race calendar JSON."""
+        name_lower = race_name.lower()
+        for entry in self._calendar:
+            if entry["name"].lower() in name_lower:
+                return entry
 
         # Fuzzy match
         try:
             from rapidfuzz import fuzz
-            rows = self.kb.query_all("SELECT * FROM race_calendar")
             best_match = None
             best_ratio = 0
-            for r in rows:
-                ratio = fuzz.ratio(race_name.lower(), r["name"].lower())
+            for entry in self._calendar:
+                ratio = fuzz.partial_ratio(entry["name"].lower(), name_lower)
                 if ratio > best_ratio:
                     best_ratio = ratio
-                    best_match = r
-            if best_match and best_ratio >= 70:
-                return dict(best_match)
+                    best_match = entry
+            if best_match and best_ratio >= 65:
+                return best_match
         except ImportError:
             pass
 
