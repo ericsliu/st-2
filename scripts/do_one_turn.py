@@ -50,6 +50,23 @@ DEVICE = "127.0.0.1:5555"
 # Post-race screen handling constants
 POST_RACE_TAP_DELAY = 2.0
 MAX_POST_ACTION_SCREENS = 20  # Safety limit on tap-through loops
+CONSECUTIVE_RACES_FILE = Path("data/consecutive_races.txt")
+
+
+def _load_consecutive_races() -> int:
+    """Load persisted consecutive race count."""
+    if CONSECUTIVE_RACES_FILE.exists():
+        try:
+            return int(CONSECUTIVE_RACES_FILE.read_text().strip())
+        except (ValueError, OSError):
+            return 0
+    return 0
+
+
+def _save_consecutive_races(count: int) -> None:
+    """Persist consecutive race count between invocations."""
+    CONSECUTIVE_RACES_FILE.write_text(str(count))
+    logger.info("Consecutive races: %d (saved)", count)
 
 
 def parse_args():
@@ -400,15 +417,20 @@ def execute_race_entry(injector, capture, assembler, screen_id, race_selector=No
     pre_selected = race_selector._pre_selected if race_selector else None
 
     if pre_selected and sequences:
-        estimated_pos = race_selector.estimate_race_position(
-            pre_selected, state.current_turn, state.max_turns,
-        )
+        # Use the turn from the career home (before opening race list)
+        # to estimate position, since pre-selection was done there.
+        # The race list header may show a different turn count.
+        from uma_trainer.decision.race_selector import GRADE_SORT_ORDER
+        estimated_pos = GRADE_SORT_ORDER.get(pre_selected.grade, 0) * 3
         logger.info(
             "Looking for pre-selected race '%s' (grade=%s, est. position=%d)",
             pre_selected.name, pre_selected.grade, estimated_pos,
         )
 
         tap_coords = sequences.navigate_to_race(
+            target_grade=pre_selected.grade,
+            target_distance=pre_selected.distance,
+            target_surface=pre_selected.surface,
             target_name=pre_selected.name,
             estimated_position=estimated_pos,
             capture=capture,
@@ -750,7 +772,8 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
                 "Turn complete. Energy: %d, Mood: %s",
                 result_state.energy, result_state.mood.value,
             )
-        engine.race_selector.on_non_race_action()  # Reset after race chain
+        engine.race_selector.scenario.on_race_completed()
+        _save_consecutive_races(engine.race_selector.scenario._consecutive_races)
         return True
 
     # No race — the alternative is training. Check if we should rest first.
@@ -776,6 +799,7 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
                 result_state.energy, result_state.mood.value,
             )
         engine.race_selector.on_non_race_action()
+        _save_consecutive_races(0)
         return True
 
     else:
@@ -907,6 +931,7 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
                 result_state.energy, result_state.mood.value,
             )
         engine.race_selector.on_non_race_action()
+        _save_consecutive_races(0)
         return True
 
 
@@ -937,6 +962,13 @@ def main():
 
     # Initialize decision engine (the real one!)
     engine = build_engine(config)
+
+    # Restore consecutive race counter from previous invocations
+    if engine.race_selector.scenario:
+        prev_count = _load_consecutive_races()
+        engine.race_selector.scenario._consecutive_races = prev_count
+        if prev_count > 0:
+            logger.info("Restored consecutive race count: %d", prev_count)
 
     logger.info("Decision engine ready (scenario=%s, runspec=%s)",
                 config.scenario, config.runspec)

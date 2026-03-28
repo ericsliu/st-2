@@ -212,6 +212,9 @@ class RaceSelector:
     # Turn action screen: should we race this turn?
     # ------------------------------------------------------------------
 
+    # Hard cap: never exceed this many consecutive races regardless of scenario
+    MAX_CONSECUTIVE_RACES = 3
+
     def should_race_this_turn(self, state: GameState) -> BotAction | None:
         """Called from the turn action screen to decide if the bot should
         tap the Races button instead of training.
@@ -221,6 +224,15 @@ class RaceSelector:
         """
         from uma_trainer.perception.regions import TURN_ACTION_REGIONS, get_tap_center
         races_btn = get_tap_center(TURN_ACTION_REGIONS["btn_races"])
+
+        # Hard cap on consecutive races — negative effects after 3 in a row
+        if self.scenario and hasattr(self.scenario, "_consecutive_races"):
+            if self.scenario._consecutive_races >= self.MAX_CONSECUTIVE_RACES:
+                logger.warning(
+                    "Hard cap: %d consecutive races — forcing break",
+                    self.scenario._consecutive_races,
+                )
+                return None
 
         # --- Always check for mandatory goal races ---
         goal_race = self._find_required_race(state)

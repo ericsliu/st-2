@@ -504,16 +504,21 @@ class ActionSequences:
     # ------------------------------------------------------------------
 
     # Race list layout constants (1080x1920 portrait)
-    _RACE_ROW_HEIGHT = 220
+    _RACE_ROW_HEIGHT = 240
     _RACE_VISIBLE_ROWS = 2
-    _RACE_NAME_REGION_Y_OFFSETS = [
-        (1080, 1150),  # row 0
-        (1300, 1380),  # row 1
-        (1510, 1580),  # row 2 (partially visible after scroll)
-    ]
+    # After scrolling, row positions shift unpredictably. Instead of fixed
+    # row Y offsets, we OCR overlapping horizontal slices and look for the
+    # grade/distance/surface pattern in each slice.
+    _RACE_SCAN_Y_START = 990
+    _RACE_SCAN_Y_END = 1500
+    _RACE_SCAN_SLICE_HEIGHT = 70
+    _RACE_SCAN_STEP = 60
 
     def navigate_to_race(
         self,
+        target_grade: str,
+        target_distance: int,
+        target_surface: str,
         target_name: str,
         estimated_position: int,
         capture: "CaptureBackend",
@@ -521,59 +526,63 @@ class ActionSequences:
     ) -> tuple[int, int] | None:
         """Scroll the race list to find the target race.
 
-        The in-game list is sorted by grade (G1 at top, Pre-OP at bottom).
-        Uses estimated_position to calculate how many scrolls are needed,
-        then OCR-verifies each visible row to find the exact match.
+        Matches by grade + distance + surface from the detail line OCR,
+        since race names are stylized images that don't OCR reliably.
 
         Returns (x, y) tap coordinates if found, None if not found.
         """
-        from rapidfuzz import fuzz
+        max_scrolls = max(3, (estimated_position // self._RACE_VISIBLE_ROWS) + 2)
 
-        # How many rows are off-screen above the target?
-        rows_to_scroll = max(0, estimated_position - self._RACE_VISIBLE_ROWS + 1)
-        swipes_needed = (rows_to_scroll + 1) // 2  # each swipe ~2 rows
-
-        for _ in range(swipes_needed):
-            self.injector.swipe(540, 1400, 540, 960, duration_ms=400)
-            time.sleep(1.0)
-
-        # Now search visible rows, with a few extra scroll attempts
-        target_lower = target_name.lower()
-        for attempt in range(5):
+        for scroll in range(max_scrolls + 1):
             frame = capture.grab_frame()
-            coords = self._find_race_in_frame(frame, ocr, target_lower)
+            coords = self._find_race_in_frame(
+                frame, ocr, target_grade, target_distance, target_surface,
+            )
             if coords:
                 return coords
 
-            # Scroll one more row down
-            self.injector.swipe(540, 1400, 540, 1180, duration_ms=300)
-            time.sleep(0.8)
+            # Scroll down one page (~2 rows).
+            # Use a slow swipe so the list settles predictably,
+            # then wait for the scroll animation to fully complete.
+            self.injector.swipe(540, 1400, 540, 960, duration_ms=600)
+            time.sleep(2.0)
 
-        logger.warning("Could not find race '%s' after scrolling", target_name)
+        logger.warning(
+            "Could not find race '%s' (%s %dm %s) after %d scrolls",
+            target_name, target_grade, target_distance, target_surface,
+            max_scrolls,
+        )
         return None
 
     def _find_race_in_frame(
         self,
         frame: "np.ndarray",
         ocr: "OCREngine",
-        target_lower: str,
+        target_grade: str,
+        target_distance: int,
+        target_surface: str,
     ) -> tuple[int, int] | None:
-        """OCR visible race rows and return tap coords if target is found."""
-        from rapidfuzz import fuzz
+        """Scan overlapping slices of the race list area for a matching
+        grade+distance+surface detail line."""
+        y = self._RACE_SCAN_Y_START
+        while y + self._RACE_SCAN_SLICE_HEIGHT <= self._RACE_SCAN_Y_END:
+            y_end = y + self._RACE_SCAN_SLICE_HEIGHT
+            region = (250, y, 1060, y_end)
+            text = ocr.read_region(frame, region)
+            if text.strip():
+                text_lower = text.lower()
+                grade_ok = target_grade.lower() in text_lower
+                dist_ok = f"{target_distance}m" in text_lower
+                surface_ok = target_surface.lower() in text_lower
 
-        for y_start, y_end in self._RACE_NAME_REGION_Y_OFFSETS:
-            region = (250, y_start, 1060, y_end)
-            text = ocr.read_region(frame, region).lower()
-            if not text.strip():
-                continue
-
-            score = fuzz.partial_ratio(target_lower, text)
-            if score >= 75:
-                y_center = (y_start + y_end) // 2
-                logger.info(
-                    "Found race '%s' in row (y=%d-%d, match=%d%%)",
-                    target_lower, y_start, y_end, score,
-                )
-                return (540, y_center)
+                if grade_ok and dist_ok and surface_ok:
+                    y_center = (y + y_end) // 2
+                    logger.info(
+                        "Found race: %s %dm %s at y=%d-%d (OCR: '%s')",
+                        target_grade, target_distance, target_surface,
+                        y, y_end, text.strip(),
+                    )
+                    return (540, y_center)
+            y += self._RACE_SCAN_STEP
 
         return None
