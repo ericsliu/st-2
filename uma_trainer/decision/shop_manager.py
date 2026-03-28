@@ -104,9 +104,10 @@ ITEM_CATALOGUE: dict[str, ShopItem] = {
     "reset_whistle":        ShopItem("Reset Whistle", 20, ItemTier.A, effect="Rearrange support cards"),
 
     # -- Race Items --
-    "artisan_hammer":       ShopItem("Artisan Cleat Hammer", 25, ItemTier.B, effect="+20% race stat gain"),
-    "master_hammer":        ShopItem("Master Cleat Hammer", 40, ItemTier.A, max_stock=3, effect="+35% race stat gain", save_for="twinkle_star"),
-    "glow_sticks":          ShopItem("Glow Sticks", 15, ItemTier.B, effect="+50% fan gain"),
+    # Master Cleat Hammer: need 3 for Twinkle Star Climax races (sizable stat boost)
+    "master_hammer":        ShopItem("Master Cleat Hammer", 40, ItemTier.SS, max_stock=3, effect="+35% race stat gain", save_for="twinkle_star"),
+    "artisan_hammer":       ShopItem("Artisan Cleat Hammer", 25, ItemTier.B, max_stock=2, effect="+20% race stat gain"),
+    "glow_sticks":          ShopItem("Glow Sticks", 15, ItemTier.NEVER, effect="+50% fan gain"),
 
     # -- Condition Cures --
     "rich_hand_cream":      ShopItem("Rich Hand Cream", 15, ItemTier.S, max_stock=1, effect="Cure Skin Outbreak"),

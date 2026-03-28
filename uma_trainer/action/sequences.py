@@ -544,7 +544,7 @@ class ActionSequences:
             # Scroll down one page (~2 rows).
             # Use a slow swipe so the list settles predictably,
             # then wait for the scroll animation to fully complete.
-            self.injector.swipe(540, 1400, 540, 960, duration_ms=600)
+            self.injector.swipe(540, 1300, 540, 1060, duration_ms=400)
             time.sleep(2.0)
 
         logger.warning(

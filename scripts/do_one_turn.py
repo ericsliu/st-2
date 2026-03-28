@@ -394,8 +394,24 @@ def _match_shop_item(ocr_text, name_to_key):
     return name_to_key[matched_name]
 
 
+def _is_checkbox_selected(frame, name_y):
+    """Check if a shop item checkbox is already selected (green) vs gray.
+
+    Green selected checkboxes have high green channel relative to red/blue.
+    """
+    import numpy as np
+    cx, cy = 950, name_y + 15
+    # Sample a small region around the checkbox center
+    region = frame[max(0, cy - 5):cy + 5, max(0, cx - 5):cx + 5]
+    if region.size == 0:
+        return False
+    avg_color = region.mean(axis=(0, 1))
+    # Green checkbox: G channel significantly higher than R and B
+    return avg_color[1] > 140 and avg_color[1] > avg_color[0] + 30
+
+
 def _scan_shop_items(frame, ocr, name_to_key):
-    """Scan visible shop items. Returns list of (item_key, name_y, purchased)."""
+    """Scan visible shop items. Returns list of (item_key, name_y, purchased, selected)."""
     import re
     items = []
     y = 700
@@ -420,10 +436,13 @@ def _scan_shop_items(frame, ocr, name_to_key):
         right_text = ocr.read_region(frame, (700, y + 20, 1050, y + 80)).strip().lower()
         is_purchased = "purchased" in right_text or "purch" in right_text
 
+        # Check if checkbox is already selected (green)
+        is_selected = _is_checkbox_selected(frame, y)
+
+        status = " PURCHASED" if is_purchased else (" SELECTED" if is_selected else "")
         logger.info("  Shop item: '%s' → %s%s (y=%d)",
-                     name_text, item_key,
-                     " PURCHASED" if is_purchased else "", y)
-        items.append((item_key, y, is_purchased))
+                     name_text, item_key, status, y)
+        items.append((item_key, y, is_purchased, is_selected))
         y += 150  # skip past this row
 
     return items
@@ -504,9 +523,8 @@ def execute_shop_visit(injector, capture, assembler, screen_id, sequences, engin
     logger.info("Want list: %s", want_keys[:10])
 
     # Scan shop and select items.
-    # Strategy: on page 0 scan full screen, after each scroll only process
-    # items in the lower half (y > 1000) to avoid re-tapping items that
-    # were already visible and tapped on the previous scroll position.
+    # After scrolling, items from previous pages reappear. We detect
+    # already-selected checkboxes (green) to avoid toggling them off.
     name_to_key = _build_shop_name_matcher()
     selected_counts: dict[str, int] = {}  # item_key -> count selected
     selected_keys: list[str] = []
@@ -521,13 +539,8 @@ def execute_shop_visit(injector, capture, assembler, screen_id, sequences, engin
         frame = capture.grab_frame()
         visible = _scan_shop_items(frame, assembler.ocr, name_to_key)
 
-        # After scrolling, only consider items in the lower portion
-        min_y = 700 if scroll == 0 else 1000
-
-        for item_key, name_y, is_purchased in visible:
-            if name_y < min_y:
-                continue
-            if is_purchased:
+        for item_key, name_y, is_purchased, is_selected in visible:
+            if is_purchased or is_selected:
                 continue
             if item_key not in want_keys:
                 continue
@@ -559,24 +572,20 @@ def execute_shop_visit(injector, capture, assembler, screen_id, sequences, engin
     if selected_keys:
         logger.info("Confirming purchase of %d items (total %d coins): %s",
                      len(selected_keys), spent, selected_keys)
-        # Tap Confirm button (green, center bottom)
+        # Step 1: Tap Confirm button on shop screen
         injector.tap(540, 1640)
         time.sleep(2.0)
 
-        # Handle Exchange confirmation dialog — tap Exchange (green button, right side)
-        # The dialog shows "Confirm Exchange" header and Cancel/Exchange buttons
-        frame = capture.grab_frame()
-        confirm_text = assembler.ocr.read_region(frame, (0, 0, 1080, 200)).lower()
-        if "confirm" in confirm_text or "exchange" in confirm_text or "purchase" in confirm_text:
-            logger.info("Tapping Exchange to confirm purchase")
-            # Exchange button is bottom-right of the dialog
-            injector.tap(810, 1530)
-            time.sleep(2.0)
-        else:
-            logger.warning("Exchange dialog not detected — OCR: '%s'", confirm_text[:60])
-            # Try tapping Exchange anyway
-            injector.tap(810, 1530)
-            time.sleep(2.0)
+        # Step 2: Tap Exchange on "Confirm Exchange" dialog (bottom-right)
+        logger.info("Tapping Exchange to confirm purchase")
+        injector.tap(810, 1780)
+        time.sleep(2.0)
+
+        # Step 3: "Exchange Complete" dialog appears with Close/Confirm Use
+        # Tap Close (bottom-left) — we don't want to use items immediately
+        logger.info("Tapping Close on Exchange Complete dialog")
+        injector.tap(270, 1780)
+        time.sleep(2.0)
 
         # Update inventory
         for key in selected_keys:

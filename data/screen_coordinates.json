@@ -63,7 +63,15 @@
     "reset": {"x": 810, "y": 1640},
     "back": {"x": 50, "y": 1870},
     "checkbox_area_x": 950,
-    "_note": "Checkboxes are gray when unselected, fill in blue when selected. Tap the checkbox to toggle."
+    "_note": "Checkboxes are gray when unselected, fill in green when selected. Tap the checkbox to toggle."
+  },
+  "shop_confirm_exchange": {
+    "cancel": {"x": 270, "y": 1780},
+    "exchange": {"x": 810, "y": 1780, "note": "Green Exchange button on Confirm Exchange dialog"}
+  },
+  "shop_exchange_complete": {
+    "close": {"x": 270, "y": 1780, "note": "Close button — don't use items immediately"},
+    "confirm_use": {"x": 810, "y": 1780, "note": "Green Confirm Use button — use items now"}
   },
   "consecutive_race_warning": {
     "cancel": {"x": 270, "y": 1390},
@@ -92,5 +100,9 @@
   },
   "full_stats_screen": {
     "close": {"x": 540, "y": 1775, "note": "Close button on Umamusume Details / Full Stats screen"}
+  },
+  "item_effect_indicators": {
+    "_note": "Dumbbell icons on left side of career home showing active item effects and remaining turns. Tap to see details.",
+    "region": {"x": 0, "y": 420, "w": 120, "h": 120}
   }
 }
