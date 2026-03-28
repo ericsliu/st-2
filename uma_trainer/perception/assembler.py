@@ -129,8 +129,12 @@ class StateAssembler:
 
     def _parse_turn_action(self, frame: np.ndarray, state: GameState) -> None:
         """Parse the main turn action screen (Rest/Training/Skills/etc.)."""
-        # Nothing screen-specific beyond stats/mood/energy/turn (parsed in assemble)
-        pass
+        from uma_trainer.perception.regions import TURN_ACTION_REGIONS
+        sp_region = TURN_ACTION_REGIONS.get("skill_pts")
+        if sp_region:
+            sp_val = self.ocr.read_number_region(frame, sp_region)
+            if sp_val is not None and 0 <= sp_val <= 9999:
+                state.skill_pts = sp_val
 
     # ------------------------------------------------------------------
     # Training stat selection screen

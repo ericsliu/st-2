@@ -81,6 +81,10 @@ race_strategy:
   preferred_surface: turf   # turf | dirt
 
 # Shop item strategy (Trackblazer only)
+# Skill point reserve — keep at least this many SP for end-of-run skill purchases.
+# Skills will only be bought if SP exceeds this threshold.
+skill_pts_reserve: 800
+
 shop_strategy:
   # Total stat gain threshold for "exceptional training".
   # Training with gains above this overrides non-urgent racing and

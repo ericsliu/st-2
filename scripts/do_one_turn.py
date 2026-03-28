@@ -51,6 +51,7 @@ DEVICE = "127.0.0.1:5555"
 POST_RACE_TAP_DELAY = 2.0
 MAX_POST_ACTION_SCREENS = 20  # Safety limit on tap-through loops
 CONSECUTIVE_RACES_FILE = Path("data/consecutive_races.txt")
+JUST_RACED_FILE = Path("data/just_raced.txt")
 
 
 def _load_consecutive_races() -> int:
@@ -67,6 +68,29 @@ def _save_consecutive_races(count: int) -> None:
     """Persist consecutive race count between invocations."""
     CONSECUTIVE_RACES_FILE.write_text(str(count))
     logger.info("Consecutive races: %d (saved)", count)
+
+
+def _load_just_raced() -> bool:
+    """Load persisted just_raced flag for post-race shop visits."""
+    if JUST_RACED_FILE.exists():
+        try:
+            return JUST_RACED_FILE.read_text().strip() == "1"
+        except OSError:
+            return False
+    return False
+
+
+def _save_just_raced(val: bool) -> None:
+    """Persist just_raced flag between invocations."""
+    JUST_RACED_FILE.write_text("1" if val else "0")
+
+
+def _get_sp_reserve(engine) -> int:
+    """Read skill_pts_reserve from strategy overrides, default 800."""
+    if engine.scorer.overrides:
+        raw = engine.scorer.overrides.get_strategy_raw()
+        return raw.get("skill_pts_reserve", 800)
+    return 800
 
 
 def parse_args():
@@ -334,6 +358,67 @@ def display_training_scores(state, engine):
 
     print("=" * 80)
     return scored
+
+
+def execute_shop_visit(injector, capture, assembler, screen_id, sequences, engine):
+    """Navigate to the shop, and exit.
+
+    For now this is a minimal visit that prevents the "Shop lineup refreshed!"
+    popup from interrupting other actions. Full purchase automation is Phase 2.
+    """
+    from uma_trainer.perception.regions import TURN_ACTION_REGIONS, get_tap_center
+    shop_btn = get_tap_center(TURN_ACTION_REGIONS["btn_shop"])
+    logger.info("Visiting shop at %s", shop_btn)
+    injector.tap(*shop_btn)
+    time.sleep(2.5)
+
+    # Take screenshot to verify we're in the shop
+    frame = capture.grab_frame()
+    shop_text = assembler.ocr.read_region(frame, (0, 0, 300, 80)).lower()
+    if "shop" in shop_text:
+        logger.info("In shop screen — exiting")
+    else:
+        logger.warning("May not be in shop (header: '%s') — tapping Back anyway", shop_text[:40])
+
+    # Exit shop
+    injector.tap(50, 1870)
+    time.sleep(2.0)
+
+
+def execute_skill_buying(state, engine, injector, capture, assembler, screen_id, sp_reserve=800):
+    """Open skill screen and buy affordable priority skills above the SP reserve.
+
+    Only buys skills from the strategy priority list. Exits when SP drops
+    below the reserve threshold or no more priority skills are visible.
+    """
+    sp = state.skill_pts
+    if sp <= sp_reserve:
+        logger.info("Skill pts %d <= reserve %d — skipping skill buying", sp, sp_reserve)
+        return
+
+    spendable = sp - sp_reserve
+    logger.info("Skill pts %d (reserve %d, spendable %d) — opening Skills", sp, sp_reserve, spendable)
+
+    from uma_trainer.perception.regions import TURN_ACTION_REGIONS, get_tap_center
+    skills_btn = get_tap_center(TURN_ACTION_REGIONS["btn_skills"])
+    injector.tap(*skills_btn)
+    time.sleep(2.5)
+
+    # Verify we're on the skill screen
+    frame = capture.grab_frame()
+    header_text = assembler.ocr.read_region(frame, (0, 0, 400, 100)).lower()
+    if "skill" not in header_text and "learn" not in header_text:
+        logger.warning("Not on skill screen (header: '%s') — aborting", header_text[:40])
+        injector.tap(50, 1870)
+        time.sleep(2.0)
+        return
+
+    logger.info("On skill screen — skill buying not yet automated (Phase 2)")
+    # TODO Phase 2: OCR skill names/costs, match against priority list, buy
+
+    # Exit skill screen
+    injector.tap(50, 1870)
+    time.sleep(2.0)
 
 
 def execute_training(state, engine, injector, capture, assembler, sequences, screen_id):
@@ -638,6 +723,24 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
                     print(f"  [DRY RUN] Would use item: {item_name} (deferred to batch)")
                     all_items_used.append(item_name)
 
+    # Log skill points
+    if state.skill_pts > 0:
+        sp_reserve = _get_sp_reserve(engine)
+        logger.info("Skill pts: %d (reserve: %d, spendable: %d)",
+                     state.skill_pts, sp_reserve, max(0, state.skill_pts - sp_reserve))
+
+    # Step 2.6: Visit shop if due (refresh cadence or post-race).
+    if engine.shop_manager.should_visit_shop(state):
+        if execute:
+            logger.info("Shop visit due — visiting before main action")
+            execute_shop_visit(injector, capture, assembler, screen_id, sequences, engine)
+            _save_just_raced(False)
+            # Re-read state after returning from shop
+            frame = capture.grab_frame()
+            state = assembler.assemble(frame)
+        else:
+            logger.info("[DRY RUN] Would visit shop this turn")
+
     # Step 2.7: Check mood and conditions before main decision.
     # Infirmary takes priority over Go Out (conditions block mood improvement).
     infirmary_action = engine.scorer.should_visit_infirmary(state)
@@ -774,6 +877,7 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
             )
         engine.race_selector.scenario.on_race_completed()
         _save_consecutive_races(engine.race_selector.scenario._consecutive_races)
+        _save_just_raced(True)
         return True
 
     # No race — the alternative is training. Check if we should rest first.
@@ -963,12 +1067,15 @@ def main():
     # Initialize decision engine (the real one!)
     engine = build_engine(config)
 
-    # Restore consecutive race counter from previous invocations
+    # Restore state from previous invocations
     if engine.race_selector.scenario:
         prev_count = _load_consecutive_races()
         engine.race_selector.scenario._consecutive_races = prev_count
         if prev_count > 0:
             logger.info("Restored consecutive race count: %d", prev_count)
+        if _load_just_raced():
+            engine.race_selector.scenario._just_raced = True
+            logger.info("Restored just_raced flag — shop visit due")
 
     logger.info("Decision engine ready (scenario=%s, runspec=%s)",
                 config.scenario, config.runspec)
@@ -991,6 +1098,17 @@ def main():
             if not success:
                 logger.error("Turn %d failed — stopping", turn_num)
                 break
+
+            # Post-turn: check if we should buy skills (SP above reserve)
+            if args.execute:
+                frame = capture.grab_frame()
+                post_state = assembler.assemble(frame)
+                sp_reserve = _get_sp_reserve(engine)
+                if post_state.skill_pts > sp_reserve:
+                    execute_skill_buying(
+                        post_state, engine, injector, capture,
+                        assembler, screen_id, sp_reserve=sp_reserve,
+                    )
 
             if turn_num < args.turns:
                 logger.info("Waiting before next turn...")

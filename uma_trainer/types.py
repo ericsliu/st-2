@@ -205,6 +205,7 @@ class GameState:
     event_choices: list[EventChoice] = field(default_factory=list)
     available_skills: list[SkillOption] = field(default_factory=list)
     available_races: list[RaceOption] = field(default_factory=list)
+    skill_pts: int = 0
     # Trainee aptitudes read from the stats page at run start.
     # Keys: short, mile, medium, long, turf, dirt. Values: S/A/B/C/D/E/F/G.
     active_conditions: list[Condition] = field(default_factory=list)
