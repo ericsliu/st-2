@@ -14,8 +14,8 @@ stat_weight_overrides:
 
   - condition: late_game
     weights:
-      speed: 1.5      # Late game: max speed
-      stamina: 1.3    # And stamina for finals
+      speed: 1.8      # Late game: max speed — top priority
+      stamina: 0.7    # Stamina already high, deprioritize
       power: 0.9
       guts: 0.6
       wit: 0.4        # Wit less useful late game

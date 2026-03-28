@@ -1,7 +1,6 @@
 # Items owned. Auto-updated after each item use.
 # Keys must match ITEM_CATALOGUE in shop_manager.py
-ankle_weights: 1
-artisan_hammer: 1
-empowering_mega: 1
+artisan_hammer: 2
 glow_sticks: 1
-good_luck_charm: 2
+good_luck_charm: 1
+reset_whistle: 1

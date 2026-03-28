@@ -353,6 +353,85 @@ class ActionSequences:
         logger.info("Item '%s' used successfully", item_name)
         return True
 
+    def execute_item_batch(
+        self,
+        items: list[tuple[str, str]],
+        capture: "CaptureBackend",
+        ocr: "OCREngine",
+    ) -> list[str]:
+        """Use multiple items in a single bag session.
+
+        Args:
+            items: List of (item_key, item_name) tuples to use.
+            capture: Screen capture backend
+            ocr: OCR engine for reading item names
+
+        Returns list of item_keys that were successfully selected.
+        The caller should consume_item() and activate_item() for each.
+        """
+        if not items:
+            return []
+
+        # Step 1: Open item bag
+        logger.info("Opening item bag for batch use (%d items)...", len(items))
+        self.injector.tap(*self.ITEM_BAG_BTN)
+        time.sleep(2.0)
+
+        # Step 2: Find and tap + for each item
+        selected = []
+        for item_key, item_name in items:
+            frame = capture.grab_frame()
+            target_lower = item_name.lower()
+            found_row = self._find_item_row(frame, ocr, target_lower)
+
+            # Scroll and retry if not found
+            if found_row is None:
+                for scroll_attempt in range(3):
+                    logger.info("Item '%s' not visible — scrolling (attempt %d)", item_name, scroll_attempt + 1)
+                    self.injector.swipe(540, 1200, 540, 400, duration_ms=500)
+                    time.sleep(1.5)
+                    frame = capture.grab_frame()
+                    found_row = self._find_item_row(frame, ocr, target_lower)
+                    if found_row is not None:
+                        break
+
+            if found_row is None:
+                logger.warning("Could not find item '%s' in bag — skipping", item_name)
+                continue
+
+            plus_y = self.ITEM_BAG_ROW_FIRST_Y + (found_row * self.ITEM_BAG_ROW_HEIGHT)
+            logger.info("Selecting '%s' at row %d — tapping + at (%d, %d)", item_name, found_row, self.ITEM_BAG_PLUS_X, plus_y)
+            self.injector.tap(self.ITEM_BAG_PLUS_X, plus_y)
+            time.sleep(0.8)
+            selected.append(item_key)
+
+        if not selected:
+            logger.warning("No items selected — closing bag")
+            self.injector.tap(*self.ITEM_BAG_CLOSE)
+            time.sleep(1.0)
+            return []
+
+        # Step 3: Tap "Confirm Use" once for all selected items
+        logger.info("Tapping Confirm Use for %d items", len(selected))
+        self.injector.tap(*self.ITEM_BAG_CONFIRM)
+        time.sleep(2.0)
+
+        # Step 4: Handle the "Use training item(s)?" confirmation popup
+        frame = capture.grab_frame()
+        confirm_text = ocr.read_region(frame, (0, 1500, 1080, 1900)).lower()
+        if "use" in confirm_text or "training item" in confirm_text:
+            logger.info("Confirming 'Use training item(s)?' popup")
+            self.injector.tap(810, 1785)
+            time.sleep(2.0)
+
+        # Step 5: Close bag
+        logger.info("Closing item bag")
+        self.injector.tap(*self.ITEM_BAG_CLOSE)
+        time.sleep(1.5)
+
+        logger.info("Batch item use complete: %s", selected)
+        return selected
+
     def _find_item_row(
         self,
         frame: "np.ndarray",

@@ -246,6 +246,13 @@ def wait_for_career_home(capture, assembler, screen_id, injector, sequences, eng
         unknown_text = assembler.ocr.read_region(frame, (0, 0, 1080, 960)).lower()
         unknown_text_lower = assembler.ocr.read_region(frame, (0, 960, 1080, 1920)).lower()
 
+        # Full Stats / Umamusume Details screen — tap Close at bottom
+        if "umamusume" in unknown_text or "details" in unknown_text:
+            logger.info("Full Stats screen — tapping Close at (540, 1775)")
+            injector.tap(540, 1775)
+            time.sleep(1.5)
+            continue
+
         # Trackblazer Inspiration GO! screen — big gold GO! button at center
         if "go" in unknown_text_lower and "skip" in unknown_text_lower:
             logger.info("Inspiration GO! screen — tapping GO! at (540, 1350)")
@@ -438,9 +445,9 @@ def execute_rest(injector):
     injector.tap(*rest_btn)
     time.sleep(2.0)
 
-    # Confirm rest dialog — OK button at (700, 1300)
+    # Confirm rest dialog — OK button at (810, 1260)
     logger.info("Confirming rest")
-    injector.tap(700, 1300)
+    injector.tap(810, 1260)
     time.sleep(2.0)
 
 
@@ -452,13 +459,72 @@ def execute_go_out(injector):
     injector.tap(*go_out_btn)
     time.sleep(2.0)
 
+    # Confirm "Go on a fun outing?" dialog — OK button at (810, 1260)
+    logger.info("Confirming Go Out")
+    injector.tap(810, 1260)
+    time.sleep(2.0)
+
+
+def check_conditions(injector, capture, assembler):
+    """Open Full Stats, read conditions, close, return list of Conditions.
+
+    Taps Full Stats button on career home, OCRs the conditions tab area,
+    taps Close, and returns detected conditions.
+    """
+    from uma_trainer.types import Condition
+
+    # Tap Full Stats button (right side of career home, below Training Items)
+    logger.info("Checking conditions via Full Stats")
+    injector.tap(990, 1160)
+    time.sleep(1.5)
+
+    frame = capture.grab_frame()
+
+    # OCR the conditions area (y=970-1200, below "Conditions" tab header)
+    condition_text = assembler.ocr.read_region(frame, (0, 950, 1080, 1250)).lower()
+    logger.info("Conditions OCR: '%s'", condition_text)
+
+    conditions = []
+    condition_keywords = {
+        "skin outbreak": Condition.SKIN_OUTBREAK,
+        "migraine": Condition.MIGRAINE,
+        "night owl": Condition.NIGHT_OWL,
+        "slacker": Condition.SLACKER,
+        "practice poor": Condition.PRACTICE_POOR,
+        "overweight": Condition.OVERWEIGHT,
+        "sharp": Condition.SHARP,
+        "charming": Condition.CHARMING,
+    }
+    for keyword, cond in condition_keywords.items():
+        if keyword in condition_text:
+            conditions.append(cond)
+
+    # Tap Close button — retry up to 3 times if screen doesn't dismiss
+    for close_attempt in range(3):
+        injector.tap(540, 1775)
+        time.sleep(1.5)
+
+        # Verify we're back on career home by checking for "Career" header
+        check_frame = capture.grab_frame()
+        header_text = assembler.ocr.read_region(check_frame, (0, 0, 300, 80)).lower()
+        if "career" in header_text:
+            break
+        logger.info("Full Stats still open (attempt %d) — retrying Close", close_attempt + 1)
+
+    return conditions
+
 
 def execute_infirmary(injector):
-    """Tap Infirmary button."""
+    """Tap Infirmary button, then confirm the dialog."""
     from uma_trainer.perception.regions import TURN_ACTION_REGIONS, get_tap_center
     infirmary_btn = get_tap_center(TURN_ACTION_REGIONS["btn_infirmary"])
     logger.info("Tapping Infirmary at %s", infirmary_btn)
     injector.tap(*infirmary_btn)
+    time.sleep(2.0)
+
+    # Confirm "Visit the infirmary?" dialog — OK button at (810, 1260)
+    logger.info("Confirming Infirmary visit")
+    injector.tap(810, 1260)
     time.sleep(2.0)
 
 
@@ -501,62 +567,36 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
             logger.error("Still on stat selection after Back tap")
             return False
 
-    # Step 2.5: Plan and execute item queue.
-    # The whistle is special: it rearranges cards, invalidating all plans.
-    # If a whistle is used, we loop back and re-evaluate everything.
+    # Step 2.3: Check conditions via Full Stats screen.
+    if execute:
+        conditions = check_conditions(injector, capture, assembler)
+        if conditions:
+            state.active_conditions = conditions
+            logger.info("Active conditions: %s", [c.value for c in conditions])
+
+    # Step 2.5: Prepare item queue.
+    # Items are split into two categories:
+    #   - Reset Whistle: used ONLY if training tiles are lacking (< 40 total stats
+    #     during summer camp). Must be used before boost items since it reshuffles cards.
+    #   - Boost items (megaphone, ankle weights, charm): batched together and used
+    #     AFTER we decide what to train, right before confirming.
     from uma_trainer.decision.shop_manager import ITEM_CATALOGUE
     all_items_used = []
-    MAX_ITEM_ROUNDS = 3  # safety limit on re-evaluation loops
+    deferred_boost_items = []  # [(key, name)] to batch-use after training decision
+    has_whistle = False
 
-    for item_round in range(MAX_ITEM_ROUNDS):
-        item_queue = engine.shop_manager.get_item_queue(state)
-        if not item_queue:
-            break
-
-        queue_names = [
-            ITEM_CATALOGUE[a.target].name if a.target in ITEM_CATALOGUE else a.target
-            for a in item_queue
-        ]
-        logger.info("Item queue (round %d): %s", item_round + 1, queue_names)
-
-        used_whistle = False
-        for item_action in item_queue:
-            item_key = item_action.target
-            item_name = ITEM_CATALOGUE[item_key].name if item_key in ITEM_CATALOGUE else item_key
-
-            if not execute:
-                print(f"  [DRY RUN] Would use item: {item_name} ({item_action.reason})")
-                all_items_used.append(item_name)
-                continue
-
-            if ocr is None:
-                logger.warning("No OCR engine — cannot navigate item bag")
-                break
-
-            success = sequences.execute_item_use(item_key, item_name, capture, ocr)
-            if success:
-                engine.shop_manager.consume_item(item_key)
-                engine.shop_manager.activate_item(item_key)
-                all_items_used.append(item_name)
-                logger.info("Item used: %s", item_name)
-                time.sleep(1.5)
-                frame = capture.grab_frame()
-                state = assembler.assemble(frame)
-                logger.info("After item: energy=%d, mood=%s", state.energy, state.mood.value)
-
-                if item_key == "reset_whistle":
-                    used_whistle = True
-                    logger.info("Whistle used — will re-evaluate entire turn")
-                    break  # Stop this queue, loop back for fresh evaluation
+    item_queue = engine.shop_manager.get_item_queue(state)
+    if item_queue:
+        for a in item_queue:
+            if a.target == "reset_whistle":
+                has_whistle = True
             else:
-                logger.warning("Failed to use item %s — aborting remaining queue", item_name)
-                break
-
-        if not execute or not used_whistle:
-            break  # No whistle = queue is final, proceed to decisions
-
-    if all_items_used:
-        print(f"Items used: {', '.join(all_items_used)}")
+                item_key = a.target
+                item_name = ITEM_CATALOGUE[item_key].name if item_key in ITEM_CATALOGUE else item_key
+                deferred_boost_items.append((item_key, item_name))
+                if not execute:
+                    print(f"  [DRY RUN] Would use item: {item_name} (deferred to batch)")
+                    all_items_used.append(item_name)
 
     # Step 2.7: Check mood and conditions before main decision.
     # Infirmary takes priority over Go Out (conditions block mood improvement).
@@ -712,7 +752,13 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
         return True
 
     else:
-        # Training — navigate to stat selection and scan tiles
+        # Training flow:
+        # 1. Scan tiles to see what's available
+        # 2. During summer camp: if best tile < 40 total stats AND we have whistle → use it, re-scan
+        # 3. Use boost items in batch (megaphone, charm, etc.)
+        # 4. Select and confirm training
+        SUMMER_MIN_STATS = 40
+
         logger.info("STEP 3: Navigating to stat selection for tile scan")
         from uma_trainer.perception.regions import TURN_ACTION_REGIONS, get_tap_center
         train_btn = get_tap_center(TURN_ACTION_REGIONS["btn_training"])
@@ -729,6 +775,43 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
             return False
 
         sequences.scan_training_gains(state, capture, assembler)
+
+        # Check if whistle should be used (tiles are lacking during summer camp)
+        is_summer = engine.scorer._is_summer_camp(state)
+        if is_summer and has_whistle and execute and ocr is not None:
+            best_total = max(
+                (sum(t.stat_gains.values()) if t.stat_gains else 0)
+                for t in state.training_tiles
+            )
+            if best_total < SUMMER_MIN_STATS:
+                logger.info(
+                    "Summer camp: best tile only %d total (need %d) — using Reset Whistle",
+                    best_total, SUMMER_MIN_STATS,
+                )
+                # Go back to career home to use whistle
+                injector.tap(95, 1875)
+                time.sleep(2.0)
+
+                whistle_name = ITEM_CATALOGUE["reset_whistle"].name
+                success = sequences.execute_item_use("reset_whistle", whistle_name, capture, ocr)
+                if success:
+                    engine.shop_manager.consume_item("reset_whistle")
+                    engine.shop_manager.activate_item("reset_whistle")
+                    all_items_used.append(whistle_name)
+                    has_whistle = False
+                    logger.info("Whistle used — re-scanning tiles")
+
+                # Navigate back to stat selection and re-scan
+                injector.tap(*train_btn)
+                time.sleep(2.0)
+                frame = capture.grab_frame()
+                state = assembler.assemble(frame)
+                is_stat_select = screen_id.is_stat_selection(frame)
+                if is_stat_select and state.training_tiles:
+                    sequences.scan_training_gains(state, capture, assembler)
+                else:
+                    logger.error("Failed to re-enter stat selection after whistle")
+                    return False
 
         # Score and display
         scored = display_training_scores(state, engine)
@@ -753,6 +836,27 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
             time.sleep(2.0)
             execute_rest(injector)
         else:
+            # Use deferred boost items in batch before confirming training.
+            # Go back to career home, batch use, return to stat selection.
+            if deferred_boost_items and ocr is not None:
+                logger.info("Using %d boost items in batch", len(deferred_boost_items))
+                injector.tap(95, 1875)  # Back to career home
+                time.sleep(2.0)
+
+                used_keys = sequences.execute_item_batch(deferred_boost_items, capture, ocr)
+                for key in used_keys:
+                    engine.shop_manager.consume_item(key)
+                    engine.shop_manager.activate_item(key)
+                    name = ITEM_CATALOGUE[key].name if key in ITEM_CATALOGUE else key
+                    all_items_used.append(name)
+
+                if all_items_used:
+                    print(f"Items used: {', '.join(all_items_used)}")
+
+                # Navigate back to stat selection
+                injector.tap(*train_btn)
+                time.sleep(2.0)
+
             # Select and confirm the best tile
             best_tile, best_score = scored[0]
             currently_raised = assembler.detect_selected_tile(capture.grab_frame())

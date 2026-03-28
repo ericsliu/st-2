@@ -7,7 +7,9 @@
     "infirmary": {"x": 162, "y": 1660},
     "recreation": {"x": 378, "y": 1660},
     "shop": {"x": 620, "y": 1640, "note": "Small target, green pixels at x=600-640 y=1630-1650"},
-    "races": {"x": 918, "y": 1660}
+    "races": {"x": 918, "y": 1660},
+    "full_stats": {"x": 990, "y": 1160, "note": "Right side, below trainee portrait. Training Items is left at ~800,1140"},
+    "training_items": {"x": 800, "y": 1140}
   },
   "race_list": {
     "race_entry_1": {"x": 540, "y": 1050, "note": "First race row, tap to select"},
@@ -33,6 +35,10 @@
     "next_rewards": {"x": 810, "y": 1810}
   },
   "rest_confirm": {
+    "cancel": {"x": 270, "y": 1260},
+    "ok": {"x": 810, "y": 1260}
+  },
+  "infirmary_confirm": {
     "cancel": {"x": 270, "y": 1260},
     "ok": {"x": 810, "y": 1260}
   },
@@ -83,5 +89,8 @@
   "item_confirm_popup": {
     "cancel": {"x": 270, "y": 1785, "note": "Cancel on 'Use training item(s)?' popup"},
     "use": {"x": 810, "y": 1785, "note": "Green 'Use Training Items' button"}
+  },
+  "full_stats_screen": {
+    "close": {"x": 540, "y": 1775, "note": "Close button on Umamusume Details / Full Stats screen"}
   }
 }

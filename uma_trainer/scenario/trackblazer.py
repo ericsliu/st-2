@@ -202,17 +202,17 @@ class TrackblazerHandler(ScenarioHandler):
         in_finale = turns_left <= 3
 
         # ── Reset Whistle — rearranges cards, invalidates all other plans ──
-        # Used during summer camp or final 3 turns. When the whistle is used,
-        # return ONLY the whistle. The caller must re-evaluate the entire turn
-        # after using it, because card positions (and therefore tile scores,
-        # item combos, everything) will have changed.
+        # Used during summer camp or final 3 turns. The caller handles whistle
+        # separately: uses it first if training tiles are lacking, then re-scans
+        # before using boost items.
         if (in_summer or in_finale) and _has("reset_whistle"):
-            return [BotAction(
+            queue.append(BotAction(
                 action_type=ActionType.USE_ITEM,
                 target="reset_whistle",
                 reason=f"Reset Whistle ({'finale' if in_finale else 'summer camp'}, {turns_left} turns left)",
                 tier_used=1,
-            )]
+            ))
+            _reserve("reset_whistle")
 
         # ── Determine if we need energy recovery ──
         # During summer: use Vita at energy < 50 (never rest)
@@ -259,14 +259,15 @@ class TrackblazerHandler(ScenarioHandler):
                 ))
                 _reserve(vita_key)
 
-        # ── Queue Megaphone at Summer Camp start ──
-        if at_camp_start:
+        # ── Queue Megaphone during Summer Camp ──
+        # Use at first opportunity during summer camp (multi-turn effect)
+        if in_summer:
             for mega_key in ("empowering_mega", "motivating_mega", "coaching_mega"):
                 if _has(mega_key):
                     queue.append(BotAction(
                         action_type=ActionType.USE_ITEM,
                         target=mega_key,
-                        reason=f"Megaphone at Summer Camp start (turn {turn})",
+                        reason=f"Megaphone at Summer Camp (turn {turn})",
                         tier_used=1,
                     ))
                     _reserve(mega_key)
@@ -282,17 +283,26 @@ class TrackblazerHandler(ScenarioHandler):
             ))
             _reserve("ankle_weights")
 
-        # ── Good-Luck Charm — before exceptional training ──
-        if not queue and _has("good_luck_charm"):
-            best_gain = self._best_training_gain(state)
-            if best_gain >= self.config.shop.exceptional_gain_threshold:
+        # ── Good-Luck Charm — during summer camp or before exceptional training ──
+        if _has("good_luck_charm"):
+            if in_summer:
                 queue.append(BotAction(
                     action_type=ActionType.USE_ITEM,
                     target="good_luck_charm",
-                    reason=f"Charm before exceptional training (gain={best_gain})",
+                    reason=f"Charm at Summer Camp (turn {turn})",
                     tier_used=1,
                 ))
                 _reserve("good_luck_charm")
+            else:
+                best_gain = self._best_training_gain(state)
+                if best_gain >= self.config.shop.exceptional_gain_threshold:
+                    queue.append(BotAction(
+                        action_type=ActionType.USE_ITEM,
+                        target="good_luck_charm",
+                        reason=f"Charm before exceptional training (gain={best_gain})",
+                        tier_used=1,
+                    ))
+                    _reserve("good_luck_charm")
 
         # ── Master Cleat Hammer — during Twinkle Star Climax ──
         twinkle_star = self.get_event_turns("twinkle_star")
