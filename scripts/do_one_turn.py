@@ -385,12 +385,105 @@ def execute_shop_visit(injector, capture, assembler, screen_id, sequences, engin
     time.sleep(2.0)
 
 
-def execute_skill_buying(state, engine, injector, capture, assembler, screen_id, sp_reserve=800):
-    """Open skill screen and buy affordable priority skills above the SP reserve.
+def _parse_skill_rows(frame, ocr, skill_matcher=None):
+    """OCR visible skill rows and return list of parsed skill dicts.
 
-    Only buys skills from the strategy priority list. Exits when SP drops
-    below the reserve threshold or no more priority skills are visible.
+    Each skill card is ~280px tall. Returns list of dicts with keys:
+        name, matched_name, cost, obtained, hint_level, plus_y
     """
+    import re
+    skills = []
+    y = 680
+    while y < 1550:
+        # Read skill name area (left side, above description)
+        name_text = ocr.read_region(frame, (70, y, 800, y + 50)).strip()
+        if not name_text or len(name_text) < 3:
+            y += 30
+            continue
+
+        # Skip description lines (they start with common verbs/prepositions)
+        lower = name_text.lower()
+        skip_prefixes = [
+            "increase", "decrease", "slightly", "moderately", "very",
+            "move", "recover", "in ", "of ", "the ", "after", "on ",
+            "out ", "when", "gap", "late", "over", "corner", "close",
+            "back", "(", "non-", "straight", "slig", "verv", "sligh",
+        ]
+        if any(lower.startswith(w) for w in skip_prefixes):
+            y += 30
+            continue
+        if len(name_text) > 40:
+            y += 30
+            continue
+
+        # Fuzzy match against known skill names
+        matched_name = name_text
+        if skill_matcher:
+            result = skill_matcher.match(name_text)
+            if result:
+                matched_name, score = result
+                if matched_name != name_text:
+                    logger.info("  Fuzzy: '%s' → '%s' (%d%%)", name_text, matched_name, score)
+            else:
+                # No match at all — likely garbage OCR or a description line
+                logger.debug("  No match for '%s' — skipping", name_text)
+                y += 30
+                continue
+
+        # Check for hint level badge ("Hint Lvl N" / "30% OFF!" near skill name)
+        hint_level = 0
+        # Badge can appear below name or to the right — scan both areas
+        hint_text = ocr.read_region(frame, (70, y + 35, 500, y + 85)).strip().lower()
+        hint_match = re.search(r"hint\s*(?:lv|lvl?)\.?\s*(\d)", hint_text)
+        if hint_match:
+            hint_level = int(hint_match.group(1))
+        elif "hint" in hint_text or "off" in hint_text:
+            hint_level = 1  # Hint present but level not parsed
+
+        # Check if this row shows "Obtained" (already purchased)
+        obtained_text = ocr.read_region(frame, (800, y + 50, 1050, y + 130)).strip().lower()
+        is_obtained = "obtained" in obtained_text or "obt" in obtained_text
+
+        # Read cost (number between -/+ buttons, right side)
+        cost = None
+        if not is_obtained:
+            cost_text = ocr.read_region(frame, (820, y + 80, 940, y + 140)).strip()
+            cost_match = re.search(r"(\d{2,4})", cost_text)
+            if cost_match:
+                cost = int(cost_match.group(1))
+
+        plus_y = y + 110
+        skill = {
+            "name": name_text,
+            "matched_name": matched_name,
+            "cost": cost,
+            "obtained": is_obtained,
+            "hint_level": hint_level,
+            "plus_y": plus_y,
+        }
+        skills.append(skill)
+        hint_str = f" hint_lvl={hint_level}" if hint_level else ""
+        logger.info(
+            "  Skill: '%s' cost=%s%s%s",
+            matched_name, cost, hint_str,
+            " (obtained)" if is_obtained else "",
+        )
+
+        # Skip past this card (~280px, but use 240 to catch tightly packed rows)
+        y += 240
+
+    return skills
+
+
+def execute_skill_buying(state, engine, injector, capture, assembler, screen_id, sp_reserve=800):
+    """Open skill screen and buy affordable skills above the SP reserve.
+
+    Buys skills from the strategy priority list first, then any affordable
+    hint skills (30% OFF). Exits when SP drops below the reserve threshold.
+    """
+    from uma_trainer.knowledge.skill_matcher import SkillMatcher
+    import re
+
     sp = state.skill_pts
     if sp <= sp_reserve:
         logger.info("Skill pts %d <= reserve %d — skipping skill buying", sp, sp_reserve)
@@ -413,12 +506,94 @@ def execute_skill_buying(state, engine, injector, capture, assembler, screen_id,
         time.sleep(2.0)
         return
 
-    logger.info("On skill screen — skill buying not yet automated (Phase 2)")
-    # TODO Phase 2: OCR skill names/costs, match against priority list, buy
+    # Read current SP from skill screen header
+    sp_text = assembler.ocr.read_region(frame, (700, 580, 1050, 650)).strip()
+    sp_match = re.search(r"(\d+)", sp_text)
+    if sp_match:
+        sp = int(sp_match.group(1))
+        spendable = sp - sp_reserve
+        logger.info("Skill screen SP: %d (spendable: %d)", sp, spendable)
 
-    # Exit skill screen
-    injector.tap(50, 1870)
-    time.sleep(2.0)
+    # Get priority list from strategy overrides
+    priority_names = []
+    blacklist_names = []
+    if engine.scorer.overrides:
+        strategy = engine.scorer.overrides.get_strategy_raw()
+        raw_priority = strategy.get("skill_priority_list", [])
+        for entry in raw_priority:
+            if isinstance(entry, str):
+                priority_names.append(entry.lower())
+            elif isinstance(entry, dict) and "name" in entry:
+                priority_names.append(entry["name"].lower())
+        blacklist_names = [n.lower() for n in strategy.get("skill_blacklist", [])]
+
+    logger.info("Priority skills: %s", priority_names)
+
+    # Initialize fuzzy matcher for skill names
+    matcher = SkillMatcher()
+
+    # Scan visible skills, scroll, and collect all available skills
+    added_any = False
+    spent = 0
+    max_scrolls = 5
+
+    for scroll in range(max_scrolls + 1):
+        frame = capture.grab_frame()
+        skills = _parse_skill_rows(frame, assembler.ocr, skill_matcher=matcher)
+
+        for skill in skills:
+            if skill["obtained"]:
+                continue
+            if skill["cost"] is None:
+                continue
+
+            name_lower = skill["matched_name"].lower()
+            cost = skill["cost"]
+
+            # Skip blacklisted
+            if any(bl in name_lower for bl in blacklist_names):
+                continue
+
+            # Check if affordable within spendable budget
+            if cost > (spendable - spent):
+                logger.info("  '%s' costs %d but only %d spendable — skip", skill["matched_name"], cost, spendable - spent)
+                continue
+
+            # Buy if priority or if it's a hint skill (discounted)
+            is_priority = any(p in name_lower for p in priority_names)
+            is_hint_cheap = skill["hint_level"] > 0 and cost <= 120
+
+            if is_priority or is_hint_cheap:
+                logger.info(
+                    "  BUYING '%s' for %d SP (priority=%s, hint=%d)",
+                    skill["matched_name"], cost, is_priority, skill["hint_level"],
+                )
+                injector.tap(1010, skill["plus_y"])
+                time.sleep(0.8)
+                spent += cost
+                added_any = True
+
+                if (spendable - spent) <= 0:
+                    logger.info("  Budget exhausted")
+                    break
+
+        if (spendable - spent) <= 0:
+            break
+
+        # Scroll down to see more skills
+        if scroll < max_scrolls:
+            injector.swipe(540, 1300, 540, 1020, duration_ms=400)
+            time.sleep(2.0)
+
+    if added_any:
+        # Tap Confirm to purchase selected skills
+        logger.info("Confirming skill purchases (spent %d SP)", spent)
+        injector.tap(540, 1640)
+        time.sleep(2.0)
+    else:
+        logger.info("No skills to buy — exiting")
+        injector.tap(50, 1870)
+        time.sleep(2.0)
 
 
 def execute_training(state, engine, injector, capture, assembler, sequences, screen_id):

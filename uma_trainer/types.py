@@ -172,6 +172,7 @@ class SkillOption:
     cost: int = 0
     stat_boost: dict[str, int] = field(default_factory=dict)
     is_hint_skill: bool = False
+    hint_level: int = 0  # 0 = no hint, 1-5 = hint level (30% OFF at lvl 1+)
     priority: int = 5  # 1-10 from knowledge base
     tap_coords: tuple[int, int] = (0, 0)
 

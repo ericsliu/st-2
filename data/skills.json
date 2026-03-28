@@ -1,66 +1,4282 @@
 [
   {
-    "skill_id": "acceleration_boost",
-    "name": "Acceleration Boost",
-    "description": "Greatly increases acceleration at the start of a race.",
-    "category": "speed",
-    "stat_requirements": {"speed": 300},
-    "priority": 9
+    "skill_id": "200014",
+    "name": "Right-Handed Demon",
+    "description": "Increase proficiency in right-handed tracks, increasing Speed and Power.",
+    "category": "unknown",
+    "rarity": "rare",
+    "grade_value": 461
   },
   {
-    "skill_id": "corner_recovery",
-    "name": "Corner Recovery",
-    "description": "Recovers stamina when rounding corners.",
-    "category": "stamina",
-    "stat_requirements": {"stamina": 250},
-    "priority": 8
+    "skill_id": "200064",
+    "name": "Yodo Invicta",
+    "description": "Increase performance at Kyoto Racecourse, boosting Stamina and Wit.",
+    "category": "unknown",
+    "rarity": "rare",
+    "grade_value": 461
   },
   {
-    "skill_id": "late_bloomer",
-    "name": "Late Bloomer",
-    "description": "Activates in the final stretch, providing a speed boost.",
-    "category": "speed",
-    "stat_requirements": {"speed": 400, "guts": 200},
-    "priority": 9
+    "skill_id": "200154",
+    "name": "Firm Course Menace",
+    "description": "Increase performance on firm ground, boosting Power and Speed.",
+    "category": "unknown",
+    "rarity": "rare",
+    "grade_value": 461
   },
   {
-    "skill_id": "position_sense",
-    "name": "Position Sense",
-    "description": "Improves positioning during races.",
-    "category": "support",
-    "stat_requirements": {"wit": 200},
-    "priority": 7
+    "skill_id": "200174",
+    "name": "Spring Spectacle",
+    "description": "Increase performance in spring, boosting Speed and Power.",
+    "category": "unknown",
+    "rarity": "rare",
+    "grade_value": 461
   },
   {
-    "skill_id": "front_runner_instinct",
-    "name": "Front Runner's Instinct",
-    "description": "Speed boost when running at the front of the pack.",
-    "category": "speed",
-    "stat_requirements": {"speed": 350},
-    "priority": 8
+    "skill_id": "200194",
+    "name": "Fall Frenzy",
+    "description": "Increase performance in fall, boosting Speed and Power.",
+    "category": "unknown",
+    "rarity": "rare",
+    "grade_value": 461
   },
   {
-    "skill_id": "stamina_keeper",
-    "name": "Stamina Keeper",
-    "description": "Reduces stamina consumption throughout the race.",
-    "category": "stamina",
-    "stat_requirements": {"stamina": 300},
-    "priority": 7
+    "skill_id": "202051",
+    "name": "Runaway",
+    "description": "Attempt to gain an especially large lead and keep it until the finish. (Front Runner)",
+    "category": "unknown",
+    "rarity": "rare",
+    "grade_value": 370
   },
   {
-    "skill_id": "recovery_medium",
-    "name": "Recovery (Medium)",
-    "description": "Slightly recovers HP during a race.",
-    "category": "recovery",
-    "stat_requirements": {},
-    "priority": 4
+    "skill_id": "201561",
+    "name": "Super Lucky Seven",
+    "description": "Good things may happen when in bracket 7.",
+    "category": "unknown",
+    "rarity": "rare",
+    "grade_value": 334
   },
   {
-    "skill_id": "concentration",
+    "skill_id": "201521",
+    "name": "Front Runner Savvy ◎",
+    "description": "Increase ability to get into a good position. (Front Runner)",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201531",
+    "name": "Pace Chaser Savvy ◎",
+    "description": "Increase ability to get into a good position. (Pace Chaser)",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201541",
+    "name": "Late Surger Savvy ◎",
+    "description": "Increase ability to get into a good position. (Late Surger)",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201551",
+    "name": "End Closer Savvy ◎",
+    "description": "Increase ability to get into a good position. (End Closer)",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200011",
+    "name": "Right-Handed ◎",
+    "description": "Increase performance on right-handed tracks.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200021",
+    "name": "Left-Handed ◎",
+    "description": "Increase performance on left-handed tracks.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200031",
+    "name": "Tokyo Racecourse ◎",
+    "description": "Increase performance at Tokyo Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200041",
+    "name": "Nakayama Racecourse ◎",
+    "description": "Increase performance at Nakayama Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200051",
+    "name": "Hanshin Racecourse ◎",
+    "description": "Increase performance at Hanshin Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200061",
+    "name": "Kyoto Racecourse ◎",
+    "description": "Increase performance at Kyoto Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200071",
+    "name": "Chukyo Racecourse ◎",
+    "description": "Increase performance at Chukyo Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200081",
+    "name": "Sapporo Racecourse ◎",
+    "description": "Increase performance at Sapporo Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200091",
+    "name": "Hakodate Racecourse ◎",
+    "description": "Increase performance at Hakodate Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200101",
+    "name": "Fukushima Racecourse ◎",
+    "description": "Increase performance at Fukushima Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200111",
+    "name": "Niigata Racecourse ◎",
+    "description": "Increase performance at Niigata Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200121",
+    "name": "Kokura Racecourse ◎",
+    "description": "Increase performance at Kokura Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200131",
+    "name": "Standard Distance ◎",
+    "description": "Increase performance over standard distances (multiples of 400m).",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200141",
+    "name": "Non-Standard Distance ◎",
+    "description": "Increase performance over non-standard distances (non-multiples of 400m).",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200151",
+    "name": "Firm Conditions ◎",
+    "description": "Increase performance on firm ground.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200161",
+    "name": "Wet Conditions ◎",
+    "description": "Increase performance on good, soft, and heavy ground.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200171",
+    "name": "Spring Runner ◎",
+    "description": "Increase performance in spring.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200181",
+    "name": "Summer Runner ◎",
+    "description": "Increase performance in summer.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200191",
+    "name": "Fall Runner ◎",
+    "description": "Increase performance in fall.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200201",
+    "name": "Winter Runner ◎",
+    "description": "Increase performance in winter.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200211",
+    "name": "Sunny Days ◎",
+    "description": "Increase performance in sunny weather.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200221",
+    "name": "Cloudy Days ◎",
+    "description": "Increase performance in cloudy weather.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200231",
+    "name": "Rainy Days ◎",
+    "description": "Increase performance in rainy weather.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200241",
+    "name": "Snowy Days ◎",
+    "description": "Increase performance in snowy weather.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200251",
+    "name": "Inner Post Proficiency ◎",
+    "description": "Increase performance in brackets 1–3.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200261",
+    "name": "Outer Post Proficiency ◎",
+    "description": "Increase performance in brackets 6–8.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200271",
+    "name": "Maverick ◎",
+    "description": "Greatly increase performance when no other runners are using the same strategy.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200281",
+    "name": "Competitive Spirit ◎",
+    "description": "Increase performance when many other runners are using the same strategy.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200291",
+    "name": "Target in Sight ◎",
+    "description": "Increase performance when the favorite is using the same strategy.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200301",
+    "name": "Long Shot ◎",
+    "description": "Increase performance when 4th favorite or below.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200951",
+    "name": "Oi Racecourse ◎",
+    "description": "Increase performance at Oi Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "201522",
+    "name": "Front Runner Savvy ○",
+    "description": "Moderately increase ability to get into a good position. (Front Runner)",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "201532",
+    "name": "Pace Chaser Savvy ○",
+    "description": "Moderately increase ability to get into a good position. (Pace Chaser)",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "201542",
+    "name": "Late Surger Savvy ○",
+    "description": "Moderately increase ability to get into a good position. (Late Surger)",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "201552",
+    "name": "End Closer Savvy ○",
+    "description": "Moderately increase ability to get into a good position. (End Closer)",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "201562",
+    "name": "Lucky Seven",
+    "description": "Moderately good things may happen when in bracket 7.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200012",
+    "name": "Right-Handed ○",
+    "description": "Moderately increase performance on right-handed tracks.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200022",
+    "name": "Left-Handed ○",
+    "description": "Moderately increase performance on left-handed tracks.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200032",
+    "name": "Tokyo Racecourse ○",
+    "description": "Moderately increase performance at Tokyo Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200042",
+    "name": "Nakayama Racecourse ○",
+    "description": "Moderately increase performance at Nakayama Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200052",
+    "name": "Hanshin Racecourse ○",
+    "description": "Moderately increase performance at Hanshin Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200062",
+    "name": "Kyoto Racecourse ○",
+    "description": "Moderately increase performance at Kyoto Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200072",
+    "name": "Chukyo Racecourse ○",
+    "description": "Moderately increase performance at Chukyo Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200082",
+    "name": "Sapporo Racecourse ○",
+    "description": "Moderately increase performance at Sapporo Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200092",
+    "name": "Hakodate Racecourse ○",
+    "description": "Moderately increase performance at Hakodate Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200102",
+    "name": "Fukushima Racecourse ○",
+    "description": "Moderately increase performance at Fukushima Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200112",
+    "name": "Niigata Racecourse ○",
+    "description": "Moderately increase performance at Niigata Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200122",
+    "name": "Kokura Racecourse ○",
+    "description": "Moderately increase performance at Kokura Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200132",
+    "name": "Standard Distance ○",
+    "description": "Moderately increase performance over standard distances (multiples of 400m).",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200142",
+    "name": "Non-Standard Distance ○",
+    "description": "Moderately increase performance over non-standard distances (non-multiples of 400m).",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200152",
+    "name": "Firm Conditions ○",
+    "description": "Moderately increase performance on firm ground.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200162",
+    "name": "Wet Conditions ○",
+    "description": "Moderately increase performance on good, soft, and heavy ground.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200172",
+    "name": "Spring Runner ○",
+    "description": "Moderately increase performance in spring.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200182",
+    "name": "Summer Runner ○",
+    "description": "Moderately increase performance in summer.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200192",
+    "name": "Fall Runner ○",
+    "description": "Moderately increase performance in fall.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200202",
+    "name": "Winter Runner ○",
+    "description": "Moderately increase performance in winter.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200212",
+    "name": "Sunny Days ○",
+    "description": "Moderately increase performance in sunny weather.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200222",
+    "name": "Cloudy Days ○",
+    "description": "Moderately increase performance in cloudy weather.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200232",
+    "name": "Rainy Days ○",
+    "description": "Moderately increase performance in rainy weather.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200242",
+    "name": "Snowy Days ○",
+    "description": "Moderately increase performance in snowy weather.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200252",
+    "name": "Inner Post Proficiency ○",
+    "description": "Moderately increase performance in brackets 1–3.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200262",
+    "name": "Outer Post Proficiency ○",
+    "description": "Moderately increase performance in brackets 6–8.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200272",
+    "name": "Maverick ○",
+    "description": "Increase performance when no other runners are using the same strategy.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200282",
+    "name": "Competitive Spirit ○",
+    "description": "Moderately increase performance when many other runners are using the same strategy.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200292",
+    "name": "Target in Sight ○",
+    "description": "Moderately increase performance when the favorite is using the same strategy.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200302",
+    "name": "Long Shot ○",
+    "description": "Moderately increase performance when 4th favorite or below.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200952",
+    "name": "Oi Racecourse ○",
+    "description": "Moderately increase performance at Oi Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "201631",
+    "name": "Sympathy",
+    "description": "Moderately increase performance when many runners share a sympathetic heart.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "201641",
+    "name": "Lone Wolf",
+    "description": "Moderately increase performance when no other runners have the heart of a lone wolf.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "300011",
+    "name": "Unquenched Thirst",
+    "description": "Moderately increase performance with the desire to race.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 0
+  },
+  {
+    "skill_id": "300021",
+    "name": "Unchanging",
+    "description": "Greatly increase performance with the same ambition of days past.",
+    "category": "unknown",
+    "rarity": "rare",
+    "grade_value": 0
+  },
+  {
+    "skill_id": "300031",
+    "name": "Towards the Scenery I Seek",
+    "description": "Moderately increase performance in pursuit of that long sought-after scenery.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 0
+  },
+  {
+    "skill_id": "300041",
+    "name": "Creeping Anxiety",
+    "description": "Moderately decrease performance due to Trainer's anxiety.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 0
+  },
+  {
+    "skill_id": "300071",
+    "name": "Show Me What Lies Beyond!",
+    "description": "Moderately increase Silence Suzuka's performance thanks to the desire to see her running reach new heights.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 0
+  },
+  {
+    "skill_id": "300081",
+    "name": "Hoiya! Have a Good Run!",
+    "description": "Moderately increase Silence Suzuka's performance thanks to a charm that guarantees a satisfying run.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 0
+  },
+  {
+    "skill_id": "300091",
+    "name": "As a Friend and Rival",
+    "description": "Moderately increase Silence Suzuka's performance through the happiness felt seeing a friend find their running style.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 0
+  },
+  {
+    "skill_id": "200013",
+    "name": "Right-Handed ×",
+    "description": "Moderately decrease performance on right-handed tracks.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200023",
+    "name": "Left-Handed ×",
+    "description": "Moderately decrease performance on left-handed tracks.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200033",
+    "name": "Tokyo Racecourse ×",
+    "description": "Moderately decrease performance at Tokyo Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200043",
+    "name": "Nakayama Racecourse ×",
+    "description": "Moderately decrease performance at Nakayama Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200053",
+    "name": "Hanshin Racecourse ×",
+    "description": "Moderately decrease performance at Hanshin Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200063",
+    "name": "Kyoto Racecourse ×",
+    "description": "Moderately decrease performance at Kyoto Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200073",
+    "name": "Chukyo Racecourse ×",
+    "description": "Moderately decrease performance at Chukyo Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200083",
+    "name": "Sapporo Racecourse ×",
+    "description": "Moderately decrease performance at Sapporo Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200093",
+    "name": "Hakodate Racecourse ×",
+    "description": "Moderately decrease performance at Hakodate Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200103",
+    "name": "Fukushima Racecourse ×",
+    "description": "Moderately decrease performance at Fukushima Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200113",
+    "name": "Niigata Racecourse ×",
+    "description": "Moderately decrease performance at Niigata Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200123",
+    "name": "Kokura Racecourse ×",
+    "description": "Moderately decrease performance at Kokura Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200133",
+    "name": "Standard Distance ×",
+    "description": "Moderately decrease performance over standard distances (multiples of 400m).",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200143",
+    "name": "Non-Standard Distance ×",
+    "description": "Moderately decrease performance over non-standard distances (non-multiples of 400m).",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200153",
+    "name": "Firm Conditions ×",
+    "description": "Moderately decrease performance on firm ground.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200163",
+    "name": "Wet Conditions ×",
+    "description": "Moderately decrease performance on good, soft, and heavy ground.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200173",
+    "name": "Spring Runner ×",
+    "description": "Moderately decrease performance in spring.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200183",
+    "name": "Summer Runner ×",
+    "description": "Moderately decrease performance in summer.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200193",
+    "name": "Fall Runner ×",
+    "description": "Moderately decrease performance in fall.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200203",
+    "name": "Winter Runner ×",
+    "description": "Moderately decrease performance in winter.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200233",
+    "name": "Rainy Days ×",
+    "description": "Moderately decrease performance in rainy weather.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200253",
+    "name": "Inner Post Averseness",
+    "description": "Moderately decrease performance in brackets 1–3.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200263",
+    "name": "Outer Post Averseness",
+    "description": "Moderately decrease performance in brackets 6–8.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200283",
+    "name": "Wallflower",
+    "description": "Moderately decrease performance when many other runners are using the same strategy.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200311",
+    "name": "G1 Averseness",
+    "description": "Moderately decrease performance in G1 or otherwise important races.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200321",
+    "name": "Paddock Fright",
+    "description": "Moderately decrease performance when the favorite.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "200953",
+    "name": "Oi Racecourse ×",
+    "description": "Moderately decrease performance at Oi Racecourse.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "201801",
+    "name": "♡ 3D Nail Art",
+    "description": "Moderately decrease performance on firm ground.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": -129
+  },
+  {
+    "skill_id": "210051",
+    "name": "Burning Spirit WIT",
+    "description": "Burn bright with team spirit, increasing strategic navigation for a medium duration in proportion to the total Wit of racing team members early-race.",
+    "category": "wit",
+    "rarity": "rare",
+    "grade_value": 633
+  },
+  {
+    "skill_id": "200561",
+    "name": "Calm and Collected",
+    "description": "Decrease fatigue upon approaching mid-race. (Pace Chaser)",
+    "category": "wit",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200681",
+    "name": "Mile Maven",
+    "description": "Widen the margin when positioned toward the front early-race. (Mile)",
+    "category": "wit",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200691",
+    "name": "Keen Eye",
+    "description": "Decrease fatigue, then moderately decrease velocity of runners ahead when positioned toward the back upon approaching mid-race. (Mile)",
+    "category": "wit",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201011",
+    "name": "Adored by All",
+    "description": "Intimidate runners behind when positioned toward the front early-race. (Sprint)",
+    "category": "wit",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201021",
+    "name": "You've Got No Shot",
+    "description": "Cause panic in and moderately dull movement for runners ahead when positioned toward the back early-race. (Sprint)",
+    "category": "wit",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201091",
+    "name": "Battle Formation",
+    "description": "Dull movement for runners ahead when positioned toward the back early-race. (Mile)",
+    "category": "wit",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201691",
+    "name": "Lie in Wait",
+    "description": "Recover endurance when positioned toward the back upon approaching mid-race. (Late Surger)",
+    "category": "wit",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200431",
     "name": "Concentration",
-    "description": "Small speed boost when the pack bunches up.",
+    "description": "Decrease time lost to slow starts.",
+    "category": "wit",
+    "rarity": "rare",
+    "grade_value": 394
+  },
+  {
+    "skill_id": "200451",
+    "name": "Center Stage",
+    "description": "Greatly increase navigation early-race.",
+    "category": "wit",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "200531",
+    "name": "Taking the Lead",
+    "description": "Increase ability to go to the front early-race. (Front Runner)",
+    "category": "wit",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "201121",
+    "name": "Clairvoyance",
+    "description": "Widen field of view with heightened observation early-race. (Medium)",
+    "category": "wit",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "201261",
+    "name": "Sixth Sense",
+    "description": "Avoid becoming surrounded early-race. (Front Runner)",
+    "category": "wit",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "210052",
+    "name": "Ignited Spirit WIT",
+    "description": "Burn bright with team spirit, slightly increasing strategic navigation for a medium duration in proportion to the total Wit of racing team members early-race.",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 263
+  },
+  {
+    "skill_id": "201012",
+    "name": "Intimidate",
+    "description": "Moderately intimidate runners behind when positioned toward the front early-race. (Sprint)",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201022",
+    "name": "Stop Right There!",
+    "description": "Slightly cause panic in and very slightly dull movement for runners ahead when positioned toward the back early-race. (Sprint)",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "200532",
+    "name": "Early Lead",
+    "description": "Slightly increase ability to go to the front early-race. (Front Runner)",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200562",
+    "name": "Stamina to Spare",
+    "description": "Slightly decrease fatigue upon approaching mid-race. (Pace Chaser)",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200682",
+    "name": "Productive Plan",
+    "description": "Slightly widen the margin when positioned toward the front early-race. (Mile)",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200692",
+    "name": "Watchful Eye",
+    "description": "Slightly decrease fatigue, then very slightly decrease velocity of runners ahead when positioned toward the back upon approaching mid-race. (Mile)",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200831",
+    "name": "Subdued Front Runners",
+    "description": "Slightly increase fatigue for front runners early-race.",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200861",
+    "name": "Subdued Pace Chasers",
+    "description": "Slightly increase fatigue for pace chasers early-race.",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200891",
+    "name": "Subdued Late Surgers",
+    "description": "Slightly increase fatigue for late surgers early-race.",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200921",
+    "name": "Subdued End Closers",
+    "description": "Slightly increase fatigue for end closers early-race.",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201092",
+    "name": "Opening Gambit",
+    "description": "Slightly dull movement for runners ahead when positioned toward the back early-race. (Mile)",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201302",
+    "name": "Restart",
+    "description": "Slightly dull movement for runners ahead when not in the lead early-race. (Front Runner)",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201601",
+    "name": "Groundwork",
+    "description": "Slightly increase acceleration after activating many skills early-race.",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201692",
+    "name": "Be Still",
+    "description": "Slightly recover endurance when positioned toward the back upon approaching mid-race. (Late Surger)",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200432",
+    "name": "Focus",
+    "description": "Slightly decrease time lost to slow starts.",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200452",
+    "name": "Prudent Positioning",
+    "description": "Increase navigation early-race.",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "201122",
+    "name": "Hawkeye",
+    "description": "Moderately widen field of view with heightened observation early-race. (Medium)",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "201262",
+    "name": "Dodging Danger",
+    "description": "Moderately avoid becoming surrounded early-race. (Front Runner)",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "200433",
+    "name": "Gatekept",
+    "description": "Moderately increase time lost to slow starts.",
+    "category": "wit",
+    "rarity": "normal",
+    "grade_value": -174
+  },
+  {
+    "skill_id": "210011",
+    "name": "Burning Spirit SPD",
+    "description": "Burn bright with team spirit, increasing velocity in proportion to the total Speed of racing team members mid-race.",
     "category": "speed",
-    "stat_requirements": {"wit": 150},
-    "priority": 6
+    "rarity": "rare",
+    "grade_value": 633
+  },
+  {
+    "skill_id": "210021",
+    "name": "Burning Spirit STA",
+    "description": "Burn bright with team spirit, recovering endurance in proportion to the total Stamina of racing team members mid-race.",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 633
+  },
+  {
+    "skill_id": "200461",
+    "name": "It's On!",
+    "description": "Increase velocity when passing another runner mid-race.",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200471",
+    "name": "Indomitable",
+    "description": "Recover endurance when passed by another runner mid-race.",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200481",
+    "name": "Unruffled",
+    "description": "Recover endurance when surrounded mid-race.",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200541",
+    "name": "Escape Artist",
+    "description": "Increase ability to go to the front mid-race. (Front Runner)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200571",
+    "name": "Race Planner",
+    "description": "Decrease fatigue mid-race. (Pace Chaser)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200591",
+    "name": "Fast & Furious",
+    "description": "Increase velocity mid-race. (Late Surger)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200621",
+    "name": "Sleeping Lion",
+    "description": "Decrease fatigue mid-race. (End Closer)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200711",
+    "name": "Trackblazer",
+    "description": "Decrease fatigue when positioned toward the front mid-race. (Medium)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200721",
+    "name": "Killer Tunes",
+    "description": "Increase positioning ability when positioned toward the front mid-race. (Medium)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200772",
+    "name": "Tantalizing Trick",
+    "description": "Increase fatigue for rushed runners behind when positioned toward the front mid-race.",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200981",
+    "name": "Staggering Lead",
+    "description": "Increase ability to maintain the lead when leading by a large margin mid-race. (Sprint)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200991",
+    "name": "Plan X",
+    "description": "Increase passing ability when positioned toward the front upon approaching late-race. (Sprint)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201051",
+    "name": "Changing Gears",
+    "description": "Increase passing ability when positioned toward the front mid-race. (Mile)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201061",
+    "name": "Step on the Gas!",
+    "description": "Increase acceleration when passing another runner mid-race. (Mile)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201161",
+    "name": "Mystifying Murmur",
+    "description": "Disturb runners directly ahead mid-race. (Medium)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201191",
+    "name": "Vanguard Spirit",
+    "description": "Increase ability to maintain the lead when leading by a fair margin mid-race. (Long)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201291",
+    "name": "Reignition",
+    "description": "Increase acceleration when not in the lead mid-race. (Front Runner)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201351",
+    "name": "Gourmand",
+    "description": "Recover endurance mid-race. (Pace Chaser)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201612",
+    "name": "Tail Nine",
+    "description": "Increase velocity after activating many skills mid-race.",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201671",
+    "name": "Trending in the Charts!",
+    "description": "Increase velocity when engaged in a challenge mid-race. (Dirt)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "202011",
+    "name": "Headliner",
+    "description": "Increase velocity when positioned toward the front upon approaching late-race. (Long)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "202021",
+    "name": "Daring Strike",
+    "description": "Moderately increase velocity for a medium duration when positioned toward the back mid-race. (End Closer)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "202041",
+    "name": "In High Spirits",
+    "description": "Increase velocity when positioned toward the front upon approaching late-race. (Sprint)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201081",
+    "name": "Greed for Speed",
+    "description": "Moderately steal velocity from runners behind when positioned toward the front mid-race. (Mile)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 461
+  },
+  {
+    "skill_id": "201221",
+    "name": "Stamina Siphon",
+    "description": "Slightly steal endurance from runners ahead when positioned toward the back mid-race. (Long)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 461
+  },
+  {
+    "skill_id": "201001",
+    "name": "Perfect Prep!",
+    "description": "Prepare to make for the finish line for a medium duration mid-race. (Sprint)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 394
+  },
+  {
+    "skill_id": "201131",
+    "name": "Lightning Step",
+    "description": "Avoid becoming surrounded for a medium duration when positioned toward the back mid-race. (Medium)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 394
+  },
+  {
+    "skill_id": "201361",
+    "name": "Shatterproof",
+    "description": "Moderately increase acceleration when positioned toward the back mid-race. (Pace Chaser)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "201431",
+    "name": "The Bigger Picture",
+    "description": "Widen field of view with heightened observation mid-race. (Late Surger)",
+    "category": "speed",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "210012",
+    "name": "Ignited Spirit SPD",
+    "description": "Burn bright with team spirit, slightly increasing velocity in proportion to the total Speed of racing team members mid-race.",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 263
+  },
+  {
+    "skill_id": "210022",
+    "name": "Ignited Spirit STA",
+    "description": "Burn bright with team spirit, slightly recovering endurance in proportion to the total Stamina of racing team members mid-race.",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 263
+  },
+  {
+    "skill_id": "200982",
+    "name": "Huge Lead",
+    "description": "Slightly increase ability to maintain the lead when leading by a large margin mid-race. (Sprint)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "200462",
+    "name": "Ramp Up",
+    "description": "Slightly increase velocity when passing another runner mid-race.",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200472",
+    "name": "Pace Strategy",
+    "description": "Slightly recover endurance when passed by another runner mid-race.",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200482",
+    "name": "Calm in a Crowd",
+    "description": "Slightly recover endurance when surrounded mid-race.",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200542",
+    "name": "Fast-Paced",
+    "description": "Slightly increase ability to go to the front mid-race. (Front Runner)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200572",
+    "name": "Preferred Position",
+    "description": "Slightly decrease fatigue mid-race. (Pace Chaser)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200592",
+    "name": "Position Pilfer",
+    "description": "Slightly increase velocity mid-race. (Late Surger)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200622",
+    "name": "Standing By",
+    "description": "Slightly decrease fatigue mid-race. (End Closer)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200662",
+    "name": "Wait-and-See",
+    "description": "Slightly decrease fatigue and very slightly increase acceleration when positioned toward the back mid-race. (Sprint)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200712",
+    "name": "Rosy Outlook",
+    "description": "Slightly decrease fatigue when positioned toward the front mid-race. (Medium)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200722",
+    "name": "Up-Tempo",
+    "description": "Slightly increase positioning ability when positioned toward the front mid-race. (Medium)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200771",
+    "name": "Trick (Front)",
+    "description": "Slightly increase fatigue for rushed runners behind when positioned toward the front mid-race.",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200781",
+    "name": "Trick (Rear)",
+    "description": "Slightly increase fatigue for rushed runners ahead when positioned toward the back mid-race.",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200841",
+    "name": "Flustered Front Runners",
+    "description": "Slightly increase fatigue for front runners mid-race.",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200871",
+    "name": "Flustered Pace Chasers",
+    "description": "Slightly increase fatigue for pace chasers mid-race.",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200901",
+    "name": "Flustered Late Surgers",
+    "description": "Slightly increase fatigue for late surgers mid-race.",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200931",
+    "name": "Flustered End Closers",
+    "description": "Slightly increase fatigue for end closers mid-race.",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200992",
+    "name": "Countermeasure",
+    "description": "Slightly increase passing ability when positioned toward the front upon approaching late-race. (Sprint)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201052",
+    "name": "Shifting Gears",
+    "description": "Slightly increase passing ability when positioned toward the front mid-race. (Mile)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201062",
+    "name": "Acceleration",
+    "description": "Slightly increase acceleration when passing another runner mid-race. (Mile)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201082",
+    "name": "Speed Eater",
+    "description": "Slightly steal velocity from runners behind when positioned toward the front mid-race. (Mile)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201162",
+    "name": "Murmur",
+    "description": "Slightly disturb runners directly ahead mid-race. (Medium)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201192",
+    "name": "Keeping the Lead",
+    "description": "Slightly increase ability to maintain the lead when leading by a fair margin mid-race. (Long)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201222",
+    "name": "Stamina Eater",
+    "description": "Very slightly steal endurance from runners ahead when positioned toward the back mid-race. (Long)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201292",
+    "name": "Second Wind",
+    "description": "Slightly increase acceleration when not in the lead mid-race. (Front Runner)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201352",
+    "name": "Hydrate",
+    "description": "Slightly recover endurance mid-race. (Pace Chaser)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201362",
+    "name": "Tactical Tweak",
+    "description": "Slightly increase acceleration when positioned toward the back mid-race. (Pace Chaser)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201611",
+    "name": "Tail Held High",
+    "description": "Slightly increase velocity after activating many skills mid-race.",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201672",
+    "name": "Top Pick",
+    "description": "Slightly increase velocity when engaged in a challenge mid-race. (Dirt)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "202002",
+    "name": "Familiar Ground",
+    "description": "Slightly recover endurance when positioned toward the back mid-race. (Dirt)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "202012",
+    "name": "Feature Act",
+    "description": "Slightly increase velocity when positioned toward the front upon approaching late-race. (Long)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "202022",
+    "name": "Early Start",
+    "description": "Very slightly increase velocity for a medium duration when positioned toward the back mid-race. (End Closer)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "202042",
+    "name": "Light as a Feather",
+    "description": "Slightly increase velocity when positioned toward the front upon approaching late-race. (Sprint)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201002",
+    "name": "Meticulous Measures",
+    "description": "Moderately prepare to make for the finish line for a medium duration mid-race. (Sprint)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "201132",
+    "name": "Thunderbolt Step",
+    "description": "Moderately avoid becoming surrounded for a medium duration when positioned toward the back mid-race. (Medium)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "201432",
+    "name": "Studious",
+    "description": "Slightly widen field of view with heightened observation mid-race. (Late Surger)",
+    "category": "speed",
+    "rarity": "normal",
+    "grade_value": 85
+  },
+  {
+    "skill_id": "210031",
+    "name": "Burning Spirit PWR",
+    "description": "Burn bright with team spirit, increasing acceleration in proportion to the total Power of racing team members late-race.",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 633
+  },
+  {
+    "skill_id": "210041",
+    "name": "Burning Spirit GUTS",
+    "description": "Burn bright with team spirit, increasing vigor in proportion to the total Guts of racing team members late-race.",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 633
+  },
+  {
+    "skill_id": "200511",
+    "name": "In Body and Mind",
+    "description": "Increase velocity in the last spurt.",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200551",
+    "name": "Unrestrained",
+    "description": "Increase ability to keep the lead on the final corner. (Front Runner)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200581",
+    "name": "Speed Star",
+    "description": "Increase ability to break out of the pack on the final corner. (Pace Chaser)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200601",
+    "name": "On Your Left!",
+    "description": "Increase acceleration late-race. (Late Surger)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200611",
+    "name": "Rising Dragon",
+    "description": "Increase velocity when passing another runner on the outside on the final corner. (Late Surger)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200631",
+    "name": "Sturm und Drang",
+    "description": "Move up in preparation to close the gap when positioned toward the back late-race. (End Closer)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200641",
+    "name": "Encroaching Shadow",
+    "description": "Increase acceleration on a straight in the last spurt. (End Closer)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200671",
+    "name": "Blinding Flash",
+    "description": "Increase spurting ability when positioned toward the back late-race. (Sprint)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200701",
+    "name": "Furious Feat",
+    "description": "Increase passing ability when positioned toward the back late-race. (Mile)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200731",
+    "name": "Unyielding",
+    "description": "Increase ability to fight back when passed by another runner on the final corner. (Medium)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200751",
+    "name": "Innate Experience",
+    "description": "Increase velocity when near the inner rail on the final corner. (Long)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201151",
+    "name": "Dominator",
+    "description": "Decrease velocity of runners ahead when positioned toward the back late-race. (Medium)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201211",
+    "name": "Overwhelming Pressure",
+    "description": "Increase velocity when passing another runner late-race. (Long)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201421",
+    "name": "Relax",
+    "description": "Recover endurance late-race. (Late Surger)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201441",
+    "name": "All-Seeing Eyes",
+    "description": "Startle other runners late-race. (Late Surger)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201511",
+    "name": "Petrifying Gaze",
+    "description": "Unnerve runners in focus late-race. (End Closer)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201701",
+    "name": "Come What May",
+    "description": "Increase velocity when well-positioned on a straight in the last spurt. (Medium)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200491",
+    "name": "No Stopping Me!",
+    "description": "Increase maneuverability when the way ahead is blocked in the last spurt.",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 394
+  },
+  {
+    "skill_id": "201681",
+    "name": "Lead the Charge!",
+    "description": "Prepare to aim for the front late-race. (Dirt)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 394
+  },
+  {
+    "skill_id": "200501",
+    "name": "Lane Legerdemain",
+    "description": "Increase navigation late-race.",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "201231",
+    "name": "Illusionist",
+    "description": "Narrow the field of view for runners ahead late-race. (Long)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "201371",
+    "name": "Dazzling Disorientation",
+    "description": "Moderately narrow the field of view for runners behind when positioned toward the front late-race. (Pace Chaser)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "201501",
+    "name": "Crusader",
+    "description": "Widen field of view when positioned toward the back late-race. (End Closer)",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "210032",
+    "name": "Ignited Spirit PWR",
+    "description": "Burn bright with team spirit, slightly increasing acceleration in proportion to the total Power of racing team members late-race.",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 263
+  },
+  {
+    "skill_id": "210042",
+    "name": "Ignited Spirit GUTS",
+    "description": "Burn bright with team spirit, very slightly increasing vigor in proportion to the total Guts of racing team members late-race.",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 263
+  },
+  {
+    "skill_id": "200512",
+    "name": "Homestretch Haste",
+    "description": "Slightly increase velocity in the last spurt.",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200552",
+    "name": "Final Push",
+    "description": "Slightly increase ability to keep the lead on the final corner. (Front Runner)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200582",
+    "name": "Prepared to Pass",
+    "description": "Slightly increase ability to break out of the pack on the final corner. (Pace Chaser)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200602",
+    "name": "Slick Surge",
+    "description": "Slightly increase acceleration late-race. (Late Surger)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200612",
+    "name": "Outer Swell",
+    "description": "Slightly increase velocity when passing another runner on the outside on the final corner. (Late Surger)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200632",
+    "name": "Masterful Gambit",
+    "description": "Slightly move up in preparation to close the gap when positioned toward the back late-race. (End Closer)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200642",
+    "name": "Straightaway Spurt",
+    "description": "Slightly increase acceleration on a straight in the last spurt. (End Closer)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200672",
+    "name": "Gap Closer",
+    "description": "Slightly increase spurting ability when positioned toward the back late-race. (Sprint)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200702",
+    "name": "Updrafters",
+    "description": "Slightly increase passing ability when positioned toward the back late-race. (Mile)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200732",
+    "name": "Steadfast",
+    "description": "Slightly increase ability to fight back when passed by another runner on the final corner. (Medium)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200752",
+    "name": "Inside Scoop",
+    "description": "Slightly increase velocity when near the inner rail on the final corner. (Long)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200851",
+    "name": "Hesitant Front Runners",
+    "description": "Slightly decrease velocity of front runners late-race.",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200881",
+    "name": "Hesitant Pace Chasers",
+    "description": "Slightly decrease velocity of pace chasers late-race.",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200911",
+    "name": "Hesitant Late Surgers",
+    "description": "Slightly decrease velocity of late surgers late-race.",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200941",
+    "name": "Hesitant End Closers",
+    "description": "Slightly decrease velocity of end closers late-race.",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201152",
+    "name": "Tether",
+    "description": "Slightly decrease velocity of runners ahead when positioned toward the back late-race. (Medium)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201212",
+    "name": "Pressure",
+    "description": "Slightly increase velocity when passing another runner late-race. (Long)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201422",
+    "name": "A Small Breather",
+    "description": "Slightly recover endurance late-race. (Late Surger)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201442",
+    "name": "Sharp Gaze",
+    "description": "Slightly startle other runners late-race. (Late Surger)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201512",
+    "name": "Intense Gaze",
+    "description": "Slightly unnerve runners in focus late-race. (End Closer)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201621",
+    "name": "Shake It Out",
+    "description": "Slightly recover endurance after activating many skills late-race.",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201702",
+    "name": "All I've Got",
+    "description": "Slightly increase velocity when well-positioned on a straight in the last spurt. (Medium)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201902",
+    "name": "Head-On",
+    "description": "Slightly increase acceleration when positioned toward the front late-race. (Pace Chaser)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200492",
+    "name": "Nimble Navigator",
+    "description": "Slightly increase maneuverability when the way ahead is blocked in the last spurt.",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "201682",
+    "name": "Forward, March!",
+    "description": "Moderately prepare to aim for the front late-race. (Dirt)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200502",
+    "name": "Go with the Flow",
+    "description": "Moderately increase navigation late-race.",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "201232",
+    "name": "Smoke Screen",
+    "description": "Moderately narrow the field of view for runners ahead late-race. (Long)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "201372",
+    "name": "Disorient",
+    "description": "Slightly narrow the field of view for runners behind when positioned toward the front late-race. (Pace Chaser)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 85
+  },
+  {
+    "skill_id": "201502",
+    "name": "Strategist",
+    "description": "Slightly widen field of view when positioned toward the back late-race. (End Closer)",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": 85
+  },
+  {
+    "skill_id": "300061",
+    "name": "Dream Run",
+    "description": "Increase velocity on the final straight due to a strong desire to cross the finish line carrying everyone's hopes and dreams.",
+    "category": "power",
+    "rarity": "rare",
+    "grade_value": 0
+  },
+  {
+    "skill_id": "200411",
+    "name": "Defeatist",
+    "description": "Moderately increase urge to give up when positioned around the very back on the final straight.",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": -262
+  },
+  {
+    "skill_id": "200421",
+    "name": "Reckless",
+    "description": "Moderately increase carelessness when in the lead with around 200m remaining.",
+    "category": "power",
+    "rarity": "normal",
+    "grade_value": -262
+  },
+  {
+    "skill_id": "210061",
+    "name": "Radiant Star",
+    "description": "Control breathing and kick forward in the second half of the race. Effect is increased in proportion to number of career wins.",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 633
+  },
+  {
+    "skill_id": "200331",
+    "name": "Professor of Curvature",
+    "description": "Increase velocity on a corner with skilled turning.",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200341",
+    "name": "Corner Connoisseur",
+    "description": "Increase acceleration on a corner with masterful turning.",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200351",
+    "name": "Swinging Maestro",
+    "description": "Recover endurance on a corner with efficient turning.",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200361",
+    "name": "Beeline Burst",
+    "description": "Increase velocity on a straight.",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200371",
+    "name": "Rushing Gale!",
+    "description": "Increase acceleration on a straight.",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200381",
+    "name": "Breath of Fresh Air",
+    "description": "Recover endurance on a straight.",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200441",
+    "name": "Iron Will",
+    "description": "Recover endurance when the way ahead is jammed early-race or mid-race.",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200651",
+    "name": "Turbo Sprint",
+    "description": "Increase acceleration on a straight. (Sprint)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200741",
+    "name": "Cooldown",
+    "description": "Decrease fatigue by taking a breather upon entering a straight. (Long)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "200761",
+    "name": "Adrenaline Rush",
+    "description": "Regain the energy to run when close to exhausting strength. (Long)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201103",
+    "name": "Flash Forward",
+    "description": "Increase velocity on a straight. (Medium)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201141",
+    "name": "Miraculous Step",
+    "description": "Decrease fatigue when moving sideways. (Medium)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201173",
+    "name": "Blast Forward",
+    "description": "Increase velocity on a straight. (Long)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201201",
+    "name": "VIP Pass",
+    "description": "Decrease fatigue when determined to pass another runner. (Long)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201281",
+    "name": "Restless",
+    "description": "Reduce fatigue on an uphill. (Front Runner)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201481",
+    "name": "Go-Home Specialist",
+    "description": "Reduce fatigue on a downhill. (End Closer)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201491",
+    "name": "Serenity",
+    "description": "Regain composure by calming down when the way ahead is jammed. (End Closer)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201592",
+    "name": "Superstan",
+    "description": "Increase velocity when close to many runners.",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 508
+  },
+  {
+    "skill_id": "201071",
+    "name": "Big-Sisterly",
+    "description": "Increase passing ability. (Mile)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "201331",
+    "name": "Technician",
+    "description": "Moderately increase ability to navigate smoothly. (Pace Chaser)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "201341",
+    "name": "Determined Descent",
+    "description": "Moderately improve running on a downhill. (Pace Chaser)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "201401",
+    "name": "Hard Worker",
+    "description": "Moderately increase acceleration for a medium duration when trying to pass another runner. (Late Surger)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "201411",
+    "name": "15,000,000 CC",
+    "description": "Increase velocity on an uphill. (Late Surger)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "201471",
+    "name": "The Coast Is Clear!",
+    "description": "Moderately widen field of view with situational awareness when moving sideways. (End Closer)",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "202031",
+    "name": "Nothing Ventured",
+    "description": "Greatly increase velocity in the second half of the race, but also greatly increase fatigue sometimes.",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 334
+  },
+  {
+    "skill_id": "210062",
+    "name": "Glittering Star",
+    "description": "Very slightly control breathing and kick forward in the second half of the race. Effect is increased in proportion to number of career wins.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 263
+  },
+  {
+    "skill_id": "200961",
+    "name": "Sprint Straightaways ◎",
+    "description": "Moderately increase velocity on a straight. (Sprint)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "200971",
+    "name": "Sprint Corners ◎",
+    "description": "Moderately increase velocity on a corner. (Sprint)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201031",
+    "name": "Mile Straightaways ◎",
+    "description": "Moderately increase velocity on a straight. (Mile)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201041",
+    "name": "Mile Corners ◎",
+    "description": "Moderately increase velocity on a corner. (Mile)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201101",
+    "name": "Medium Straightaways ◎",
+    "description": "Moderately increase velocity on a straight. (Medium)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201111",
+    "name": "Medium Corners ◎",
+    "description": "Moderately increase velocity on a corner. (Medium)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201171",
+    "name": "Long Straightaways ◎",
+    "description": "Moderately increase velocity on a straight. (Long)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201181",
+    "name": "Long Corners ◎",
+    "description": "Moderately increase velocity on a corner. (Long)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201241",
+    "name": "Front Runner Straightaways ◎",
+    "description": "Moderately increase velocity on a straight. (Front Runner)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201251",
+    "name": "Front Runner Corners ◎",
+    "description": "Moderately increase velocity on a corner. (Front Runner)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201311",
+    "name": "Pace Chaser Straightaways ◎",
+    "description": "Moderately increase velocity on a straight. (Pace Chaser)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201321",
+    "name": "Pace Chaser Corners ◎",
+    "description": "Moderately increase velocity on a corner. (Pace Chaser)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201381",
+    "name": "Late Surger Straightaways ◎",
+    "description": "Moderately increase velocity on a straight. (Late Surger)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201391",
+    "name": "Late Surger Corners ◎",
+    "description": "Moderately increase velocity on a corner. (Late Surger)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201451",
+    "name": "End Closer Straightaways ◎",
+    "description": "Moderately increase velocity on a straight. (End Closer)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "201461",
+    "name": "End Closer Corners ◎",
+    "description": "Moderately increase velocity on a corner. (End Closer)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 262
+  },
+  {
+    "skill_id": "200332",
+    "name": "Corner Adept ○",
+    "description": "Slightly increase velocity on a corner with skilled turning.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200342",
+    "name": "Corner Acceleration ○",
+    "description": "Slightly increase acceleration on a corner with masterful turning.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200352",
+    "name": "Corner Recovery ○",
+    "description": "Slightly recover endurance on a corner with efficient turning.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200362",
+    "name": "Straightaway Adept",
+    "description": "Slightly increase velocity on a straight.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200372",
+    "name": "Straightaway Acceleration",
+    "description": "Slightly increase acceleration on a straight.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200382",
+    "name": "Straightaway Recovery",
+    "description": "Slightly recover endurance on a straight.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200442",
+    "name": "Lay Low",
+    "description": "Slightly recover endurance when the way ahead is jammed early-race or mid-race.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200652",
+    "name": "Sprinting Gear",
+    "description": "Slightly increase acceleration on a straight. (Sprint)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200742",
+    "name": "Deep Breaths",
+    "description": "Slightly decrease fatigue by taking a breather upon entering a straight. (Long)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200762",
+    "name": "Extra Tank",
+    "description": "Slightly regain the energy to run when close to exhausting strength. (Long)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200962",
+    "name": "Sprint Straightaways ○",
+    "description": "Slightly increase velocity on a straight. (Sprint)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200972",
+    "name": "Sprint Corners ○",
+    "description": "Slightly increase velocity on a corner. (Sprint)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201032",
+    "name": "Mile Straightaways ○",
+    "description": "Slightly increase velocity on a straight. (Mile)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201042",
+    "name": "Mile Corners ○",
+    "description": "Slightly increase velocity on a corner. (Mile)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201072",
+    "name": "Unyielding Spirit",
+    "description": "Slightly increase passing ability. (Mile)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201102",
+    "name": "Medium Straightaways ○",
+    "description": "Slightly increase velocity on a straight. (Medium)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201112",
+    "name": "Medium Corners ○",
+    "description": "Slightly increase velocity on a corner. (Medium)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201142",
+    "name": "Soft Step",
+    "description": "Slightly decrease fatigue when moving sideways. (Medium)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201172",
+    "name": "Long Straightaways ○",
+    "description": "Slightly increase velocity on a straight. (Long)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201182",
+    "name": "Long Corners ○",
+    "description": "Slightly increase velocity on a corner. (Long)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201202",
+    "name": "Passing Pro",
+    "description": "Slightly decrease fatigue when determined to pass another runner. (Long)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201242",
+    "name": "Front Runner Straightaways ○",
+    "description": "Slightly increase velocity on a straight. (Front Runner)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201252",
+    "name": "Front Runner Corners ○",
+    "description": "Slightly increase velocity on a corner. (Front Runner)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201272",
+    "name": "Leader's Pride",
+    "description": "Slightly increase ability to pass or challenge another runner early-race or mid-race. (Front Runner)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201282",
+    "name": "Moxie",
+    "description": "Slightly reduce fatigue on an uphill. (Front Runner)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201312",
+    "name": "Pace Chaser Straightaways ○",
+    "description": "Slightly increase velocity on a straight. (Pace Chaser)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201322",
+    "name": "Pace Chaser Corners ○",
+    "description": "Slightly increase velocity on a corner. (Pace Chaser)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201332",
+    "name": "Shrewd Step",
+    "description": "Slightly increase ability to navigate smoothly. (Pace Chaser)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201342",
+    "name": "Straight Descent",
+    "description": "Slightly improve running on a downhill. (Pace Chaser)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201382",
+    "name": "Late Surger Straightaways ○",
+    "description": "Slightly increase velocity on a straight. (Late Surger)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201392",
+    "name": "Late Surger Corners ○",
+    "description": "Slightly increase velocity on a corner. (Late Surger)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201402",
+    "name": "Fighter",
+    "description": "Slightly increase acceleration for a medium duration when trying to pass another runner. (Late Surger)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201412",
+    "name": "1,500,000 CC",
+    "description": "Slightly increase velocity on an uphill. (Late Surger)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201452",
+    "name": "End Closer Straightaways ○",
+    "description": "Slightly increase velocity on a straight. (End Closer)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201462",
+    "name": "End Closer Corners ○",
+    "description": "Slightly increase velocity on a corner. (End Closer)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201482",
+    "name": "After-School Stroll",
+    "description": "Slightly reduce fatigue on a downhill. (End Closer)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201492",
+    "name": "Levelheaded",
+    "description": "Slightly regain composure by calming down when the way ahead is jammed. (End Closer)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201571",
+    "name": "Triple 7s",
+    "description": "Slightly gain energy with 777m remaining.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201581",
+    "name": "Highlander",
+    "description": "Slightly improve running on an uphill.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201591",
+    "name": "Uma Stan",
+    "description": "Slightly increase velocity when close to many runners.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201651",
+    "name": "Slipstream",
+    "description": "Slightly decrease wind resistance when following directly behind another runner.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "201661",
+    "name": "Playtime's Over!",
+    "description": "Slightly increase velocity when followed by another runner directly behind for a long time.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 217
+  },
+  {
+    "skill_id": "200791",
+    "name": "Frenzied Front Runners",
+    "description": "Increase time needed for front runners to calm down when they become rushed.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200801",
+    "name": "Frenzied Pace Chasers",
+    "description": "Increase time needed for pace chasers to calm down when they become rushed.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200811",
+    "name": "Frenzied Late Surgers",
+    "description": "Increase time needed for late surgers to calm down when they become rushed.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "200821",
+    "name": "Frenzied End Closers",
+    "description": "Increase time needed for end closers to calm down when they become rushed.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 174
+  },
+  {
+    "skill_id": "202032",
+    "name": "Risky Business",
+    "description": "Moderately increase velocity in the second half of the race, but also greatly increase fatigue sometimes.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 129
+  },
+  {
+    "skill_id": "201472",
+    "name": "I Can See Right Through You",
+    "description": "Slightly widen field of view with situational awareness when moving sideways. (End Closer)",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": 85
+  },
+  {
+    "skill_id": "300051",
+    "name": "Blatant Fear",
+    "description": "Greatly decrease velocity on a corner in the second half of the race due to Trainer's obvious anxiety.",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 0
+  },
+  {
+    "skill_id": "300101",
+    "name": "Cheers of a Fellow Dreamer",
+    "description": "Recover Silence Suzuka's endurance on a corner in the second half of the race through a friend's cheers of support.",
+    "category": "stamina",
+    "rarity": "rare",
+    "grade_value": 0
+  },
+  {
+    "skill_id": "200333",
+    "name": "Corner Adept ×",
+    "description": "Moderately decrease velocity on a corner with clumsy turning.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": -262
+  },
+  {
+    "skill_id": "200343",
+    "name": "Corner Acceleration ×",
+    "description": "Moderately decrease acceleration on a corner with awkward turning.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": -262
+  },
+  {
+    "skill_id": "200353",
+    "name": "Corner Recovery ×",
+    "description": "Moderately lose endurance on a corner with inefficient turning.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": -262
+  },
+  {
+    "skill_id": "200391",
+    "name": "Ramp Revulsion",
+    "description": "Moderately increase fatigue on an uphill.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": -262
+  },
+  {
+    "skill_id": "200401",
+    "name": "Packphobia",
+    "description": "Moderately lose endurance when surrounded.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": -262
+  },
+  {
+    "skill_id": "200521",
+    "name": "Running Idle",
+    "description": "Moderately increase fatigue when in the lead by too large of a margin.",
+    "category": "stamina",
+    "rarity": "normal",
+    "grade_value": -262
+  },
+  {
+    "skill_id": "100011",
+    "name": "Shooting Star",
+    "description": "Ride the momentum to increase velocity and very slightly increase acceleration after passing another runner toward the front late-race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100021",
+    "name": "The View from the Lead Is Mine!",
+    "description": "Increase velocity by drawing on all remaining strength when in the lead by a fair margin in the second half of the race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100031",
+    "name": "Sky-High Teio Step",
+    "description": "Greatly increase velocity with flashy footwork when closing the gap to runners ahead on the final straight.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100041",
+    "name": "Red Shift/LP1211-M",
+    "description": "Increase acceleration by shifting gears when positioned toward the front on the final corner or later.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100051",
+    "name": "Lights of Vaudeville",
+    "description": "Greatly increase velocity with a dazzling display when just breaking out of the pack toward the front on the final straight.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100061",
+    "name": "Triumphant Pulse",
+    "description": "Greatly increase ability to break out of the pack by opening up a path when positioned toward the front with 200m remaining.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100071",
+    "name": "Anchors Aweigh!",
+    "description": "Moderately increase velocity steadily with a long spurt starting halfway through the race.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100081",
+    "name": "Cut and Drive!",
+    "description": "Become stronger at challenging rivals and increase velocity when positioned toward the front with 200m or less remaining.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100091",
+    "name": "Resplendent Red Ace",
+    "description": "Swell with the determination to be number one when positioned toward the front in the second half of the race.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100101",
+    "name": "Shooting for Victory!",
+    "description": "Increase acceleration with a pow, a wow, and a bang when well-positioned upon approaching the final straight.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100111",
+    "name": "Where There's a Will, There's a Way",
+    "description": "Increase velocity with a strong turn of foot when passing another runner toward the back on the final straight.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100121",
+    "name": "You and Me! One-on-One!",
+    "description": "Increase velocity on the final straight after passing another runner on the outside toward the back on the final corner or later.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100131",
+    "name": "The Duty of Dignity Calls",
+    "description": "Increase velocity with the determination to not be overtaken when positioned toward the front on the final corner.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100141",
+    "name": "Victoria por plancha ☆",
+    "description": "Hang onto the advantage when positioned toward the front with energy to spare on the final straight.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100151",
+    "name": "This Dance Is for Vittoria!",
+    "description": "Increase velocity with royal brilliance when positioned toward the front and close to the runner ahead or behind on the final corner or later.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100161",
+    "name": "Shadow Break",
+    "description": "Increase velocity with beastly strength when passing another runner on the outside on the final corner or later. If the skill user engaged in a challenge mid-race, greatly increase velocity instead.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100171",
+    "name": "Behold Thine Emperor's Divine Might",
+    "description": "Greatly increase velocity on the final straight after passing another runner 3 times late-race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100181",
+    "name": "Blazing Pride",
+    "description": "Increase velocity with the stride of an empress when passing another runner from midpack or further back on the final corner.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100191",
+    "name": "OMG! (ﾟ∀ﾟ)  The Final Sprint! ☆",
+    "description": "Increase velocity and navigation with the pure euphoria of being within breathing distance of precious waifus after passing another runner 2 times late-race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100201",
+    "name": "Angling and Scheming",
+    "description": "Increase acceleration at an opportune moment when in the lead on a corner late-race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100211",
+    "name": "White Lightning Comin' Through!",
+    "description": "Bolt down the track like lightning when well-positioned or aiming for the front from midpack on a straight in the second half of the race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100221",
+    "name": "Fairy Tale",
+    "description": "Increase velocity with the excitement of running when engaged in a challenge while well-positioned in the second half of the race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100231",
+    "name": "∴win Q.E.D.",
+    "description": "Increase velocity by deriving the winning equation when passing another runner toward the front on the final corner or later.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100241",
+    "name": "Flashy☆Landing",
+    "description": "Increase ability to break out of the pack on the straight after engaging in a challenge toward the front on the final corner or later.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100251",
+    "name": "Chasing After You",
+    "description": "Chase after an unseen friend when in midpack in the second half of the race, moderately increasing velocity steadily and very slightly intimidating runners ahead.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100261",
+    "name": "G00 1st. F∞;",
+    "description": "Increase velocity when positioned toward the front after making it to the final straight without faltering.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100271",
+    "name": "Let's Pump Some Iron!",
+    "description": "Increase acceleration in an attempt to move up on a corner late-race.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100281",
+    "name": "YUMMY☆SPEED!",
+    "description": "Kick forward hard with renewed vigor when starting to get tired while well-positioned halfway through the race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100301",
+    "name": "Blue Rose Closer",
+    "description": "Increase velocity with strong willpower on the final straight after passing another runner in the front part of the pack on the final corner or later.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100321",
+    "name": "U=ma2",
+    "description": "Recover endurance and moderately increase velocity for a moderate duration when sitting off the pace on a corner in the second half of the race.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100331",
+    "name": "Shooting Star of Dioskouroi",
+    "description": "Increase velocity with guidance from the stars when far from the lead on the final straight. If positioned around the very back, greatly increase velocity instead.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100351",
+    "name": "Our Ticket to Win!",
+    "description": "Increase velocity with winning ambition when positioned toward the front on the final straight after engaging in a challenge on the final corner or later.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100371",
+    "name": "Schwarzes Schwert",
+    "description": "Increase velocity in a dash for the lead after running calmly and according to plan up until the final straight.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100381",
+    "name": "#LookatCurren",
+    "description": "Gain momentum and begin to advance when passing another runner while well-positioned around halfway through the race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100391",
+    "name": "A Princess Must Seize Victory!",
+    "description": "Increase velocity with pretty princess power when engaged in a challenge on the final straight.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100401",
+    "name": "KEEP IT REAL.",
+    "description": "Moderately increase acceleration steadily with a wink when starting to make a move from midpack in the second half of the race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100411",
+    "name": "Genius x Bakushin = Victory",
+    "description": "Increase velocity with BAKUSHIN power when engaged in a challenge toward the front in the second half of the race.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100451",
+    "name": "Pure Heart",
+    "description": "Greatly recover endurance when well-positioned mid-race.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100461",
+    "name": "SPARKLY☆STARDOM",
+    "description": "Become empowered to keep the spotlight when positioned toward the front and close to the runner behind on a straight mid-race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100481",
+    "name": "Pop & Polish",
+    "description": "Get hyped and increase velocity when pressured by or passing another runner while well-positioned on the final straight.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100501",
+    "name": "Nemesis",
+    "description": "Increase velocity with smoldering ambition when moving up from midpack on the final corner or later.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100521",
+    "name": "Super-Duper Climax",
+    "description": "Recover endurance with a glance at nearby runners when positioned toward the back on the final corner.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100561",
+    "name": "I See Victory in My Future!",
+    "description": "Clear a path forward with the power of divination when the way ahead is jammed late-race.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100581",
+    "name": "I Never Goof Up!",
+    "description": "Aim for the front with unwavering determination when passing another runner from midpack or further back on a corner late-race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100591",
+    "name": "Moving Past, and Beyond",
+    "description": "Having run the race calmly, increase acceleration with hardened determination when making a move mid-race, or on a crucial corner late-race whilst in midpack.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100601",
+    "name": "Just a Little Farther!",
+    "description": "Increase velocity with flaring fighting spirit when positioned 3rd and about to lose late-race.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100611",
+    "name": "Prideful King",
+    "description": "Greatly increase velocity in a true display of skill with 200m remaining after racing calmly.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100621",
+    "name": "Go, Go, Mun!",
+    "description": "Recover endurance and moderately increase velocity with newfound resolve when in midpack around halfway through the race.",
+    "category": "unique",
+    "rarity": "evolved",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100671",
+    "name": "Eternal Encompassing Shine",
+    "description": "If well-positioned at the start of the final straight, her strong willpower to win increases velocity. If positioned near the front, greatly increase velocity instead.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100681",
+    "name": "Victory Cheer!",
+    "description": "Moderately increase velocity when positioned toward the front on the third corner in the second half of the race. Or, kick forward hard when toward the front on the backstretch late-race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100691",
+    "name": "Ambition to Surpass the Sakura",
+    "description": "Increase velocity with blossoming ambition when well-positioned and close to the runner ahead with 300m or less remaining.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "100711",
+    "name": "A Lifelong Dream, A Moment's Flight",
+    "description": "Seize the moment when close to the runner behind on the final straight, slightly consuming endurance to greatly increase velocity for a moderate duration.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110011",
+    "name": "Dazzl'n ♪ Diver",
+    "description": "Recover endurance by relaxing after activating 2 skills when positioned midpack mid-race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110031",
+    "name": "Certain Victory",
+    "description": "Greatly increase velocity with an indomitable fighting spirit on the final straight after being on the heels of another runner toward the front on the final corner or later.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110041",
+    "name": "A Kiss for Courage",
+    "description": "Increase velocity enthusiastically when positioned toward the front in the second half of the race after recovering endurance with a skill.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110061",
+    "name": "Festive Miracle",
+    "description": "Control breathing and kick forward hard toward victory in the second half of the race after recovering endurance with skills at least 3 times.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110111",
+    "name": "Superior Heal",
+    "description": "Greatly recover endurance with a gentle light when overtaken toward the back mid-race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110131",
+    "name": "Legacy of the Strong",
+    "description": "Increase velocity continuously when pressured by another runner and running out of energy toward the front on the final corner or later.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110141",
+    "name": "Condor's Fury",
+    "description": "Increase acceleration with blazing passion when aiming for the front from midpack on the final corner.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110151",
+    "name": "Barcarole of Blessings",
+    "description": "Increase velocity for a moderate duration when in the front part of the pack with 400m remaining. If at least 7 skills have been activated, greatly increase velocity for a moderate duration instead.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110171",
+    "name": "Arrows Whistle, Shadows Disperse",
+    "description": "Increase velocity with a blazing spirit when pressured by another runner in the front part of the pack on the final corner or later.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110181",
+    "name": "Eternal Moments",
+    "description": "Increase velocity when starting to make a move from a position toward the front mid-race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110231",
+    "name": "Presents from X",
+    "description": "Increase velocity by deriving a path to victory mid-race after staying well-positioned from the start of the race up until the second half.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110241",
+    "name": "Flowery☆Maneuver",
+    "description": "Increase velocity when passing another runner toward the front on the final corner. If passing toward the back, increase acceleration instead.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110261",
+    "name": "Operation Cacao",
+    "description": "Take a slight breather and increase velocity when in the front part of the pack and detecting another runner coming from behind on a corner mid-race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110301",
+    "name": "Every Rose Has Its Fangs",
+    "description": "Suck endurance from runners ahead when well-positioned and pressured by another runner mid-race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110371",
+    "name": "Guten Appetit ♪",
+    "description": "Increase velocity continuously with a patissiere's pride on the final straight after passing another runner 3 times on the final corner or later.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110401",
+    "name": "Dancing in the Leaves",
+    "description": "Increase ability to break out of the pack when engaged in a challenge in midpack on the final corner.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110451",
+    "name": "Give Mummy a Hug ♡",
+    "description": "Increase ability to break out of the pack when well-positioned and close to the runner ahead on the final straight.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110521",
+    "name": "114th Time's the Charm",
+    "description": "Give max effort when far from the lead on the final corner, moderately increasing velocity steadily for a duration proportional to distance from the lead.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "110561",
+    "name": "Bountiful Harvest",
+    "description": "Increase velocity with a surge of great fortune when pressured by another runner toward the back in the second half of the race.",
+    "category": "unique",
+    "rarity": "special",
+    "grade_value": 340
+  },
+  {
+    "skill_id": "10071",
+    "name": "Warning Shot!",
+    "description": "Slightly increase velocity with a long spurt starting halfway through the race.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10081",
+    "name": "Xceleration",
+    "description": "Become stronger at challenging rivals and moderately increase velocity when positioned toward the front with 200m or less remaining.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10091",
+    "name": "Red Ace",
+    "description": "Slightly swell with the determination to be number one when positioned toward the front in the second half of the race.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10111",
+    "name": "Focused Mind",
+    "description": "Moderately increase velocity with a strong turn of foot when passing another runner toward the back on the final straight.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10141",
+    "name": "Corazón ☆ Ardiente",
+    "description": "Slightly hang on to the advantage when positioned toward the front with energy to spare on the final straight.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10181",
+    "name": "Empress's Pride",
+    "description": "Moderately increase velocity with the stride of an empress when passing another runner from midpack or further back on the final corner.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10241",
+    "name": "1st Place Kiss☆",
+    "description": "Slightly increase ability to break out of the pack on the straight after engaging in a challenge toward the front on the final corner or later.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10271",
+    "name": "Feel the Burn!",
+    "description": "Moderately increase acceleration in an attempt to move up on a corner late-race.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10321",
+    "name": "Introduction to Physiology",
+    "description": "Moderately recover endurance and slightly increase velocity for a moderate duration when sitting off the pace on a corner in the second half of the race.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10351",
+    "name": "V Is for Victory!",
+    "description": "Moderately increase velocity with winning ambition when positioned toward the front on the final straight after engaging in a challenge on the final corner or later.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10411",
+    "name": "Class Rep + Speed = Bakushin",
+    "description": "Moderately increase velocity with BAKUSHIN power when engaged in a challenge toward the front in the second half of the race.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10451",
+    "name": "Clear Heart",
+    "description": "Recover endurance when well-positioned mid-race.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10521",
+    "name": "Super-Duper Stoked",
+    "description": "Moderately recover endurance with a glance at nearby runners when positioned toward the back on the final corner.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10561",
+    "name": "Luck Be with Me!",
+    "description": "Moderately clear a path forward with the power of divination when the way ahead is jammed late-race.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10601",
+    "name": "I Can Win Sometimes, Right?",
+    "description": "Moderately increase velocity with an arousal of fighting spirit when positioned 3rd and about to lose late-race.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10611",
+    "name": "Call Me King",
+    "description": "Increase velocity in a true display of skill with 200m remaining after racing calmly.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "10621",
+    "name": "Ready, Go!",
+    "description": "Moderately recover endurance and slightly increase velocity with newfound resolve when in midpack around halfway through the race.",
+    "category": "unique",
+    "rarity": "unique",
+    "grade_value": 240
+  },
+  {
+    "skill_id": "900011",
+    "name": "Shooting Star",
+    "description": "Slightly increase velocity and very minimally increase acceleration after passing another runner toward the front late-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900021",
+    "name": "The View from the Lead Is Mine!",
+    "description": "Slightly increase velocity when in the lead by a fair margin in the second half of the race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900031",
+    "name": "Sky-High Teio Step",
+    "description": "Moderately increase velocity when closing the gap to runners ahead on the final straight.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900041",
+    "name": "Red Shift/LP1211-M",
+    "description": "Slightly increase acceleration when positioned toward the front on the final corner or later.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900051",
+    "name": "Lights of Vaudeville",
+    "description": "Moderately increase velocity when just breaking out of the pack toward the front on the final straight.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900061",
+    "name": "Triumphant Pulse",
+    "description": "Moderately increase ability to break out of the pack when positioned toward the front with 200m remaining.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900071",
+    "name": "Anchors Aweigh!",
+    "description": "Very slightly increase velocity steadily with a long spurt starting halfway through the race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900081",
+    "name": "Cut and Drive!",
+    "description": "Slightly increase velocity when positioned toward the front with 200m or less remaining.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900091",
+    "name": "Resplendent Red Ace",
+    "description": "Very slightly swell with the determination to be number one when positioned toward the front in the second half of the race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900101",
+    "name": "Shooting for Victory!",
+    "description": "Slightly increase acceleration when well-positioned upon approaching the final straight.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900111",
+    "name": "Where There's a Will, There's a Way",
+    "description": "Slightly increase velocity when passing another runner toward the back on the final straight.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900121",
+    "name": "You and Me! One-on-One!",
+    "description": "Slightly increase velocity on the final straight after passing another runner on the outside toward the back on the final corner or later.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900131",
+    "name": "The Duty of Dignity Calls",
+    "description": "Slightly increase velocity when positioned toward the front on the final corner.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900141",
+    "name": "Victoria por plancha ☆",
+    "description": "Very slightly hang on to the advantage when positioned toward the front with energy to spare on the final straight.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900151",
+    "name": "This Dance Is for Vittoria!",
+    "description": "Slightly increase velocity when positioned toward the front and close to the runner ahead or behind on the final corner or later.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900161",
+    "name": "Shadow Break",
+    "description": "Slightly increase velocity when passing another runner on the outside on the final corner or later. If the skill user engaged in a challenge mid-race, moderately increase velocity instead.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900171",
+    "name": "Behold Thine Emperor's Divine Might",
+    "description": "Moderately increase velocity on the final straight after passing another runner 3 times late-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900181",
+    "name": "Blazing Pride",
+    "description": "Slightly increase velocity when passing another runner from midpack or further back on the final corner.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900191",
+    "name": "OMG! (ﾟ∀ﾟ)  The Final Sprint! ☆",
+    "description": "Slightly increase velocity and navigation after passing another runner 2 times late-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900201",
+    "name": "Angling and Scheming",
+    "description": "Slightly increase acceleration when in the lead on a corner late-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900211",
+    "name": "White Lightning Comin' Through!",
+    "description": "Slightly bolt down the track when well-positioned or aiming for the front from midpack on a straight in the second half of the race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900221",
+    "name": "Fairy Tale",
+    "description": "Slightly increase velocity when engaged in a challenge while well-positioned in the second half of the race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900231",
+    "name": "∴win Q.E.D.",
+    "description": "Slightly increase velocity when passing another runner toward the front on the final corner or later.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900241",
+    "name": "Flashy☆Landing",
+    "description": "Very slightly increase ability to break out of the pack on the straight after engaging in a challenge toward the front on the final corner or later.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900251",
+    "name": "Chasing After You",
+    "description": "Very slightly increase velocity steadily and very minimally intimidate runners ahead when in midpack in the second half of the race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900261",
+    "name": "G00 1st. F∞;",
+    "description": "Slightly increase velocity when positioned toward the front after making it to the final straight without faltering.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900271",
+    "name": "Let's Pump Some Iron!",
+    "description": "Slightly increase acceleration in an attempt to move up on a corner late-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900281",
+    "name": "YUMMY☆SPEED!",
+    "description": "Very slightly kick forward when moderately tired while well-positioned halfway through the race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900301",
+    "name": "Blue Rose Closer",
+    "description": "Slightly increase velocity on the final straight after passing another runner in the front part of the pack on the final corner or later.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900321",
+    "name": "U=ma2",
+    "description": "Slightly recover endurance and very slightly increase velocity for a moderate duration when sitting off the pace on a corner in the second half of the race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900331",
+    "name": "Shooting Star of Dioskouroi",
+    "description": "Slightly increase velocity when far from the lead on the final straight. If positioned around the very back, moderately increase velocity instead.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900351",
+    "name": "Our Ticket to Win!",
+    "description": "Slightly increase velocity when positioned toward the front on the final straight after engaging in a challenge on the final corner or later.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900371",
+    "name": "Schwarzes Schwert",
+    "description": "Slightly increase velocity in a dash for the lead after running calmly and according to plan up until the final straight.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900381",
+    "name": "#LookatCurren",
+    "description": "Very slightly begin to advance when passing another runner while well-positioned around halfway through the race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900391",
+    "name": "A Princess Must Seize Victory!",
+    "description": "Slightly increase velocity when engaged in a challenge on the final straight.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900401",
+    "name": "KEEP IT REAL.",
+    "description": "Very slightly increase acceleration steadily when starting to make a move from midpack in the second half of the race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900411",
+    "name": "Genius x Bakushin = Victory",
+    "description": "Slightly increase velocity when engaged in a challenge toward the front in the second half of the race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900451",
+    "name": "Pure Heart",
+    "description": "Moderately recover endurance when well-positioned mid-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900461",
+    "name": "SPARKLY☆STARDOM",
+    "description": "Become very slightly empowered to keep the advantage when positioned toward the front and close to the runner behind on a straight mid-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900481",
+    "name": "Pop & Polish",
+    "description": "Slightly increase velocity when pressured by or passing another runner while well-positioned on the final straight.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900501",
+    "name": "Nemesis",
+    "description": "Slightly increase velocity when moving up from midpack on the final corner or later.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900521",
+    "name": "Super-Duper Climax",
+    "description": "Slightly recover endurance with a glance at nearby runners when positioned toward the back on the final corner.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900561",
+    "name": "I See Victory in My Future!",
+    "description": "Slightly clear a path forward depending on divination results when the way ahead is jammed late-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900581",
+    "name": "I Never Goof Up!",
+    "description": "Very slightly aim for the front when passing another runner from midpack or further back on a corner late-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900591",
+    "name": "Moving Past, and Beyond",
+    "description": "Having run the race calmly, slightly increase acceleration when making a move mid-race, or on a crucial corner late-race whilst in midpack.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900601",
+    "name": "Just a Little Farther!",
+    "description": "Slightly increase velocity when positioned 3rd and about to lose late-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900611",
+    "name": "Prideful King",
+    "description": "Moderately increase velocity in a true display of skill with 200m remaining after racing calmly.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900621",
+    "name": "Go, Go, Mun!",
+    "description": "Slightly recover endurance and very slightly increase velocity when in midpack around halfway through the race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900671",
+    "name": "Eternal Encompassing Shine",
+    "description": "If well-positioned at the start of the final straight, slightly increase velocity. If positioned near the front, moderately increase velocity instead.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900681",
+    "name": "Victory Cheer!",
+    "description": "Very slightly increase velocity when positioned toward the front on the third corner in the second half of the race. Or, very slightly kick forward when toward the front on the backstretch late-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900691",
+    "name": "Ambition to Surpass the Sakura",
+    "description": "Slightly increase velocity when well-positioned and close to the runner ahead with 300m or less remaining.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "900711",
+    "name": "A Lifelong Dream, A Moment's Flight",
+    "description": "Slightly consume endurance to moderately increase velocity for a moderate duration when close to the runner behind on the final straight.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910011",
+    "name": "Dazzl'n ♪ Diver",
+    "description": "Slightly recover endurance after activating 2 skills mid-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910031",
+    "name": "Certain Victory",
+    "description": "Moderately increase velocity on the final straight after being on the heels of another runner toward the front on the final corner or later.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910041",
+    "name": "A Kiss for Courage",
+    "description": "Slightly increase velocity when positioned toward the front in the second half of the race after recovering endurance with a skill.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910061",
+    "name": "Festive Miracle",
+    "description": "Very slightly control breathing and kick forward toward victory in the second half of the race after recovering endurance with skills at least 3 times.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910111",
+    "name": "Superior Heal",
+    "description": "Moderately recover endurance when overtaken toward the back mid-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910131",
+    "name": "Legacy of the Strong",
+    "description": "Slightly increase velocity continuously when pressured by another runner and running out of energy toward the front on the final corner or later.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910141",
+    "name": "Condor's Fury",
+    "description": "Slightly increase acceleration when aiming for the front from midpack on the final corner.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910151",
+    "name": "Barcarole of Blessings",
+    "description": "Slightly increase velocity for a moderate duration when in the front part of the pack with 400m remaining. If at least 7 skills have been activated, moderately increase velocity for a moderate duration instead.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910171",
+    "name": "Arrows Whistle, Shadows Disperse",
+    "description": "Slightly increase velocity when pressured by another runner in the front part of the pack on the final corner or later.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910181",
+    "name": "Eternal Moments",
+    "description": "Slightly increase velocity when starting to make a move from a position toward the front mid-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910231",
+    "name": "Presents from X",
+    "description": "Slightly increase velocity mid-race after staying well-positioned from the start of the race up until the second half.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910241",
+    "name": "Flowery☆Maneuver",
+    "description": "Slightly increase velocity when passing another runner toward the front on the final corner. If passing toward the back, slightly increase acceleration instead.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910261",
+    "name": "Operation Cacao",
+    "description": "Take a minimal breather and slightly increase velocity when in the front part of the pack and there's another runner coming from behind on a corner mid-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910301",
+    "name": "Every Rose Has Its Fangs",
+    "description": "Slightly drain endurance from runners ahead when well-positioned and pressured by another runner mid-race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910371",
+    "name": "Guten Appetit ♪",
+    "description": "Slightly increase velocity continuously on the final straight after passing another runner 3 times on the final corner or later.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910401",
+    "name": "Dancing in the Leaves",
+    "description": "Very slightly increase ability to break out of the pack when engaged in a challenge in midpack on the final corner.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910451",
+    "name": "Give Mummy a Hug ♡",
+    "description": "Very slightly increase ability to break out of the pack when well-positioned and close to the runner ahead on the final straight.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910521",
+    "name": "114th Time's the Charm",
+    "description": "Give max effort when far from the lead on the final corner, very slightly increasing velocity steadily for a duration proportional to distance from the lead.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "910561",
+    "name": "Bountiful Harvest",
+    "description": "Slightly increase velocity with a surge of fortune when pressured by another runner toward the back in the second half of the race.",
+    "category": "unique",
+    "rarity": "normal",
+    "grade_value": 180
+  },
+  {
+    "skill_id": "1000011",
+    "name": "Carnival Bonus",
+    "description": "Increase attributes by +{0}％ in the Racing Carnival. {1}％ chance to also raise runner's mood to Great. This skill will disappear when the event ends.",
+    "category": "unknown",
+    "rarity": "normal",
+    "grade_value": 0
   }
 ]
