@@ -351,6 +351,7 @@ class GameFSM:
 
         # Register item training effects when a shop item is used
         if action.action_type == ActionType.USE_ITEM and self.engine.shop_manager:
+            self.engine.shop_manager.consume_item(action.target)
             self.engine.shop_manager.activate_item(action.target)
 
         # Race entry confirmation: after tapping the Race button on the

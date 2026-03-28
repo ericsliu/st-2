@@ -1,36 +1,798 @@
 [
   {
-    "event_text": "You're feeling fired up today!",
+    "event_text": "Get Well Soon!",
     "character_id": null,
+    "choices": [
+      "(Safe option)",
+      "(Risky option)"
+    ],
     "best_choice_index": 0,
-    "choice_effects": ["Mood improves", "Energy decreases slightly"],
-    "source": "manual",
-    "confidence": 1.0
+    "choice_effects": [
+      "Mood -1, last trained stat -5, small chance Practice Poor",
+      "Success (~15%): Practice Perfect ◯ | Fail (~85%): Mood -1, last trained stat -10, likely Practice Poor"
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "Training failure event. Triggers when failure rate was 1-19% (~guaranteed) or 20-79% (~70% chance). Choice 1 is safer. Choice 2 gambles for Practice Perfect but usually makes things worse."
   },
   {
-    "event_text": "A rival challenges you to a practice race.",
+    "event_text": "Don't Overdo It!",
     "character_id": null,
+    "choices": [
+      "(Accept the loss)",
+      "(Gamble for Practice Perfect)"
+    ],
     "best_choice_index": 0,
-    "choice_effects": ["Speed +5, Bond +5 with rival", "Skip — no effect"],
-    "source": "manual",
-    "confidence": 0.9
+    "choice_effects": [
+      "Energy +10, Mood -2, last trained stat -10 and two random stats -10, chance Practice Poor",
+      "Success (~15%): Practice Perfect ◯ | Fail (~85%): Mood -3, three random stats -10 each, Practice Poor"
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "Severe training failure event. Triggers on high failure rates (20%+). Choice 1 at least gives energy back. Choice 2 is very risky."
   },
   {
-    "event_text": "Your trainer suggests an extra workout.",
+    "event_text": "Best Foot Forward!",
     "character_id": null,
+    "choices": [
+      "(Could I have some new training gear?)",
+      "(Could I have some of those carrots?)"
+    ],
+    "best_choice_index": 1,
+    "choice_effects": [
+      "Energy -10, Power +20, Guts +20, Skill Hint: Beeline Burst +1",
+      "Energy +30, Stamina +20, Skill Hint: Breath of Fresh Air +1"
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale scenario event. Choice 2 (carrots) is generally best for energy recovery. Choice 1 better if you need Power/Guts and have enough energy. Higher Power increases chance for this event to appear."
+  },
+  {
+    "event_text": "New Year's Shrine Visit",
+    "character_id": null,
+    "choices": [
+      "Let's start with nutrition!",
+      "Let's work on your fundamentals!",
+      "Let's refine your technique!"
+    ],
+    "best_choice_index": 2,
+    "choice_effects": [
+      "Energy +30",
+      "All Stats +5",
+      "Skill Pts +35"
+    ],
+    "source": "game8",
+    "confidence": 0.9,
+    "notes": "Character-specific event appearing for most trainees in January. Choice text varies by character but effects are generally: energy, stats, or skill points. Skill points (choice 3) is usually best value. Pick energy if below 50."
+  },
+  {
+    "event_text": "At Summer Camp (Year 2)",
+    "character_id": null,
+    "choices": [
+      "(You need to get stronger.)",
+      "(You need to strengthen your resolve.)"
+    ],
     "best_choice_index": 0,
-    "choice_effects": ["Power +8, Energy -10", "Rest and skip"],
-    "source": "manual",
-    "confidence": 0.85
+    "choice_effects": [
+      "Power +10",
+      "Guts +10"
+    ],
+    "source": "game8",
+    "confidence": 0.85,
+    "notes": "Character-specific event during Classic Year summer camp. Choice text and stat types vary by character. Pick whichever stat aligns with your build."
+  },
+  {
+    "event_text": "Acupuncturist",
+    "character_id": null,
+    "choices": [
+      "Activate the Strength Chakra",
+      "Activate the Winning Chakra",
+      "Activate the Health Chakra",
+      "Activate the Charm Chakra",
+      "This is too sketchy. Let's quit while we still can."
+    ],
+    "best_choice_index": 2,
+    "choice_effects": [
+      "Success (20-30%): All Stats +20 | Fail (70-80%): Mood -2, All Stats -15, Night Owl",
+      "Success (40-60%): Corner Recovery ◯, Straightaway Recovery skills | Fail (40-60%): Mood -2, Energy -20",
+      "Success (70-80%): Max Energy +12, Energy +40, cure negative conditions | Fail (20-30%): Energy -20, Mood -2, Practice Poor",
+      "Success (80-85%): Energy +20, Mood +1, Charming ◯ | Fail (15-20%): Energy -10, Mood -1, Practice Poor (random)",
+      "Energy +10 (guaranteed)"
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "Random event. Health Chakra (choice 3) is safest and most useful — high success rate, cures conditions, big energy. Charm Chakra (choice 4) is safest overall. Strength is a trap. Quit option is guaranteed but low value."
+  },
+  {
+    "event_text": "Night Owl",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. ~25% chance to lose Energy -10 each turn. ~25% chance to also lose Mood -1 from that energy loss."
+    ],
+    "source": "game8",
+    "confidence": 0.9,
+    "notes": "Negative condition event (no choices). Night Owl activates randomly after turns. Cure via Infirmary (+20 energy, chance to remove) or Rest. Appears for all characters. Visit Infirmary when possible."
+  },
+  {
+    "event_text": "Skin Troubles",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Grants Skin Outbreak condition: mood may randomly decrease by one stage."
+    ],
+    "source": "game8",
+    "confidence": 0.85,
+    "notes": "Negative condition event (no choices). Cure via Infirmary or Rest with 70+ energy recovery."
+  },
+  {
+    "event_text": "Slacking Off",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Grants Slacker condition: chance trainee won't show up for training, wasting a turn."
+    ],
+    "source": "game8",
+    "confidence": 0.85,
+    "notes": "Negative condition event (no choices). Cure ASAP via Infirmary or training with reporter Etsuko Otonashi."
+  },
+  {
+    "event_text": "Inspiration",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Grants stats, skill hints, and aptitude increases. Bonuses scale with parent compatibility (double circle) and legacy star count."
+    ],
+    "source": "game8",
+    "confidence": 0.85,
+    "notes": "Occurs in April of Years 2 and 3. No choices. Better parents = better bonuses."
+  },
+  {
+    "event_text": "Training Level Up",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Training facilities upgrade, increasing stat gains from training."
+    ],
+    "source": "game8",
+    "confidence": 0.9,
+    "notes": "Automatic scenario event. Training levels increase at set turn intervals."
+  },
+  {
+    "event_text": "Director's Appraisal",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Director evaluates performance. Multiple variants (4 IDs) with different outcomes based on progress."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "Periodic scenario event. No player choices."
+  },
+  {
+    "event_text": "Reporter's Appraisal",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Reporter evaluates performance. Multiple variants based on progress."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "Periodic scenario event. No player choices."
+  },
+  {
+    "event_text": "A Reporter's Duty",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Wit +10"
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale scenario event. Automatic Wit boost."
+  },
+  {
+    "event_text": "Tazuna's Training Tips",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Narrative event, no stat effects."
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale early scenario event. Pure story."
+  },
+  {
+    "event_text": "Tazuna, the Director's Secretary",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Mood +1, Skill Pts +18, Friendship +5"
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "Support card event for Tazuna Hayakawa cards. Triggers after first training with Tazuna."
+  },
+  {
+    "event_text": "Road to Stardom",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Director Aikawa now appears in training."
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale scenario event. Occurs 9 turns before Junior Debut."
+  },
+  {
+    "event_text": "Encounter with an Elite Trainer",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Stat rewards. With Aoi support card: Trainer Aoi Kiryuin appears as training partner."
+    ],
+    "source": "game8",
+    "confidence": 0.9,
+    "notes": "URA Finale scenario event. 8 turns before Junior Debut."
+  },
+  {
+    "event_text": "URA Finale Announced!",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Narrative only — no stat/mood/condition effects."
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale scenario event. Story progression only."
+  },
+  {
+    "event_text": "Going to the URA Finale!",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Skill Pts +30"
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale scenario event. Late December Senior Year. Requires 240,000 fans."
+  },
+  {
+    "event_text": "At the Carrot Farm",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Skill Pts +30"
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale scenario event. Late December Classic Year. Requires 100,000 fans."
+  },
+  {
+    "event_text": "After the URA Finale Qualifier",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Skill Pts +40, All Stats +10"
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale scenario event. After winning URA Qualifier."
+  },
+  {
+    "event_text": "After the URA Finale Semifinal",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Skill Pts +40, All Stats +10"
+    ],
+    "source": "game8",
+    "confidence": 0.9,
+    "notes": "URA Finale scenario event. After winning URA Semifinal. Effects likely similar to Qualifier reward."
+  },
+  {
+    "event_text": "After the URA Finale Finals",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Skill Pts +80, All Stats +10"
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale scenario event. After winning URA Finals. Largest skill point reward."
+  },
+  {
+    "event_text": "After the URA Finale Finals: Victory!",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Large stat and skill point rewards for winning the finale."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale ending event for victory."
+  },
+  {
+    "event_text": "After the URA Finale Finals: Defeat",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Smaller rewards for losing the finale."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale ending event for defeat."
+  },
+  {
+    "event_text": "A Super Successful Event!",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Skill Pts +50, All Stats +15, Director's Fan condition"
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale scenario event. Requires winning URA Finals AND max friendship with Director Yayoi Akikawa."
+  },
+  {
+    "event_text": "A Successful Event!",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Stat and skill point rewards."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale scenario event. Lesser version of A Super Successful Event (without max Director friendship)."
+  },
+  {
+    "event_text": "Before the URA Finale Qualifier",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Narrative only — no stat/mood/condition effects."
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale scenario event. Story only."
+  },
+  {
+    "event_text": "Before the URA Finale Semifinal",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Narrative only — no stat/mood/condition effects."
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale scenario event. Story only."
+  },
+  {
+    "event_text": "Before the URA Finale Finals",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Narrative only — no stat/mood/condition effects."
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale scenario event. Story only."
+  },
+  {
+    "event_text": "Holding an Event!",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Grants stat/mood/skill rewards."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale scenario event."
+  },
+  {
+    "event_text": "A Three-Legged Race",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Grants stat/mood/skill rewards."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale scenario event."
+  },
+  {
+    "event_text": "Hand in Hand",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Narrative only — no stat/mood/condition effects."
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale scenario event. Story only."
+  },
+  {
+    "event_text": "Golden Popularity",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Narrative only — no stat/mood/condition effects."
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "URA Finale scenario event. Story only."
+  },
+  {
+    "event_text": "Victory! (G1)",
+    "character_id": null,
+    "choices": [
+      "(Safe recovery)",
+      "(Gamble for better recovery)"
+    ],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "Energy -15, Skill Pts +45, Random Stat +10",
+      "Success: Energy -5, Skill Pts +45, Random Stat +10 | Fail: Energy -25, Skill Pts +45, Random Stat +10"
+    ],
+    "source": "game8",
+    "confidence": 0.85,
+    "notes": "Post-race event after winning a G1 race. Choice 2 gambles energy cost. Skill pts and stat gain are the same either way. Character-specific variants exist but effects are similar across characters."
+  },
+  {
+    "event_text": "Victory! (G2)",
+    "character_id": null,
+    "choices": [
+      "(Safe recovery)",
+      "(Gamble for better recovery)"
+    ],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "Energy -15, Skill Pts +35, Random Stat +8",
+      "Success: Energy -5, Skill Pts +35, Random Stat +8 | Fail: Energy -20, Skill Pts +35, Random Stat +8"
+    ],
+    "source": "game8",
+    "confidence": 0.9,
+    "notes": "Post-race event after winning a G2 race. Same structure as G1 but lower rewards."
+  },
+  {
+    "event_text": "Victory! (G3)",
+    "character_id": null,
+    "choices": [
+      "(Safe recovery)",
+      "(Gamble for better recovery)"
+    ],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "Energy -15, Skill Pts +35, Random Stat +8",
+      "Success: Energy -5, Skill Pts +35, Random Stat +8 | Fail: Energy -20, Skill Pts +35, Random Stat +8"
+    ],
+    "source": "game8",
+    "confidence": 0.9,
+    "notes": "Post-race event after winning a G3 race."
+  },
+  {
+    "event_text": "Defeat (G1)",
+    "character_id": null,
+    "choices": [
+      "(Safe recovery)",
+      "(Gamble for better recovery)"
+    ],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "Energy -25, Skill Pts +25, Random Stat +4",
+      "Success: Energy -15, Skill Pts +25, Random Stat +4 | Fail: Energy -35, Skill Pts +25, Random Stat +4"
+    ],
+    "source": "game8",
+    "confidence": 0.9,
+    "notes": "Post-race event after losing a G1 race. Higher energy cost than victory. Choice 1 safer."
+  },
+  {
+    "event_text": "Defeat (G2)",
+    "character_id": null,
+    "choices": [
+      "(Safe recovery)",
+      "(Gamble for better recovery)"
+    ],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "Energy -20, Skill Pts +20, Random Stat +4",
+      "Success: Energy -10, Skill Pts +20, Random Stat +4 | Fail: Energy -30, Skill Pts +20, Random Stat +4"
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "Post-race event after losing a G2 race. Estimated values based on G1/G3 pattern."
+  },
+  {
+    "event_text": "Defeat (G3)",
+    "character_id": null,
+    "choices": [
+      "(Safe recovery)",
+      "(Gamble for better recovery)"
+    ],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "Energy -15, Skill Pts +15, Random Stat +4",
+      "Success: Energy -5, Skill Pts +15, Random Stat +4 | Fail: Energy -25, Skill Pts +15, Random Stat +4"
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "Post-race event after losing a G3 race. Estimated values based on pattern."
+  },
+  {
+    "event_text": "Try Again",
+    "character_id": null,
+    "choices": [
+      "Try Again",
+      "Give Up"
+    ],
+    "best_choice_index": 1,
+    "choice_effects": [
+      "Restart the career run from the beginning (same setup)",
+      "End the career run and return to menu"
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "Appears when career goals fail. For parent/legacy runs, ALWAYS pick Give Up (choice 2) unless user explicitly says it's an Ace run."
+  },
+  {
+    "event_text": "Etsuko's Elated Coverage",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Positive stat/mood rewards from reporter."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale scenario event. Positive reporter interaction."
+  },
+  {
+    "event_text": "Etsuko's Exhaustive Coverage",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Stat rewards from reporter."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale scenario event."
+  },
+  {
+    "event_text": "A Quirky Correspondent?",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Introduces reporter Etsuko."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale scenario event. Story introduction."
+  },
+  {
+    "event_text": "Summer Plans",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Introduces summer camp period."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "Shared event before summer camp. Narrative."
+  },
+  {
+    "event_text": "Get Your First Victory!",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Narrative before debut race."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "Shared scenario event before the Junior Debut race."
+  },
+  {
+    "event_text": "Ending",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Career run ends. Final evaluation shown."
+    ],
+    "source": "game8",
+    "confidence": 0.95,
+    "notes": "Final event of every career run."
+  },
+  {
+    "event_text": "Twinkle Monthly Special Issue",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Magazine feature event."
+    ],
+    "source": "game8",
+    "confidence": 0.7,
+    "notes": "URA Finale scenario event."
+  },
+  {
+    "event_text": "The Finale is in Danger?!",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Scenario narrative event."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale scenario event. Story progression."
+  },
+  {
+    "event_text": "To Action! Before Dawn!",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Scenario narrative event."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale scenario event."
+  },
+  {
+    "event_text": "A Trainer's Knowledge",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Grants stat/skill rewards."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale scenario event."
+  },
+  {
+    "event_text": "Exhilarating! What a Scoop!",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Reporter event with stat rewards."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale scenario event."
+  },
+  {
+    "event_text": "Kiryuin's Day Off",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Kiryuin story event."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale scenario event involving Aoi Kiryuin."
+  },
+  {
+    "event_text": "Happy Shoe Shopping",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Power +10 (Power +20 with Kiryuin Aoi card equipped)"
+    ],
+    "source": "game8",
+    "confidence": 0.9,
+    "notes": "URA Finale scenario event. Bonus if Aoi support card is in deck."
+  },
+  {
+    "event_text": "Before the URA Finale Finals: Reunion",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Narrative event before finals."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale scenario event."
+  },
+  {
+    "event_text": "Invitation to the URA Finale",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Narrative event."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "URA Finale scenario event."
+  },
+  {
+    "event_text": "A Present from Director Akikawa!",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Reward event from the Director."
+    ],
+    "source": "game8",
+    "confidence": 0.8,
+    "notes": "Shared scenario event. Likely grants skill points or stats."
+  },
+  {
+    "event_text": "Pro Shop Grand Opening!",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Shop becomes available for purchases."
+    ],
+    "source": "game8",
+    "confidence": 0.9,
+    "notes": "Trackblazer scenario event. Shop unlocks after debut race."
+  },
+  {
+    "event_text": "The Climax Begins!",
+    "character_id": null,
+    "choices": [],
+    "best_choice_index": 0,
+    "choice_effects": [
+      "No choice. Climax race series begins."
+    ],
+    "source": "game8",
+    "confidence": 0.85,
+    "notes": "Trackblazer scenario event. Marks start of climax phase."
   },
   {
     "event_text": "Which Curren Do You Like?",
     "character_id": "curren_chan",
-    "choices": ["Something bold.", "Something stylish."],
+    "choices": [
+      "Something bold.",
+      "Something stylish."
+    ],
     "best_choice_index": 0,
-    "choice_effects": ["Speed +10, Power +10", "Stamina +10, Guts +10"],
+    "choice_effects": [
+      "Speed +10, Power +10",
+      "Stamina +10, Guts +10"
+    ],
     "source": "gametora",
     "confidence": 1.0,
-    "notes": "For speed/power builds pick bold; for stamina/guts builds pick stylish"
+    "notes": "Curren Chan character event. For speed/power builds pick bold; for stamina/guts builds pick stylish."
   }
 ]

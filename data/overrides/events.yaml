@@ -26,3 +26,41 @@
 - text_contains: "nightmare"
   choice: 1
   note: "Avoid nightmare events that drain energy"
+
+# Post-race events — choice 0 is always the safe option (fixed energy cost)
+- text_contains: "victory"
+  choice: 0
+  note: "Post-race victory event — choice 0 is safe (fixed energy cost)"
+
+- text_contains: "defeat"
+  choice: 0
+  note: "Post-race defeat event — choice 0 is safe"
+
+# Trainee-specific post-race
+- text_contains: "trainee event"
+  choice: 0
+  note: "Trainee post-race event — choice 0 is safe"
+
+# Acupuncturist — Health Chakra is best
+- text_contains: "acupuncturist"
+  choice: 2
+  note: "Health Chakra (70-80% success, heals conditions, big energy)"
+
+# New Year's — skill points usually best value
+- text_contains: "shrine visit"
+  choice: 2
+  note: "Skill Pts +35 is usually best value"
+
+# Training failure — always take the safe option
+- text_contains: "get well soon"
+  choice: 0
+  note: "Training failure — safe option, don't gamble"
+
+- text_contains: "don't overdo it"
+  choice: 0
+  note: "Severe training failure — safe option, don't gamble"
+
+# Try Again — never restart for parent runs
+- text_contains: "try again"
+  choice: 1
+  note: "Never restart — this is a parent run"

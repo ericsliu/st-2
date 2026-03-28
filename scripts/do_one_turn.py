@@ -67,6 +67,7 @@ def build_engine(config: AppConfig):
     scenario = load_scenario(config.scenario)
     runspec = load_runspec(config.runspec)
     shop_manager = ShopManager(scenario=scenario, overrides=overrides)
+    shop_manager.load_inventory()
 
     scorer = TrainingScorer(
         config=config.scorer,
@@ -109,7 +110,7 @@ def abort(capture, msg):
     return 1
 
 
-def wait_for_career_home(capture, assembler, screen_id, injector, sequences, max_screens=MAX_POST_ACTION_SCREENS):
+def wait_for_career_home(capture, assembler, screen_id, injector, sequences, engine=None, max_screens=MAX_POST_ACTION_SCREENS):
     """Tap through post-action screens until we're back on career home.
 
     Handles: post-race flow, events, popups, training results,
@@ -118,6 +119,8 @@ def wait_for_career_home(capture, assembler, screen_id, injector, sequences, max
     Returns the GameState once we're on the career home screen,
     or None if we hit the safety limit.
     """
+    last_screen = None
+    post_race_repeat = 0
     for i in range(max_screens):
         time.sleep(POST_RACE_TAP_DELAY)
         frame = capture.grab_frame()
@@ -128,16 +131,28 @@ def wait_for_career_home(capture, assembler, screen_id, injector, sequences, max
             "Post-action screen %d: %s (stat_sel=%s)",
             i + 1, state.screen.value, is_stat_select,
         )
+        # Track last screen for stuck detection (updated before branching)
+        prev_screen = last_screen
+        last_screen = state.screen
 
         # Career home = TRAINING screen but NOT stat selection
         if state.screen == ScreenState.TRAINING and not is_stat_select:
             logger.info("Back on career home")
             return state
 
-        # Event screen — pick first choice (safe default for parent runs)
+        # Event screen — use EventHandler to pick the best choice
         if state.screen == ScreenState.EVENT:
-            logger.info("Event screen — picking choice 1 (default)")
-            injector.tap(540, 1100)
+            if engine is not None and state.event_text:
+                action = engine.event_handler.decide(state)
+                choice_idx = int(action.target) if action.target.isdigit() else 0
+                logger.info(
+                    "Event: '%s' → choice %d (%s)",
+                    state.event_text[:60], choice_idx, action.reason,
+                )
+                injector.tap(*action.tap_coords)
+            else:
+                logger.info("Event screen (no handler/text) — picking choice 1 (default)")
+                injector.tap(540, 1100)
             continue
 
         # Warning popup — tap OK
@@ -156,9 +171,20 @@ def wait_for_career_home(capture, assembler, screen_id, injector, sequences, max
             continue
 
         # Post-race screen — tap Next (NOT Try Again)
+        # Also handles Goal Complete (misidentified as post_race) — centered Next at (540, 1640)
         if state.screen == ScreenState.POST_RACE:
-            logger.info("Post-race screen — tapping Next")
-            injector.tap(765, 1760)
+            if prev_screen == ScreenState.POST_RACE:
+                post_race_repeat += 1
+            else:
+                post_race_repeat = 0
+
+            if post_race_repeat >= 2:
+                # Stuck — probably Goal Complete or similar screen with centered button
+                logger.info("Post-race stuck (%d repeats) — trying centered Next at (540, 1640)", post_race_repeat)
+                injector.tap(540, 1640)
+            else:
+                logger.info("Post-race screen — tapping Next")
+                injector.tap(765, 1760)
             continue
 
         # Race list — tap Back to return to career home
@@ -255,11 +281,11 @@ def execute_training(state, engine, injector, capture, assembler, sequences, scr
     return action
 
 
-def execute_race_entry(injector, capture, assembler, screen_id):
-    """Navigate into the race list and enter the best race.
+def execute_race_entry(injector, capture, assembler, screen_id, race_selector=None):
+    """Navigate into the race list, pick the best race, and enter it.
 
     Called when DecisionEngine says to race. We're on career home.
-    Taps the Races button, then handles the race list screen.
+    Uses the RaceSelector to score races and filter by aptitude.
     """
     from uma_trainer.perception.regions import TURN_ACTION_REGIONS, get_tap_center
 
@@ -269,15 +295,51 @@ def execute_race_entry(injector, capture, assembler, screen_id):
     injector.tap(*races_btn)
     time.sleep(2.5)
 
-    # Verify we're on the race list
+    # Verify we're on the race list (may get a warning popup first)
     frame = capture.grab_frame()
     state = assembler.assemble(frame)
+
+    # Handle consecutive race warning / low energy warning
+    if state.screen == ScreenState.WARNING_POPUP:
+        from uma_trainer.perception.regions import WARNING_POPUP_REGIONS, get_tap_center
+        ok_btn = get_tap_center(WARNING_POPUP_REGIONS["btn_ok"])
+        logger.info("Warning popup before race list — tapping OK at %s", ok_btn)
+        injector.tap(*ok_btn)
+        time.sleep(2.0)
+        frame = capture.grab_frame()
+        state = assembler.assemble(frame)
+
     if state.screen != ScreenState.RACE_ENTRY:
         logger.warning("Expected RACE_ENTRY, got %s — aborting race", state.screen.value)
         return False
 
-    # For now, the first visible race is usually pre-selected.
-    # Tap the green Race button to enter.
+    # Use the race selector to pick the best race by aptitude/grade/GP value
+    if race_selector and state.available_races:
+        action = race_selector.decide(state)
+        if action.action_type == ActionType.WAIT:
+            logger.warning("RaceSelector: no suitable race — %s. Going back.", action.reason)
+            injector.tap(75, 1870)  # Back button
+            time.sleep(1.5)
+            return False
+
+        # Log what we're entering
+        for race in state.available_races:
+            logger.info(
+                "  Race option: '%s' grade=%s dist=%dm surface=%s apt_ok=%s",
+                race.name, race.grade, race.distance, race.surface, race.is_aptitude_ok,
+            )
+
+        # Tap the selected race entry to highlight it, then the Race button
+        if action.tap_coords and action.tap_coords != (0, 0):
+            logger.info("Selecting race at %s", action.tap_coords)
+            injector.tap(*action.tap_coords)
+            time.sleep(1.0)
+
+        logger.info("Entering race: %s", action.reason)
+    else:
+        logger.info("No race selector or no races parsed — entering first race")
+
+    # Tap the green Race button to confirm entry
     from uma_trainer.perception.regions import RACE_LIST_REGIONS
     race_btn = get_tap_center(RACE_LIST_REGIONS["btn_race"])
     logger.info("Tapping Race button on list at %s", race_btn)
@@ -285,13 +347,9 @@ def execute_race_entry(injector, capture, assembler, screen_id):
     time.sleep(2.0)
 
     # Handle the "Enter race?" confirmation dialog
-    # Green Race confirm button is at approximately (660, 1420)
-    # based on pixel scanning — the FSM uses (730, 1385) but that misses.
     frame = capture.grab_frame()
     state = assembler.assemble(frame)
 
-    # If we see a dialog (screen might still read as RACE_ENTRY or UNKNOWN),
-    # tap the confirm area. Try a couple positions.
     logger.info("Tapping race confirmation dialog")
     injector.tap(660, 1420)
     time.sleep(3.0)
@@ -313,7 +371,25 @@ def execute_rest(injector):
     time.sleep(2.0)
 
 
-def run_one_turn(execute, capture, assembler, screen_id, engine, injector, sequences, force_rest=False):
+def execute_go_out(injector):
+    """Tap Recreation (Go Out) button."""
+    from uma_trainer.perception.regions import TURN_ACTION_REGIONS, get_tap_center
+    go_out_btn = get_tap_center(TURN_ACTION_REGIONS["btn_recreation"])
+    logger.info("Tapping Go Out (Recreation) at %s", go_out_btn)
+    injector.tap(*go_out_btn)
+    time.sleep(2.0)
+
+
+def execute_infirmary(injector):
+    """Tap Infirmary button."""
+    from uma_trainer.perception.regions import TURN_ACTION_REGIONS, get_tap_center
+    infirmary_btn = get_tap_center(TURN_ACTION_REGIONS["btn_infirmary"])
+    logger.info("Tapping Infirmary at %s", infirmary_btn)
+    injector.tap(*infirmary_btn)
+    time.sleep(2.0)
+
+
+def run_one_turn(execute, capture, assembler, screen_id, engine, injector, sequences, ocr=None, force_rest=False):
     """Run a single turn. Returns True if successful."""
 
     # Step 1: Identify screen (read-only)
@@ -333,7 +409,7 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
         # Not on career home — try to navigate there via wait_for_career_home
         logger.info("Not on career home (got %s) — tapping through to get there", state.screen.value)
         state = wait_for_career_home(
-            capture, assembler, screen_id, injector, sequences,
+            capture, assembler, screen_id, injector, sequences, engine=engine,
         )
         if state is None or state.screen != ScreenState.TRAINING:
             logger.error("Could not reach career home. Aborting.")
@@ -351,6 +427,103 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
         if is_stat_select:
             logger.error("Still on stat selection after Back tap")
             return False
+
+    # Step 2.5: Plan and execute item queue.
+    # The whistle is special: it rearranges cards, invalidating all plans.
+    # If a whistle is used, we loop back and re-evaluate everything.
+    from uma_trainer.decision.shop_manager import ITEM_CATALOGUE
+    all_items_used = []
+    MAX_ITEM_ROUNDS = 3  # safety limit on re-evaluation loops
+
+    for item_round in range(MAX_ITEM_ROUNDS):
+        item_queue = engine.shop_manager.get_item_queue(state)
+        if not item_queue:
+            break
+
+        queue_names = [
+            ITEM_CATALOGUE[a.target].name if a.target in ITEM_CATALOGUE else a.target
+            for a in item_queue
+        ]
+        logger.info("Item queue (round %d): %s", item_round + 1, queue_names)
+
+        used_whistle = False
+        for item_action in item_queue:
+            item_key = item_action.target
+            item_name = ITEM_CATALOGUE[item_key].name if item_key in ITEM_CATALOGUE else item_key
+
+            if not execute:
+                print(f"  [DRY RUN] Would use item: {item_name} ({item_action.reason})")
+                all_items_used.append(item_name)
+                continue
+
+            if ocr is None:
+                logger.warning("No OCR engine — cannot navigate item bag")
+                break
+
+            success = sequences.execute_item_use(item_key, item_name, capture, ocr)
+            if success:
+                engine.shop_manager.consume_item(item_key)
+                engine.shop_manager.activate_item(item_key)
+                all_items_used.append(item_name)
+                logger.info("Item used: %s", item_name)
+                time.sleep(1.5)
+                frame = capture.grab_frame()
+                state = assembler.assemble(frame)
+                logger.info("After item: energy=%d, mood=%s", state.energy, state.mood.value)
+
+                if item_key == "reset_whistle":
+                    used_whistle = True
+                    logger.info("Whistle used — will re-evaluate entire turn")
+                    break  # Stop this queue, loop back for fresh evaluation
+            else:
+                logger.warning("Failed to use item %s — aborting remaining queue", item_name)
+                break
+
+        if not execute or not used_whistle:
+            break  # No whistle = queue is final, proceed to decisions
+
+    if all_items_used:
+        print(f"Items used: {', '.join(all_items_used)}")
+
+    # Step 2.7: Check mood and conditions before main decision.
+    # Infirmary takes priority over Go Out (conditions block mood improvement).
+    infirmary_action = engine.scorer.should_visit_infirmary(state)
+    if infirmary_action:
+        print(f"\nDecision: INFIRMARY ({infirmary_action.reason})")
+        if not execute:
+            print("[DRY RUN] Would tap Infirmary.")
+        else:
+            logger.info("STEP 3: Executing INFIRMARY")
+            execute_infirmary(injector)
+            logger.info("STEP 4: Handling post-infirmary flow")
+            result_state = wait_for_career_home(
+                capture, assembler, screen_id, injector, sequences, engine=engine,
+            )
+            if result_state:
+                logger.info(
+                    "Turn complete. Energy: %d, Mood: %s",
+                    result_state.energy, result_state.mood.value,
+                )
+        return True
+
+    go_out_action = engine.scorer.should_go_out(state)
+    if go_out_action:
+        print(f"\nDecision: GO OUT ({go_out_action.reason})")
+        if not execute:
+            print("[DRY RUN] Would tap Recreation.")
+        else:
+            logger.info("STEP 3: Executing GO OUT")
+            execute_go_out(injector)
+            logger.info("STEP 4: Handling post-go-out flow")
+            result_state = wait_for_career_home(
+                capture, assembler, screen_id, injector, sequences, engine=engine,
+            )
+            if result_state:
+                logger.info(
+                    "Turn complete. Energy: %d, Mood: %s",
+                    result_state.energy, result_state.mood.value,
+                )
+        return True
 
     # Step 3: Get the decision from the REAL DecisionEngine
     # For training decisions, we need stat gains — navigate to stat selection first
@@ -370,7 +543,7 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
 
         logger.info("STEP 4: Handling post-rest flow")
         result_state = wait_for_career_home(
-            capture, assembler, screen_id, injector, sequences,
+            capture, assembler, screen_id, injector, sequences, engine=engine,
         )
         if result_state:
             logger.info(
@@ -423,14 +596,14 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
 
         # Execute: tap Races, handle race list, race confirmation, post-race flow
         logger.info("STEP 3: Executing RACE")
-        success = execute_race_entry(injector, capture, assembler, screen_id)
+        success = execute_race_entry(injector, capture, assembler, screen_id, race_selector=engine.race_selector)
         if not success:
             return False
 
         # Handle post-race flow (View Results, results, rewards, events)
         logger.info("STEP 4: Handling post-race flow")
         result_state = wait_for_career_home(
-            capture, assembler, screen_id, injector, sequences,
+            capture, assembler, screen_id, injector, sequences, engine=engine,
         )
         if result_state:
             logger.info(
@@ -455,7 +628,7 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
         # Handle post-rest events
         logger.info("STEP 4: Handling post-rest flow")
         result_state = wait_for_career_home(
-            capture, assembler, screen_id, injector, sequences,
+            capture, assembler, screen_id, injector, sequences, engine=engine,
         )
         if result_state:
             logger.info(
@@ -522,7 +695,7 @@ def run_one_turn(execute, capture, assembler, screen_id, engine, injector, seque
         # Handle post-training events
         logger.info("STEP 4: Handling post-training flow")
         result_state = wait_for_career_home(
-            capture, assembler, screen_id, injector, sequences,
+            capture, assembler, screen_id, injector, sequences, engine=engine,
         )
         if result_state:
             logger.info(
@@ -566,7 +739,8 @@ def main():
 
             success = run_one_turn(
                 args.execute, capture, assembler, screen_id,
-                engine, injector, sequences, force_rest=args.force_rest,
+                engine, injector, sequences, ocr=ocr,
+                force_rest=args.force_rest,
             )
 
             if not success:

@@ -257,6 +257,139 @@ class ActionSequences:
         except Exception as e:
             logger.debug("Failed to save suspicious frame: %s", e)
 
+    # ------------------------------------------------------------------
+    # Item bag usage
+    # ------------------------------------------------------------------
+
+    # Item bag layout (1080x1920 portrait, Trackblazer scenario)
+    # Calibrated from pixel scanning of green + button circles.
+    # The bag is a scrollable list with "Training Items" header at top.
+    ITEM_BAG_BTN = (870, 1120)          # "Training Items" button on career home
+    ITEM_BAG_ROW_FIRST_Y = 271          # Center Y of first row's + button
+    ITEM_BAG_ROW_HEIGHT = 204           # Spacing between rows
+    ITEM_BAG_VISIBLE_ROWS = 7           # Max visible rows without scrolling
+    ITEM_BAG_PLUS_X = 1000              # X coordinate of "+" button center
+    ITEM_BAG_NAME_REGION_X = (80, 700)  # X range for item name OCR
+    ITEM_BAG_NAME_REGION_H = 80         # Height of name region per row
+    ITEM_BAG_CLOSE = (110, 1750)        # "Close" button
+    ITEM_BAG_CONFIRM = (880, 1750)      # "Confirm Use" button
+
+    def execute_item_use(
+        self,
+        item_key: str,
+        item_name: str,
+        capture: "CaptureBackend",
+        ocr: "OCREngine",
+    ) -> bool:
+        """Open item bag, find item by name, select it, and confirm use.
+
+        Args:
+            item_key: Internal key (e.g. "vita_40")
+            item_name: Display name to OCR-match (e.g. "Vita 40")
+            capture: Screen capture backend
+            ocr: OCR engine for reading item names
+
+        Returns True if the item was successfully used.
+        """
+        from rapidfuzz import fuzz
+
+        # Step 1: Open item bag
+        logger.info("Opening item bag...")
+        self.injector.tap(*self.ITEM_BAG_BTN)
+        time.sleep(2.0)
+
+        # Step 2: OCR visible rows to find the target item
+        frame = capture.grab_frame()
+        target_lower = item_name.lower()
+
+        found_row = self._find_item_row(frame, ocr, target_lower)
+
+        # Scroll and retry if not found
+        if found_row is None:
+            for scroll_attempt in range(3):
+                logger.info("Item not visible — scrolling down (attempt %d)", scroll_attempt + 1)
+                self.injector.swipe(540, 1200, 540, 400, duration_ms=500)
+                time.sleep(1.5)
+                frame = capture.grab_frame()
+                found_row = self._find_item_row(frame, ocr, target_lower)
+                if found_row is not None:
+                    break
+
+        if found_row is None:
+            logger.warning("Could not find item '%s' in bag — closing", item_name)
+            self.injector.tap(*self.ITEM_BAG_CLOSE)
+            time.sleep(1.0)
+            return False
+
+        # Step 3: Tap the "+" button for this item's row
+        plus_y = self.ITEM_BAG_ROW_FIRST_Y + (found_row * self.ITEM_BAG_ROW_HEIGHT)
+        logger.info(
+            "Found '%s' at row %d — tapping + at (%d, %d)",
+            item_name, found_row, self.ITEM_BAG_PLUS_X, plus_y,
+        )
+        self.injector.tap(self.ITEM_BAG_PLUS_X, plus_y)
+        time.sleep(0.8)
+
+        # Step 4: Tap "Confirm Use"
+        logger.info("Tapping Confirm Use")
+        self.injector.tap(*self.ITEM_BAG_CONFIRM)
+        time.sleep(2.0)
+
+        # Step 5: Handle the "Use training item(s)?" confirmation popup.
+        # After Confirm Use, a second popup appears with Cancel / Use Training Items.
+        # The green "Use Training Items" button is at ~(810, 1785).
+        frame = capture.grab_frame()
+        confirm_text = ocr.read_region(frame, (0, 1500, 1080, 1900)).lower()
+        if "use" in confirm_text or "training item" in confirm_text:
+            logger.info("Confirming 'Use training item(s)?' popup")
+            self.injector.tap(810, 1785)
+            time.sleep(2.0)
+
+        # Step 6: Close the item bag so career home is visible for state reads
+        logger.info("Closing item bag")
+        self.injector.tap(*self.ITEM_BAG_CLOSE)
+        time.sleep(1.5)
+
+        logger.info("Item '%s' used successfully", item_name)
+        return True
+
+    def _find_item_row(
+        self,
+        frame: "np.ndarray",
+        ocr: "OCREngine",
+        target_lower: str,
+    ) -> int | None:
+        """OCR visible item rows and return the row index matching target_lower.
+
+        Returns None if not found.
+        """
+        from rapidfuzz import fuzz
+
+        for row_idx in range(self.ITEM_BAG_VISIBLE_ROWS):
+            row_center_y = self.ITEM_BAG_ROW_FIRST_Y + (row_idx * self.ITEM_BAG_ROW_HEIGHT)
+            y_start = row_center_y - self.ITEM_BAG_NAME_REGION_H
+            y_end = row_center_y + self.ITEM_BAG_NAME_REGION_H
+            region = (
+                self.ITEM_BAG_NAME_REGION_X[0],
+                y_start,
+                self.ITEM_BAG_NAME_REGION_X[1],
+                y_end,
+            )
+            text = ocr.read_region(frame, region).lower()
+            if not text.strip():
+                continue
+
+            # Check fuzzy match — item names are distinctive enough
+            score = fuzz.partial_ratio(target_lower, text)
+            logger.debug(
+                "Item bag row %d: '%s' (match=%.0f%% vs '%s')",
+                row_idx, text.strip(), score, target_lower,
+            )
+            if score >= 80:
+                return row_idx
+
+        return None
+
     def attempt_error_recovery(self) -> None:
         """Generic recovery: tap common button positions to advance.
 

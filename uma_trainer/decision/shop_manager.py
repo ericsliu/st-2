@@ -146,6 +146,55 @@ class ShopManager:
         self._last_tick_turn: int = -1
 
     # ------------------------------------------------------------------
+    # Inventory persistence
+    # ------------------------------------------------------------------
+
+    def load_inventory(self, path: str = "data/inventory.yaml") -> None:
+        """Load item inventory from a YAML file."""
+        import yaml
+        from pathlib import Path
+
+        p = Path(path)
+        if not p.exists():
+            logger.warning("No inventory file at %s", path)
+            return
+
+        with open(p) as f:
+            raw = yaml.safe_load(f) or {}
+
+        for key, count in raw.items():
+            if key.startswith("#") or key.startswith("_"):
+                continue
+            if key not in ITEM_CATALOGUE:
+                logger.warning("Unknown item key in inventory: %s", key)
+                continue
+            self._inventory[key] = int(count)
+
+        if self._inventory:
+            logger.info("Loaded inventory: %s", self._inventory)
+        else:
+            logger.info("Inventory is empty")
+
+    def save_inventory(self, path: str = "data/inventory.yaml") -> None:
+        """Persist current inventory back to YAML."""
+        import yaml
+        from pathlib import Path
+
+        data = {k: v for k, v in sorted(self._inventory.items()) if v > 0}
+        header = (
+            "# Items owned. Auto-updated after each item use.\n"
+            "# Keys must match ITEM_CATALOGUE in shop_manager.py\n"
+        )
+        with open(Path(path), "w") as f:
+            f.write(header)
+            yaml.dump(data, f, default_flow_style=False)
+
+    @property
+    def inventory(self) -> dict[str, int]:
+        """Read-only view of current inventory."""
+        return dict(self._inventory)
+
+    # ------------------------------------------------------------------
     # Scenario-delegated decisions
     # ------------------------------------------------------------------
 
@@ -156,14 +205,30 @@ class ShopManager:
         return False
 
     def get_item_to_use(self, state: GameState) -> BotAction | None:
-        """Check if any owned item should be used this turn."""
+        """Check if any owned item should be used this turn.
+
+        Does NOT decrement inventory — call consume_item() after
+        successfully executing the item use in the UI.
+        Deprecated: prefer get_item_queue() for multi-item planning.
+        """
         if self.scenario:
-            action = self.scenario.get_item_to_use(state, self._inventory)
-            if action:
-                # Decrement inventory
-                self._use_item(action.target)
-            return action
+            return self.scenario.get_item_to_use(state, self._inventory)
         return None
+
+    def get_item_queue(self, state: GameState) -> list[BotAction]:
+        """Plan a queue of items to use this turn.
+
+        Returns an ordered list. Items are planned together so combos
+        (e.g. Vita + Ankle Weights) are validated before committing.
+        Does NOT decrement inventory — call consume_item() after each.
+        """
+        if self.scenario:
+            return self.scenario.get_item_queue(state, self._inventory)
+        return []
+
+    def consume_item(self, item_key: str) -> None:
+        """Decrement inventory after an item is successfully used."""
+        self._use_item(item_key)
 
     def is_exceptional_training(self, state: GameState) -> bool:
         """True if the best available training tile has stat gains above
@@ -247,6 +312,7 @@ class ShopManager:
     def _use_item(self, item_key: str) -> None:
         if self._inventory.get(item_key, 0) > 0:
             self._inventory[item_key] -= 1
+            self.save_inventory()
 
     # ------------------------------------------------------------------
     # Active item effects (Trackblazer shop items)
@@ -306,13 +372,13 @@ class ShopManager:
             multiplier *= effect.multiplier
             zero_failure = zero_failure or effect.zero_failure
 
-        # Pending: check what item would be used this turn (without side effects)
+        # Pending: preview all items in this turn's queue
         if self.scenario:
-            pending = self.scenario.get_item_to_use(state, self._inventory)
-            if pending and pending.target in ITEM_TRAINING_EFFECTS:
-                effect_def = ITEM_TRAINING_EFFECTS[pending.target]
-                multiplier *= effect_def.get("multiplier", 1.0)
-                zero_failure = zero_failure or effect_def.get("zero_failure", False)
+            for pending in self.scenario.get_item_queue(state, self._inventory):
+                if pending.target in ITEM_TRAINING_EFFECTS:
+                    effect_def = ITEM_TRAINING_EFFECTS[pending.target]
+                    multiplier *= effect_def.get("multiplier", 1.0)
+                    zero_failure = zero_failure or effect_def.get("zero_failure", False)
 
         return TrainingBoost(multiplier=multiplier, zero_failure=zero_failure)
 

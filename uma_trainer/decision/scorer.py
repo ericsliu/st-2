@@ -14,7 +14,9 @@ from uma_trainer.decision.runspec import RunSpec
 from uma_trainer.types import (
     ActionType,
     BotAction,
+    Condition,
     GameState,
+    Mood,
     StatType,
     TrainingTile,
 )
@@ -128,6 +130,86 @@ class TrainingScorer:
                 threshold = strategy.rest_energy_override
 
         return state.energy < threshold
+
+    def should_go_out(self, state: GameState) -> BotAction | None:
+        """Check if we should Go Out (recreation) to improve mood.
+
+        Mood priorities:
+        - Before Classic Summer (turn 36): Go Out if BAD or TERRIBLE
+        - After Classic Summer (turn 36+): Go Out if not GOOD or GREAT
+        - During summer camp: NEVER Go Out — too valuable to waste
+
+        Returns a BotAction for GO_OUT, or None if mood is acceptable.
+        """
+        if self._is_summer_camp(state):
+            return None  # Never waste summer camp turns on mood
+
+        # Check for conditions that block mood improvement
+        mood_blocked = any(
+            c in state.active_conditions
+            for c in (Condition.MIGRAINE,)
+        )
+        if mood_blocked:
+            return None  # Go Out won't help — need Infirmary first
+
+        is_post_classic_summer = state.current_turn >= 36
+        mood = state.mood
+
+        need_go_out = False
+        if is_post_classic_summer:
+            # After Classic Summer: need GOOD or GREAT
+            if mood in (Mood.BAD, Mood.TERRIBLE, Mood.NORMAL):
+                need_go_out = True
+        else:
+            # Before Classic Summer: only if BAD or TERRIBLE
+            if mood in (Mood.BAD, Mood.TERRIBLE):
+                need_go_out = True
+
+        if not need_go_out:
+            return None
+
+        return BotAction(
+            action_type=ActionType.GO_OUT,
+            reason=f"Mood recovery: {mood.value} (turn {state.current_turn})",
+        )
+
+    def should_visit_infirmary(self, state: GameState) -> BotAction | None:
+        """Check if we should visit the Infirmary to cure a condition.
+
+        Conditions that warrant Infirmary:
+        - Migraine (blocks mood improvement)
+        - Night Owl (random energy drain)
+        - Slacker (may skip training)
+        - Practice Poor (reduced training gains)
+
+        During summer camp: only visit for Migraine (critical blocker).
+        """
+        negative_conditions = [
+            c for c in state.active_conditions
+            if c in (
+                Condition.MIGRAINE,
+                Condition.NIGHT_OWL,
+                Condition.SLACKER,
+                Condition.PRACTICE_POOR,
+                Condition.OVERWEIGHT,
+                Condition.SKIN_OUTBREAK,
+            )
+        ]
+
+        if not negative_conditions:
+            return None
+
+        # During summer camp, only Infirmary for critical blockers
+        if self._is_summer_camp(state):
+            critical = [c for c in negative_conditions if c == Condition.MIGRAINE]
+            if not critical:
+                return None
+            negative_conditions = critical
+
+        return BotAction(
+            action_type=ActionType.INFIRMARY,
+            reason=f"Cure conditions: {[c.value for c in negative_conditions]}",
+        )
 
     def _is_summer_camp(self, state: GameState) -> bool:
         """True if the current turn is within a summer camp window."""

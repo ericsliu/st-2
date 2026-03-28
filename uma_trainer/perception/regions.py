@@ -292,9 +292,9 @@ TURN_ACTION_REGIONS: dict[str, Region] = {
     "btn_log":           (740, 1830, 850, 1890),
     "btn_menu":          (950, 1830, 1050, 1890),
 
-    # Training Items and Full Stats buttons
-    "btn_training_items": (620, 1120, 780, 1180),
-    "btn_full_stats":     (820, 1120, 980, 1180),
+    # Training Items and Full Stats buttons (right side, above stat bars)
+    "btn_training_items": (810, 1080, 950, 1160),
+    "btn_full_stats":     (960, 1080, 1070, 1160),
 }
 
 

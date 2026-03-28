@@ -289,8 +289,21 @@ class ScenarioHandler:
 
     def get_item_to_use(self, state: "GameState", inventory: dict[str, int]) -> BotAction | None:
         """Check if any owned item should be used this turn.
-        Default: None (no item usage logic)."""
+        Default: None (no item usage logic).
+        Deprecated: prefer get_item_queue() for multi-item planning."""
         return None
+
+    def get_item_queue(self, state: "GameState", inventory: dict[str, int]) -> list["BotAction"]:
+        """Plan a queue of items to use this turn.
+
+        Returns an ordered list of item actions. The caller executes them
+        in sequence. Items are planned together so that combos (e.g.
+        Ankle Weights + Vita) are validated before committing.
+
+        Default: delegates to get_item_to_use() for single-item compat.
+        """
+        action = self.get_item_to_use(state, inventory)
+        return [action] if action else []
 
     def get_exceptional_threshold(self) -> int:
         """Stat gain threshold for exceptional training."""

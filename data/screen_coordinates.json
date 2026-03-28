@@ -69,5 +69,19 @@
   },
   "goal_complete": {
     "next": {"x": 540, "y": 1640}
+  },
+  "item_bag": {
+    "open_btn": {"x": 870, "y": 1120, "note": "Training Items button on career home"},
+    "close": {"x": 110, "y": 1750},
+    "confirm_use": {"x": 880, "y": 1750, "note": "Green Confirm Use button"},
+    "plus_btn_x": 1000,
+    "row_first_y": 271,
+    "row_height": 204,
+    "visible_rows": 7,
+    "_note": "Green + circles at x=1000. Row centers at y=271,475,679,883,1087,1285,1495. Tap + then Confirm Use. A second popup asks 'Use training item(s)?' with Cancel/Use buttons."
+  },
+  "item_confirm_popup": {
+    "cancel": {"x": 270, "y": 1785, "note": "Cancel on 'Use training item(s)?' popup"},
+    "use": {"x": 810, "y": 1785, "note": "Green 'Use Training Items' button"}
   }
 }

@@ -155,79 +155,157 @@ class TrackblazerHandler(ScenarioHandler):
     def get_item_to_use(
         self, state: "GameState", inventory: dict[str, int],
     ) -> BotAction | None:
-        """Check if any owned item should be used this turn.
+        """Single-item compat — returns first item from the queue."""
+        queue = self.get_item_queue(state, inventory)
+        return queue[0] if queue else None
 
-        Timing rules:
-        1. Condition cures — use immediately
-        2. Good-Luck Charm — before exceptional training
-        3. Megaphones — at Summer Camp start
-        4. Ankle Weights — stack with Megaphone at Summer Camp
-        5. Master Cleat Hammer — during Twinkle Star Climax
-        6. Vita items — when low energy + good training available
+    def get_item_queue(
+        self, state: "GameState", inventory: dict[str, int],
+    ) -> list[BotAction]:
+        """Plan a queue of items to use this turn.
+
+        Plans items as combos — e.g. Ankle Weights are only queued if
+        energy is sufficient or a Vita drink is available to pair with them.
+        Items are returned in execution order.
+
+        Priority:
+        1. Vita for energy recovery (queued first so energy is restored
+           before training-boost items increase energy cost)
+        2. Megaphones — at Summer Camp start
+        3. Ankle Weights — stack at Summer Camp (only if energy is safe)
+        4. Reset Whistle — rearrange cards at Summer Camp start
+        5. Good-Luck Charm — before exceptional training
+        6. Master Cleat Hammer — during Twinkle Star Climax
         """
         turn = state.current_turn
+        queue: list[BotAction] = []
+
+        # Track remaining inventory as we plan (so we don't double-spend)
+        remaining = dict(inventory)
 
         def _has(key: str) -> bool:
-            return inventory.get(key, 0) > 0
+            return remaining.get(key, 0) > 0
 
-        # 1. Condition cures — TODO: detect specific conditions
+        def _reserve(key: str) -> None:
+            remaining[key] = remaining.get(key, 0) - 1
 
-        # 2. Good-Luck Charm — before exceptional training
-        if _has("good_luck_charm"):
-            best_gain = self._best_training_gain(state)
-            if best_gain >= self.config.shop.exceptional_gain_threshold:
-                return BotAction(
-                    action_type=ActionType.USE_ITEM,
-                    target="good_luck_charm",
-                    reason=f"Charm before exceptional training (gain={best_gain})",
-                    tier_used=1,
-                )
+        def _best_vita() -> str | None:
+            for k in ("vita_65", "vita_40", "vita_20"):
+                if _has(k):
+                    return k
+            return None
 
-        # 3. Megaphones — at Summer Camp start
         summer_camp = self.get_event_turns("summer_camp")
-        if turn in summer_camp and self.is_event_start("summer_camp", turn):
+        in_summer = turn in summer_camp
+        at_camp_start = in_summer and self.is_event_start("summer_camp", turn)
+        turns_left = state.max_turns - turn if state.max_turns else 999
+        in_finale = turns_left <= 3
+
+        # ── Reset Whistle — rearranges cards, invalidates all other plans ──
+        # Used during summer camp or final 3 turns. When the whistle is used,
+        # return ONLY the whistle. The caller must re-evaluate the entire turn
+        # after using it, because card positions (and therefore tile scores,
+        # item combos, everything) will have changed.
+        if (in_summer or in_finale) and _has("reset_whistle"):
+            return [BotAction(
+                action_type=ActionType.USE_ITEM,
+                target="reset_whistle",
+                reason=f"Reset Whistle ({'finale' if in_finale else 'summer camp'}, {turns_left} turns left)",
+                tier_used=1,
+            )]
+
+        # ── Determine if we need energy recovery ──
+        # During summer: use Vita at energy < 50 (never rest)
+        # Outside summer: use Vita at energy < 30
+        vita_threshold = 50 if in_summer else 30
+        needs_energy = state.energy < vita_threshold
+
+        # ── Plan Ankle Weights (summer camp) ──
+        # Ankle Weights increase energy cost by 20%, so we need to ensure
+        # energy is safe. If energy is low, pair with a Vita drink.
+        want_weights = in_summer and _has("ankle_weights")
+        weights_energy_safe = state.energy >= 40  # enough to absorb +20% cost
+
+        if want_weights and not weights_energy_safe:
+            # Need a Vita to pair — check if one exists
+            vita_key = _best_vita()
+            if vita_key:
+                # Queue Vita FIRST, then Ankle Weights
+                queue.append(BotAction(
+                    action_type=ActionType.USE_ITEM,
+                    target=vita_key,
+                    reason=f"Vita before Ankle Weights (energy={state.energy})",
+                    tier_used=1,
+                ))
+                _reserve(vita_key)
+                needs_energy = False  # Vita covers our energy need
+            else:
+                # No Vita available — skip Ankle Weights entirely
+                logger.info(
+                    "Skipping Ankle Weights: energy=%d, no Vita available",
+                    state.energy,
+                )
+                want_weights = False
+
+        # ── Queue Vita for energy recovery (if still needed) ──
+        if needs_energy:
+            vita_key = _best_vita()
+            if vita_key:
+                queue.append(BotAction(
+                    action_type=ActionType.USE_ITEM,
+                    target=vita_key,
+                    reason=f"Vita for energy recovery (energy={state.energy})",
+                    tier_used=1,
+                ))
+                _reserve(vita_key)
+
+        # ── Queue Megaphone at Summer Camp start ──
+        if at_camp_start:
             for mega_key in ("empowering_mega", "motivating_mega", "coaching_mega"):
                 if _has(mega_key):
-                    return BotAction(
+                    queue.append(BotAction(
                         action_type=ActionType.USE_ITEM,
                         target=mega_key,
                         reason=f"Megaphone at Summer Camp start (turn {turn})",
                         tier_used=1,
-                    )
+                    ))
+                    _reserve(mega_key)
+                    break
 
-        # 4. Ankle Weights — stack with Megaphone at Summer Camp
-        if turn in summer_camp and _has("ankle_weights"):
-            return BotAction(
+        # ── Queue Ankle Weights (validated above) ──
+        if want_weights:
+            queue.append(BotAction(
                 action_type=ActionType.USE_ITEM,
                 target="ankle_weights",
                 reason="Ankle Weights stacked at Summer Camp",
                 tier_used=1,
-            )
+            ))
+            _reserve("ankle_weights")
 
-        # 5. Master Cleat Hammer — during Twinkle Star Climax
+        # ── Good-Luck Charm — before exceptional training ──
+        if not queue and _has("good_luck_charm"):
+            best_gain = self._best_training_gain(state)
+            if best_gain >= self.config.shop.exceptional_gain_threshold:
+                queue.append(BotAction(
+                    action_type=ActionType.USE_ITEM,
+                    target="good_luck_charm",
+                    reason=f"Charm before exceptional training (gain={best_gain})",
+                    tier_used=1,
+                ))
+                _reserve("good_luck_charm")
+
+        # ── Master Cleat Hammer — during Twinkle Star Climax ──
         twinkle_star = self.get_event_turns("twinkle_star")
         if turn in twinkle_star and _has("master_hammer"):
-            return BotAction(
+            queue.append(BotAction(
                 action_type=ActionType.USE_ITEM,
                 target="master_hammer",
                 reason="Master Hammer for Twinkle Star Climax",
                 tier_used=1,
-            )
+            ))
+            _reserve("master_hammer")
 
-        # 6. Vita items — low energy + decent training
-        if state.energy < 30 and state.training_tiles:
-            best_gain = self._best_training_gain(state)
-            if best_gain >= 20:
-                for vita_key in ("vita_65", "vita_40", "vita_20"):
-                    if _has(vita_key):
-                        return BotAction(
-                            action_type=ActionType.USE_ITEM,
-                            target=vita_key,
-                            reason=f"Vita for low-energy training (gain={best_gain})",
-                            tier_used=1,
-                        )
-
-        return None
+        return queue
 
     @staticmethod
     def _best_training_gain(state: "GameState") -> int:

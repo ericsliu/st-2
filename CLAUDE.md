@@ -1,5 +1,11 @@
 # Uma Trainer — Autonomous Uma Musume: Pretty Derby Bot
 
+## Development Rules
+
+**Python execution**: ALWAYS use `.venv/bin/python scripts/some_script.py`. NEVER use bare `python`, `python3`, or `python -c "..."` inline commands. When you need to run any Python code, no matter how small, write it to a script file first and run it with `.venv/bin/python`.
+
+**Bash commands**: Never chain commands with `&&` or `;`. Never use multiline commands. One command per Bash call.
+
 ## Project Overview
 
 An autonomous bot that plays Uma Musume: Pretty Derby (Global/English version, launched June 26 2025) on a MacBook Pro M1. It executes full Career Mode training runs with minimal human supervision, making strategic decisions about stat allocation, skill purchases, race entries, and event choices.

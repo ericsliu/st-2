@@ -47,6 +47,19 @@ class Mood(str, Enum):
         }[self]
 
 
+class Condition(str, Enum):
+    """Negative conditions affecting the trainee."""
+
+    NIGHT_OWL = "night_owl"          # Random energy drain each turn
+    MIGRAINE = "migraine"            # Blocks mood improvement
+    SKIN_OUTBREAK = "skin_outbreak"  # Random mood decrease
+    SLACKER = "slacker"              # May skip training
+    PRACTICE_POOR = "practice_poor"  # Reduced training gains
+    OVERWEIGHT = "overweight"        # Reduced speed, stamina
+    SHARP = "sharp"                  # Positive: +training gains (NOT negative)
+    CHARMING = "charming"            # Positive: bond gain bonus
+
+
 class StatType(str, Enum):
     """The five trainable stats in Uma Musume."""
 
@@ -193,6 +206,7 @@ class GameState:
     available_races: list[RaceOption] = field(default_factory=list)
     # Trainee aptitudes read from the stats page at run start.
     # Keys: short, mile, medium, long, turf, dirt. Values: S/A/B/C/D/E/F/G.
+    active_conditions: list[Condition] = field(default_factory=list)
     trainee_aptitudes: dict[str, str] = field(default_factory=dict)
     confidence: float = 1.0  # Assembler confidence in this reading
     raw_detections: list[Any] = field(default_factory=list)
