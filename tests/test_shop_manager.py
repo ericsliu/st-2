@@ -79,6 +79,8 @@ class TestShopManagerDelegation:
         action = sm.get_item_to_use(state)
         assert action is not None
         assert action.target == "good_luck_charm"
+        # get_item_to_use does NOT decrement; caller uses consume_item()
+        sm.consume_item("good_luck_charm")
         assert sm._inventory["good_luck_charm"] == 1
 
 

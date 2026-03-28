@@ -78,27 +78,62 @@ class TemplateDigitReader:
     ) -> int | None:
         """Read a gain value (+N) from a region of a frame.
 
+        When training items (Megaphone, Ankle Weights) boost gains, the
+        region contains TWO rows of "+N" numbers (base on top, bonus on
+        bottom).  The actual gain is the sum of both rows.
+
+        Splits the region at the vertical midpoint and reads each half
+        independently.  If both halves contain a valid gain, returns
+        their sum.
+
         Args:
             frame: Full frame (BGR, 1080x1920).
-            bbox: (x1, y1, x2, y2) region containing the gain number.
+            bbox: (x1, y1, x2, y2) region containing the gain number(s).
 
         Returns:
-            The gain value (1-50), or None if no gain detected.
+            The total gain value (1-99), or None if no gain detected.
         """
         x1, y1, x2, y2 = bbox
         region = frame[y1:y2, x1:x2]
         if region.size == 0:
             return None
+
+        h = y2 - y1
+
+        # Only attempt two-row split on tall regions (>100px).
+        # The expanded gain regions are 140px (y=1120-1260) to cover
+        # both base and bonus rows.  Single-row regions are ~70px.
+        if h > 100:
+            mid = h // 2
+            top_region = frame[y1:y1 + mid, x1:x2]
+            bot_region = frame[y1 + mid:y2, x1:x2]
+
+            top_val = self.read_gain(top_region) if top_region.size > 0 else None
+            bot_val = self.read_gain(bot_region) if bot_region.size > 0 else None
+
+            if top_val is not None and bot_val is not None:
+                total = top_val + bot_val
+                logger.debug(
+                    "Boosted gain: top=%d + bot=%d = %d",
+                    top_val, bot_val, total,
+                )
+                return total
+            if top_val is not None:
+                return top_val
+            if bot_val is not None:
+                return bot_val
+
+        # Single row or fallback: read full region
         return self.read_gain(region)
 
     def read_gain(self, region: np.ndarray) -> int | None:
-        """Read a gain value from a BGR image region.
+        """Read a single gain value from a BGR image region.
 
         Args:
-            region: BGR image containing a "+N" gain number.
+            region: BGR image containing a "+N" gain number (one row).
 
         Returns:
-            The gain value (1-50), or None if no gain detected.
+            The gain value (1-99), or None if no gain detected.
         """
         self._ensure_loaded()
         if not self._templates:
@@ -379,6 +414,6 @@ class TemplateDigitReader:
             return None
 
         val = int(digits)
-        if 1 <= val <= 50:
+        if 1 <= val <= 99:
             return val
         return None

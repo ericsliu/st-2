@@ -137,8 +137,8 @@ class OCREngine:
         characters. Digit glyphs can also be confused with letters (e.g.
         '10' → 'IC', '0' → 'O').
 
-        Gains are always 1–50 in practice; values outside this range are
-        treated as misreads.
+        Gains are always 1–99 in practice (up to ~50 base, higher with
+        item boosts); values outside this range are treated as misreads.
         """
         text = self.read_text(image)
         return self._parse_gain_text(text)
@@ -270,22 +270,36 @@ class OCREngine:
             pass  # never fail the OCR pipeline due to logging
 
     def _parse_gain_text(self, text: str) -> int | None:
-        """Parse gain text using the same logic as read_gain_number but from a string."""
+        """Parse gain text using the same logic as read_gain_number but from a string.
+
+        When training items boost gains, OCR may return two "+N" values
+        (e.g. "+13 +33").  All "+N" patterns are found and summed to get
+        the actual total gain.
+        """
         cleaned = text.replace(",", "").replace(".", "").strip()
         if re.search(r"[\d+＋$]", cleaned):
             cleaned_digits = cleaned.translate(self._OCR_DIGIT_MAP)
         else:
             cleaned_digits = cleaned
 
-        m = re.search(r"[+＋]\s*(\d+)", cleaned_digits)
-        if m:
-            return int(m.group(1))
+        # Find ALL "+N" patterns and sum them (handles boosted gains)
+        plus_matches = re.findall(r"[+＋]\s*(\d+)", cleaned_digits)
+        if plus_matches:
+            total = sum(int(m) for m in plus_matches)
+            if 1 <= total <= 99:
+                return total
+
+        # "$N" misread of "+N"
         m = re.search(r"[$]\s*(\d+)", cleaned_digits)
         if m:
             return int(m.group(1))
+        # "4N" misread of "+N"
         m = re.match(r"4(\d+)$", cleaned_digits)
         if m:
             return int(m.group(1))
+        # Bare number fallback — no "+" found, so this is a single value.
+        # Values > 50 with 2+ digits are likely misreads (e.g. "69" = "+9"),
+        # so strip the leading digit.
         m = re.search(r"\d+", cleaned_digits)
         if m:
             val = int(m.group())
@@ -347,8 +361,8 @@ class AppleVisionOCR:
         self._Vision = Vision
         logger.debug("AppleVisionOCR ready")
 
-    # Pre-built custom words for gain regions: "+1" through "+50"
-    _GAIN_CUSTOM_WORDS = [f"+{i}" for i in range(1, 51)]
+    # Pre-built custom words for gain regions: "+1" through "+99"
+    _GAIN_CUSTOM_WORDS = [f"+{i}" for i in range(1, 100)]
 
     def _pil_to_cgimage(self, pil_image: Image.Image):
         """Convert PIL image to CGImage for Vision framework."""

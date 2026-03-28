@@ -211,11 +211,12 @@ class TestTrackblazerHandler:
         assert action is not None
         assert action.target == "empowering_mega"
 
-    def test_no_megaphone_mid_camp(self, trackblazer):
+    def test_megaphone_mid_camp(self, trackblazer):
         state = GameState(current_turn=13, scenario="trackblazer")
         action = trackblazer.get_item_to_use(state, {"empowering_mega": 1})
-        # Not a camp start turn, so no megaphone
-        assert action is None
+        # Megaphone used any turn during summer camp
+        assert action is not None
+        assert action.target == "empowering_mega"
 
     def test_hammer_at_twinkle_star(self, trackblazer):
         state = GameState(current_turn=70, scenario="trackblazer")

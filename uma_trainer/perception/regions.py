@@ -314,17 +314,16 @@ STAT_SELECTION_REGIONS: dict[str, Region] = {
     "selected_label":    (10, 290, 350, 340),       # e.g. "Speed Lvl 3"
     "selected_subtitle": (10, 340, 350, 390),       # e.g. "Exercise Bike"
 
-    # Stat gain previews (small green "+X" above each stat label)
-    # Measured from OCR strip scan: gains at y=1190-1250.
-    # Right edges extended +30px to capture double-digit gains (+11, +17, +19)
-    # that extend past the stat column boundary.  Left edges kept tight to
-    # avoid overlapping the previous column's gain number.
-    "gain_speed":        (20, 1185, 200, 1255),
-    "gain_stamina":      (175, 1185, 365, 1255),
-    "gain_power":        (335, 1185, 540, 1255),
-    "gain_guts":         (510, 1185, 700, 1255),
-    "gain_wit":          (670, 1185, 870, 1255),
-    "gain_skill_pts":    (860, 1185, 1060, 1255),
+    # Stat gain previews ("+X" above each stat label)
+    # When items boost training (e.g. Megaphone), gains show as TWO rows:
+    #   top row = base gains, bottom row = bonus gains. Total = sum of both.
+    # Region covers y=1120-1260 to capture both rows.
+    "gain_speed":        (20, 1120, 200, 1260),
+    "gain_stamina":      (175, 1120, 365, 1260),
+    "gain_power":        (335, 1120, 540, 1260),
+    "gain_guts":         (510, 1120, 700, 1260),
+    "gain_wit":          (670, 1120, 870, 1260),
+    "gain_skill_pts":    (860, 1120, 1060, 1260),
 
     # Stat label + value row: labels at y=1250-1300, values at y=1300-1370
     "stat_speed":        (30, 1260, 170, 1370),

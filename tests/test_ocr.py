@@ -83,3 +83,23 @@ class TestReadGainNumber:
         """Trackblazer 'T' icon misread as '1)' — single digit with noise, rejected."""
         _mock_text(ocr, "1)")
         assert ocr.read_gain_number(MagicMock()) is None
+
+
+class TestBoostedGainParsing:
+    """Item-boosted training shows two additive rows (+base +bonus)."""
+
+    def test_two_plus_patterns_summed(self, ocr):
+        """+13 +33 (Megaphone speed boost) → 46."""
+        assert ocr._parse_gain_text("+13 +33") == 46
+
+    def test_two_plus_patterns_small(self, ocr):
+        """+9 +23 (Megaphone power boost) → 32."""
+        assert ocr._parse_gain_text("+9 +23") == 32
+
+    def test_single_plus_unchanged(self, ocr):
+        """Single +N still works normally."""
+        assert ocr._parse_gain_text("+17") == 17
+
+    def test_fullwidth_plus_summed(self, ocr):
+        """Fullwidth ＋ symbols also summed."""
+        assert ocr._parse_gain_text("＋5 ＋12") == 17
