@@ -164,6 +164,13 @@ def wait_for_career_home(capture, assembler, screen_id, injector, sequences, eng
             injector.tap(*ok_btn)
             continue
 
+        # Shop popup (e.g. "The Shop's lineup has been refreshed!") — tap Cancel
+        if state.screen == ScreenState.SKILL_SHOP:
+            logger.info("Shop popup — tapping Cancel to dismiss")
+            injector.tap(270, 1360)
+            time.sleep(1.0)
+            continue
+
         # Pre-race screen — tap View Results
         if state.screen == ScreenState.PRE_RACE:
             logger.info("Pre-race screen — tapping View Results")
@@ -235,9 +242,25 @@ def wait_for_career_home(capture, assembler, screen_id, injector, sequences, eng
             time.sleep(2.0)
             continue
 
-        # Check for Claw Machine minigame (Go Out special event) — pause for human
-        from uma_trainer.perception.ocr import OCREngine
+        # OCR full screen for unknown screen detection
         unknown_text = assembler.ocr.read_region(frame, (0, 0, 1080, 960)).lower()
+        unknown_text_lower = assembler.ocr.read_region(frame, (0, 960, 1080, 1920)).lower()
+
+        # Trackblazer Inspiration GO! screen — big gold GO! button at center
+        if "go" in unknown_text_lower and "skip" in unknown_text_lower:
+            logger.info("Inspiration GO! screen — tapping GO! at (540, 1350)")
+            injector.tap(540, 1350)
+            time.sleep(3.0)
+            continue
+
+        # Inspiration result ("spark activated", "inspiration strikes") — tap to dismiss
+        if "inspiration" in unknown_text_lower or "spark" in unknown_text_lower:
+            logger.info("Inspiration result — tapping to dismiss")
+            injector.tap(540, 960)
+            time.sleep(2.0)
+            continue
+
+        # Check for Claw Machine minigame (Go Out special event) — pause for human
         if "claw" in unknown_text or "crane" in unknown_text:
             logger.warning("CLAW MACHINE MINIGAME detected — pausing for human input")
             print("\n*** CLAW MACHINE MINIGAME — please play manually, then press Enter ***")
@@ -342,15 +365,24 @@ def execute_race_entry(injector, capture, assembler, screen_id, race_selector=No
     frame = capture.grab_frame()
     state = assembler.assemble(frame)
 
-    # Handle consecutive race warning / low energy warning
-    if state.screen == ScreenState.WARNING_POPUP:
-        from uma_trainer.perception.regions import WARNING_POPUP_REGIONS, get_tap_center
-        ok_btn = get_tap_center(WARNING_POPUP_REGIONS["btn_ok"])
-        logger.info("Warning popup before race list — tapping OK at %s", ok_btn)
-        injector.tap(*ok_btn)
-        time.sleep(2.0)
-        frame = capture.grab_frame()
-        state = assembler.assemble(frame)
+    # Handle popups that can appear before the race list
+    for _ in range(3):
+        if state.screen == ScreenState.WARNING_POPUP:
+            from uma_trainer.perception.regions import WARNING_POPUP_REGIONS, get_tap_center
+            ok_btn = get_tap_center(WARNING_POPUP_REGIONS["btn_ok"])
+            logger.info("Warning popup before race list — tapping OK at %s", ok_btn)
+            injector.tap(*ok_btn)
+            time.sleep(2.0)
+            frame = capture.grab_frame()
+            state = assembler.assemble(frame)
+        elif state.screen == ScreenState.SKILL_SHOP:
+            logger.info("Shop popup before race list — tapping Cancel")
+            injector.tap(100, 1150)
+            time.sleep(2.0)
+            frame = capture.grab_frame()
+            state = assembler.assemble(frame)
+        else:
+            break
 
     if state.screen != ScreenState.RACE_ENTRY:
         logger.warning("Expected RACE_ENTRY, got %s — aborting race", state.screen.value)
