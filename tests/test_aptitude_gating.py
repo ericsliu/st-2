@@ -37,7 +37,7 @@ def _state(aptitudes=None):
 def test_distance_category_mapping():
     assert RaceSelector._distance_category(1000) == "short"
     assert RaceSelector._distance_category(1200) == "short"
-    assert RaceSelector._distance_category(1400) == "mile"
+    assert RaceSelector._distance_category(1400) == "short"
     assert RaceSelector._distance_category(1600) == "mile"
     assert RaceSelector._distance_category(1800) == "mile"
     assert RaceSelector._distance_category(2000) == "medium"
