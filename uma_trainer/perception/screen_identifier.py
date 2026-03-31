@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 # We read 3 strategic zones that together distinguish every screen.
 
 # Top header / title bar — captures screen titles like "Shop", "Race List"
-HEADER_REGION = (0, 0, 600, 120)
+# Extended to y=200 to catch event sub-headers ("Tutorial", "Main Scenario Event")
+HEADER_REGION = (0, 0, 600, 200)
 
 # Left side of bottom button area — captures "Rest", "Back", etc.
 BUTTON_LEFT_REGION = (0, 1380, 550, 1770)
@@ -37,6 +38,9 @@ BUTTON_RIGHT_REGION = (300, 1600, 1080, 1830)
 
 # Popup header area — captures "Warning" text on popup dialogs
 POPUP_REGION = (0, 550, 1080, 700)
+
+# Event banner area — captures event sub-headers like "Tutorial", scenario names
+EVENT_BANNER_REGION = (0, 250, 980, 700)
 
 # Mid-screen area — captures event text markers, "View Results", etc.
 MID_REGION = (0, 1000, 1080, 1500)
@@ -55,8 +59,11 @@ SCREEN_RULES: list[ScreenRule] = [
     # Warning popup — "Warning" in the popup header region is very distinctive
     (ScreenState.WARNING_POPUP, ["warning"], []),
 
-    # Shop screen — "Shop" in header + "Confirm" or "Shop Coins" in buttons
-    (ScreenState.SKILL_SHOP, ["shop"], ["race", "training"]),
+    # Shop screen — matched via header check in identify(), not keyword rules.
+    # Item descriptions may contain "training"/"rest" which conflicts with
+    # career home detection. Header-based check is more reliable.
+    # This rule is a fallback for when "coin" or "cost" is visible.
+    (ScreenState.SKILL_SHOP, ["shop", "coin"], []),
 
     # Race list — "Race" in header area alongside list-style content
     (ScreenState.RACE_ENTRY, ["race list"], []),
@@ -70,6 +77,9 @@ SCREEN_RULES: list[ScreenRule] = [
     # may contain "next" in choice text) are detected as EVENT instead.
     (ScreenState.POST_RACE, ["next"], ["race list", "view results", "rest",
                                        "training", "shop", "effect"]),
+
+    # Tutorial events — "Tutorial" header with choices (Yes/No, etc.)
+    (ScreenState.EVENT, ["tutorial"], ["rest", "training", "shop", "race list"]),
 
     # Event popup — choice buttons with event text
     (ScreenState.EVENT, ["effect"], ["rest", "training", "shop", "race list"]),
@@ -138,6 +148,17 @@ class ScreenIdentifier:
         # OCR the key regions
         all_text = self._ocr_regions(frame)
         all_lower = all_text.lower()
+
+        # Header-specific check: "Shop" in header means we're ON the shop screen.
+        # The career home also has a "Shop" button label, but it's in the bottom
+        # button area, not in the header. This avoids false positives from item
+        # descriptions containing "training"/"rest" that break keyword rules.
+        header_text = self._ocr.read_region(frame, HEADER_REGION).lower()
+        if "shop" in header_text:
+            elapsed = (time.monotonic() - t0) * 1000
+            logger.debug("Screen identified: %s (%.1fms, header match) text='%s'",
+                         ScreenState.SKILL_SHOP.value, elapsed, all_text[:100])
+            return ScreenState.SKILL_SHOP
 
         # Match against rules
         for screen, required, forbidden in SCREEN_RULES:
@@ -235,6 +256,7 @@ class ScreenIdentifier:
             BUTTON_LEFT_REGION,
             BUTTON_RIGHT_REGION,
             POPUP_REGION,
+            EVENT_BANNER_REGION,
             MID_REGION,
         ):
             text = self._ocr.read_region(frame, region)

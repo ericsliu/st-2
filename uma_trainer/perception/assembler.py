@@ -136,6 +136,24 @@ class StateAssembler:
             if sp_val is not None and 0 <= sp_val <= 9999:
                 state.skill_pts = sp_val
 
+        # TS Climax state: check header for "TS CLIMAX" then read race progress
+        header = self.ocr.read_region(frame, (0, 0, 400, 50)).strip().upper()
+        if "TS CLIMAX" in header or "CLIMAX" in header:
+            race_text = self.ocr.read_region(frame, (0, 510, 250, 570)).strip()
+            race_match = re.search(r"(\d+)/(\d+)", race_text)
+            if race_match:
+                state.ts_climax_races_done = int(race_match.group(1))
+                state.ts_climax_races_total = int(race_match.group(2))
+            pts_text = self.ocr.read_region(frame, (0, 450, 200, 510)).strip()
+            pts_match = re.search(r"(\d+)", pts_text)
+            if pts_match:
+                state.ts_climax_pts = int(pts_match.group(1))
+
+        # Race Day detection: "Race Day" label appears in center button area
+        race_day_text = self.ocr.read_region(frame, (300, 1490, 750, 1570)).strip().lower()
+        if "race day" in race_day_text:
+            state.is_race_day = True
+
     # ------------------------------------------------------------------
     # Training stat selection screen
     # ------------------------------------------------------------------
@@ -640,29 +658,70 @@ class StateAssembler:
         # Recovery amount (Wit-type training extends bar with low-sat fill)
         state.energy_recovery = int(round(recovery / bar_width * 100))
 
+    # Month half → offset within a year (0-indexed). Each year has 24 turns,
+    # 2 per month (Early/Late), starting from January.
+    _MONTH_OFFSETS = {
+        "jan": 0, "feb": 2, "mar": 4, "apr": 6, "may": 8, "jun": 10,
+        "jul": 12, "aug": 14, "sep": 16, "oct": 18, "nov": 20, "dec": 22,
+    }
+    _YEAR_OFFSETS = {
+        "junior": 0, "classic": 24, "senior": 48,
+    }
+
     def _parse_turn(
         self,
         frame: np.ndarray,
         regions: dict[str, tuple[int, int, int, int]],
         state: GameState,
     ) -> None:
-        """Parse the turn counter (e.g. '12 turn(s) left')."""
-        region = regions.get("turn_counter")
+        """Parse the current turn from the period text (e.g. 'Classic Year Early Apr').
+
+        The 'X turn(s) left' counter is a GOAL DEADLINE, not a turn counter.
+        We derive the absolute turn from the period text instead.
+        """
+        region = regions.get("period_text")
         if region is None:
             return
 
-        text = self.ocr.read_region(frame, region)
-
-        # Try "12 turn(s) left" format — game shows turns remaining.
-        # Convert to absolute turn number: max_turns - turns_left.
-        match = re.search(r"(\d+)\s*turn", text, re.IGNORECASE)
-        if match:
-            turns_left = int(match.group(1))
-            state.current_turn = state.max_turns - turns_left
+        text = self.ocr.read_region(frame, region).strip().lower()
+        if not text:
             return
 
-        # Fallback: first number found (assume turns left)
-        match = re.search(r"\d+", text)
-        if match:
-            turns_left = int(match.group())
-            state.current_turn = state.max_turns - turns_left
+        # Parse year
+        year_offset = None
+        for year_name, offset in self._YEAR_OFFSETS.items():
+            if year_name in text:
+                year_offset = offset
+                break
+        if year_offset is None:
+            return
+
+        # Handle "Pre-Debut" phase: use turns-left counter to derive turn.
+        # Pre-Debut spans turns 1-12 of Junior Year, with debut at turn 12.
+        if "pre-debut" in text or "predebut" in text:
+            turn_region = regions.get("turn_counter")
+            if turn_region is not None:
+                turn_text = self.ocr.read_region(frame, turn_region).strip()
+                import re
+                m = re.search(r"(\d+)", turn_text)
+                if m:
+                    turns_left = int(m.group(1))
+                    state.current_turn = 12 - turns_left + 1
+                    return
+            # Fallback: assume turn 1
+            state.current_turn = 1
+            return
+
+        # Parse month
+        month_offset = None
+        for month_abbr, offset in self._MONTH_OFFSETS.items():
+            if month_abbr in text:
+                month_offset = offset
+                break
+        if month_offset is None:
+            return
+
+        # Parse half (Early=0, Late=1)
+        half = 1 if "late" in text else 0
+
+        state.current_turn = year_offset + month_offset + half + 1  # 1-indexed

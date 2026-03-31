@@ -5,6 +5,11 @@
 #
 # choice: 0-based index (0 = first option, 1 = second, etc.)
 
+# Tutorial events — always decline the explanation
+- text_contains: "tutorial"
+  choice: 1
+  note: "Tutorial — 'No, thank you.' to dismiss"
+
 - text_contains: "extra workout"
   choice: 0
   note: "Always accept if energy is sufficient"
@@ -53,10 +58,22 @@
   choice: 0
   note: "Trainee post-race event — default to option 1"
 
-# Acupuncturist — Health Chakra is best
+# King Halo Power card — "A Captivating Invitation" gives Uma Stan (bottom choice)
+- text_contains: "captivating invitation"
+  choice: 1
+  note: "King Halo event chain — bottom choice gives Uma Stan skill"
+
+# Acupuncturist — 5 choices: Strength(0), Winning(1), Health(2), Charm(3), Skip(4)
+# Charm Chakra early for Charming status (90% success, bond boost), skip later
 - text_contains: "acupuncturist"
-  choice: 2
-  note: "Health Chakra (70-80% success, heals conditions, big energy)"
+  choice: 3
+  turn_max: 36
+  note: "Pre-Classic Summer — Charm Chakra for Charming status (90% success)"
+
+- text_contains: "acupuncturist"
+  choice: 4
+  turn_min: 37
+  note: "Post-Classic Summer — skip entirely, downside risk not worth it"
 
 # New Year's — skill points usually best value
 - text_contains: "shrine visit"

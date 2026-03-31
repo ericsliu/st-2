@@ -335,10 +335,12 @@ STAT_SELECTION_REGIONS: dict[str, Region] = {
 
     # Right panel: support card character portraits (stacked vertically)
     # Portraits appear here for the currently selected/raised tile.
-    "support_panel":     (850, 280, 1070, 1200),
+    # Starts at y=400 to skip the trainee portrait in the top-right corner.
+    "support_panel":     (850, 400, 1070, 1200),
 
-    # Failure rate display — below stat values
-    "failure_rate":      (10, 1360, 280, 1460),     # "Failure 8%"
+    # Failure rate display — bubble above the raised tile, moves horizontally
+    # depending on which tile is raised. Wide region to catch all positions.
+    "failure_rate":      (100, 1300, 1050, 1450),   # "Failure 0%"
 
     # Bottom bar
     "btn_back":          (10, 1840, 180, 1910),
