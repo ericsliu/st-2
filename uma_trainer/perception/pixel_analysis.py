@@ -7,6 +7,7 @@ All functions operate on BGR numpy arrays at 1080×1920.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import numpy as np
 
@@ -270,6 +271,204 @@ def count_panel_portraits(frame: np.ndarray, region: Region) -> int:
             break
 
     return count
+
+
+def _load_npc_templates() -> list[tuple[str, "np.ndarray"]]:
+    """Load NPC portrait templates from data/npc_templates/.
+
+    Returns list of (name, bgr_array) tuples. Cached after first call.
+    """
+    if hasattr(_load_npc_templates, "_cache"):
+        return _load_npc_templates._cache
+
+    import cv2
+    templates = []
+    template_dir = Path(__file__).resolve().parent.parent.parent / "data" / "npc_templates"
+    if template_dir.is_dir():
+        for png in sorted(template_dir.glob("*.png")):
+            tmpl = cv2.imread(str(png))
+            if tmpl is not None:
+                templates.append((png.stem, tmpl))
+                logger.debug("Loaded NPC template: %s (%s)", png.stem, tmpl.shape[:2])
+
+    _load_npc_templates._cache = templates
+    return templates
+
+
+def _is_npc_portrait(frame: np.ndarray, portrait_region: tuple[int, int, int, int],
+                     threshold: float = 0.65) -> str | None:
+    """Check if a portrait region matches any NPC template.
+
+    Args:
+        frame: BGR numpy array (full 1080x1920 frame).
+        portrait_region: (x1, y1, x2, y2) of the portrait area.
+        threshold: Minimum normalized cross-correlation to count as match.
+
+    Returns:
+        NPC name if matched, None otherwise.
+    """
+    import cv2
+
+    x1, y1, x2, y2 = portrait_region
+    roi = frame[y1:y2, x1:x2]
+    if roi.size == 0:
+        return None
+
+    templates = _load_npc_templates()
+    if not templates:
+        return None
+
+    for name, tmpl in templates:
+        # Resize template to match ROI height if needed
+        th, tw = tmpl.shape[:2]
+        rh, rw = roi.shape[:2]
+        if th != rh or tw != rw:
+            tmpl_resized = cv2.resize(tmpl, (rw, rh))
+        else:
+            tmpl_resized = tmpl
+
+        result = cv2.matchTemplate(roi, tmpl_resized, cv2.TM_CCOEFF_NORMED)
+        score = float(result.max())
+        logger.debug("NPC match '%s': score=%.3f (threshold=%.2f)", name, score, threshold)
+        if score >= threshold:
+            return name
+
+    return None
+
+
+def _classify_bond_color(frame: np.ndarray, bar_y: int,
+                         segment_xs: list[int]) -> str:
+    """Classify the bond bar color as 'blue', 'green', or 'orange'.
+
+    The bar color indicates bond level range:
+      - blue/cyan: low bond (below ~60%)
+      - green: medium bond (approaching but below friendship threshold)
+      - orange: friendship threshold reached (≥80%)
+
+    Samples filled segments and classifies by average HSV hue.
+    Returns 'none' if no filled segments found.
+    """
+    try:
+        import cv2
+    except ImportError:
+        return "none"
+
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    hues = []
+    for sx in segment_xs:
+        if sx >= frame.shape[1] or bar_y >= frame.shape[0]:
+            continue
+        b, g, r = int(frame[bar_y, sx, 0]), int(frame[bar_y, sx, 1]), int(frame[bar_y, sx, 2])
+        sat = max(r, g, b) - min(r, g, b)
+        if sat > 80:
+            hues.append(int(hsv[bar_y, sx, 0]))
+
+    if not hues:
+        return "none"
+
+    avg_hue = sum(hues) / len(hues)
+    # OpenCV HSV hue: 0-179.  Orange ~10-25, Green ~35-55, Blue/Cyan ~85-110
+    if avg_hue < 30:
+        return "orange"
+    elif avg_hue < 65:
+        return "green"
+    else:
+        return "blue"
+
+
+def read_bond_levels(frame: np.ndarray) -> list[int]:
+    """Read bond meter levels from support card portraits on the stat selection screen.
+
+    Each portrait has a segmented bond gauge bar below it. The bar has 5 segments
+    separated by dark gray dividers (~73,72,73). Filled segments are colored;
+    unfilled segments are gray (~109,109,117).
+
+    Bar color indicates bond range:
+      - blue/cyan = low bond
+      - green = medium bond (below friendship threshold)
+      - orange = friendship threshold reached (≥80%)
+
+    The segment count gives a coarse reading (0/20/40/60/80/100) but the color
+    is authoritative for the friendship boundary: green bars are capped at 79
+    (below friendship) even if segment count suggests 80+.
+
+    NPC portraits (Director Akikawa, Reporter) are filtered out via template
+    matching against data/npc_templates/.
+
+    Returns a list of bond percentages (0-100) for each detected support card,
+    ordered top to bottom. Empty list if no bars found.
+    """
+    # Bond bar absolute positions (1080x1920 portrait, stat selection screen).
+    # Bar y-centers for up to 6 support card slots, spaced ~180px apart.
+    BAR_Y_CENTERS = [424, 604, 784, 964, 1144, 1324]
+
+    # Portrait region: ~140px above bar center, x=940..1060
+    PORTRAIT_X = (940, 1060)
+    PORTRAIT_Y_OFFSET = 130  # portrait top is this far above bar_y
+
+    # Dividers at x=926, 949, 972, 995, 1021 create 5 segments:
+    #   Seg1: 915-925, Seg2: 928-948, Seg3: 951-971, Seg4: 974-994, Seg5: 998-1020
+    # One sample point near the center of each segment.
+    SEGMENT_SAMPLE_XS = [920, 938, 961, 984, 1009]
+
+    # Segment divider x positions — dark gray (~73,72,73) between segments.
+    DIVIDER_XS = [926, 949, 972, 995]
+
+    results = []
+
+    for bar_y in BAR_Y_CENTERS:
+        if bar_y >= frame.shape[0]:
+            break
+
+        # First, verify this is a real bond bar by checking for dividers.
+        has_divider = False
+        for dx in DIVIDER_XS:
+            if dx >= frame.shape[1]:
+                continue
+            b, g, r = int(frame[bar_y, dx, 0]), int(frame[bar_y, dx, 1]), int(frame[bar_y, dx, 2])
+            if r < 90 and g < 90 and b < 90 and (max(r, g, b) - min(r, g, b)) < 15:
+                has_divider = True
+                break
+
+        if not has_divider:
+            break  # No bond bar here — no more cards below
+
+        # Check if this portrait is an NPC (Director/Reporter) — skip if so
+        portrait_top = bar_y - PORTRAIT_Y_OFFSET
+        portrait_bot = bar_y - 10
+        portrait_region = (PORTRAIT_X[0], max(0, portrait_top), PORTRAIT_X[1], portrait_bot)
+        npc_name = _is_npc_portrait(frame, portrait_region)
+        if npc_name:
+            logger.info("Skipping NPC '%s' at bar_y=%d", npc_name, bar_y)
+            continue  # Skip this slot but keep checking lower slots
+
+        filled = 0
+        for sx in SEGMENT_SAMPLE_XS:
+            if sx >= frame.shape[1] or bar_y >= frame.shape[0]:
+                break
+            b, g, r = int(frame[bar_y, sx, 0]), int(frame[bar_y, sx, 1]), int(frame[bar_y, sx, 2])
+            sat = max(r, g, b) - min(r, g, b)
+            if sat > 80:
+                filled += 1
+
+        bond_pct = (filled * 100) // 5  # 0, 20, 40, 60, 80, 100
+
+        # Use bar color to enforce friendship boundary.
+        # Green = not yet at friendship, so cap at 79 even if segments say 80+.
+        # Orange = friendship reached, so floor at 80.
+        color = _classify_bond_color(frame, bar_y, SEGMENT_SAMPLE_XS)
+        if color == "green" and bond_pct >= 80:
+            bond_pct = 79
+        elif color == "orange" and bond_pct < 80:
+            bond_pct = 80
+        elif color == "blue" and bond_pct >= 60:
+            bond_pct = 59  # Blue = low bond, cap conservatively
+
+        results.append(bond_pct)
+        logger.debug("Bond bar y=%d: %d/5 filled, color=%s -> %d%%",
+                      bar_y, filled, color, bond_pct)
+
+    return results
 
 
 def region_has_content(frame: np.ndarray, region: Region, threshold: float = 0.15) -> bool:
