@@ -298,6 +298,16 @@ TURN_ACTION_REGIONS: dict[str, Region] = {
 }
 
 
+# ── Full Stats (Umamusume Details) screen ────────────────────────────────────
+# Aptitude rows — read when Full Stats is open.
+# Calibrated from full_stats.png at 1080×1920.
+FULL_STATS_REGIONS: dict[str, Region] = {
+    "track_row":    (20, 598, 1060, 668),    # "Track  Turf A  Dirt E"
+    "distance_row": (20, 655, 1060, 725),    # "Distance  Sprint D  Mile A  Medium A  Long S"
+    "style_row":    (20, 714, 1060, 784),    # "Style  Front G  Pace B  Late C  End A"
+}
+
+
 # ── Training stat selection screen ────────────────────────────────────────────
 # After tapping "Training", shows 5 stat tiles at the bottom.
 # Calibrated 2026-03-27 from MuMuPlayer 1080×1920 stat_selection.png.

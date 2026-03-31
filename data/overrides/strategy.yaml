@@ -6,18 +6,18 @@
 stat_weight_overrides:
   - condition: early_game
     weights:
-      speed: 1.0      # Early game: don't over-invest in speed, build bonds
-      stamina: 0.9
+      speed: 1.2      # Speed is always valuable, even early
+      stamina: 0.8
       power: 0.8
-      guts: 0.7
-      wit: 1.1        # Wit early = better training efficiency all run
+      guts: 0.4       # Guts barely matters for parent runs
+      wit: 1.0        # Wit early = better training efficiency all run
 
   - condition: late_game
     weights:
-      speed: 1.8      # Late game: max speed — top priority
-      stamina: 0.7    # Stamina already high, deprioritize
+      speed: 2.0      # Late game: speed is king
+      stamina: 0.5    # Stamina caps out around 600 usefulness
       power: 0.9
-      guts: 0.6
+      guts: 0.3       # Guts is lowest priority
       wit: 0.4        # Wit less useful late game
 
 # Skills to never buy regardless of priority
@@ -36,6 +36,10 @@ skill_blacklist:
 skill_priority_list:
   - "Late Bloomer"
   - "Acceleration Boost"
+  - "Uma Stan"
+  - "Professor of Curvature"
+  - "Nimble Navigator"
+  - "Straightaway Adept"
 
 # Whether to allow double-circling (upgrading) skills at all.
 # Set to false for parent/factor runs where breadth > depth.
@@ -53,15 +57,8 @@ bond_priority_turns_override: null # e.g. 20 to shorten bond phase
 scenario_rest_thresholds:
   trackblazer: 5
 
-# Trainee aptitudes — set per run. Used to filter races by surface/distance.
-# Values: S, A, B, C, D, E, F, G. Races with C or worse aptitude score 0.
-trainee_aptitudes:
-  turf: A
-  dirt: G
-  short: E
-  mile: A
-  medium: B
-  long: C
+# Trainee aptitudes are now read live from Full Stats screen each turn.
+# No longer set manually here.
 
 # Race strategy (especially important for Trackblazer which has ~30 races)
 race_strategy:

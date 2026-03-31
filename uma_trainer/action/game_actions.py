@@ -559,13 +559,19 @@ class GameActionExecutor:
     # Conditions
     # ------------------------------------------------------------------
 
-    def check_conditions(self) -> list[Condition]:
-        """Open Full Stats, read conditions, close. Return list of Conditions."""
-        logger.info("Checking conditions via Full Stats")
+    def check_conditions(self) -> tuple[list[Condition], dict[str, str]]:
+        """Open Full Stats, read conditions + aptitudes, close.
+
+        Returns (conditions, aptitudes) where aptitudes is a dict like
+        {"turf": "A", "dirt": "E", "short": "D", "mile": "A", ...}.
+        """
+        logger.info("Checking conditions + aptitudes via Full Stats")
         self.injector.tap(990, 1160)
         time.sleep(1.5)
 
         frame = self.provider.refresh_frame()
+
+        # --- Conditions ---
         condition_text = self.ocr.read_region(frame, (0, 950, 1080, 1250)).lower()
         logger.info("Conditions OCR: '%s'", condition_text)
 
@@ -584,6 +590,9 @@ class GameActionExecutor:
             if keyword in condition_text:
                 conditions.append(cond)
 
+        # --- Aptitudes ---
+        aptitudes = self._read_aptitudes(frame)
+
         for close_attempt in range(3):
             self.injector.tap(540, 1775)
             time.sleep(1.5)
@@ -593,7 +602,65 @@ class GameActionExecutor:
                 break
             logger.info("Full Stats still open (attempt %d) — retrying Close", close_attempt + 1)
 
-        return conditions
+        return conditions, aptitudes
+
+    def _read_aptitudes(self, frame) -> dict[str, str]:
+        """Parse aptitude grades from the Full Stats screen frame."""
+        from uma_trainer.perception.regions import FULL_STATS_REGIONS
+
+        valid_grades = {"S", "A", "B", "C", "D", "E", "F", "G"}
+
+        def _parse_row(text: str, pairs: list[tuple[str, str]]) -> dict[str, str]:
+            result = {}
+            for label, key in pairs:
+                m = re.search(rf"{label}\s*([A-GS])\b", text, re.IGNORECASE)
+                if m and m.group(1).upper() in valid_grades:
+                    result[key] = m.group(1).upper()
+            return result
+
+        aptitudes: dict[str, str] = {}
+
+        # Track row: "Track  Turf A  Dirt E"
+        track_pairs = [("turf", "turf"), ("dirt", "dirt")]
+        track_text = self.ocr.read_region(frame, FULL_STATS_REGIONS["track_row"])
+        logger.debug("Track row OCR: '%s'", track_text)
+        aptitudes.update(_parse_row(track_text, track_pairs))
+
+        # Distance row: "Distance  Sprint D  Mile A  Medium A  Long S"
+        dist_pairs = [("sprint", "short"), ("mile", "mile"),
+                      ("medium", "medium"), ("long", "long")]
+        dist_text = self.ocr.read_region(frame, FULL_STATS_REGIONS["distance_row"])
+        logger.debug("Distance row OCR: '%s'", dist_text)
+        aptitudes.update(_parse_row(dist_text, dist_pairs))
+
+        # Style row (informational logging only)
+        style_text = self.ocr.read_region(frame, FULL_STATS_REGIONS["style_row"])
+        logger.debug("Style row OCR: '%s'", style_text)
+
+        # Retry any missing keys with shifted y (OCR sensitive to crop)
+        expected_keys = {"turf", "dirt", "short", "mile", "medium", "long"}
+        missing = expected_keys - aptitudes.keys()
+        if missing:
+            logger.info("Aptitude retry for missing: %s", missing)
+            row_map = {
+                "track_row": (track_pairs, {"turf", "dirt"}),
+                "distance_row": (dist_pairs, {"short", "mile", "medium", "long"}),
+            }
+            for row_name, (pairs, row_keys) in row_map.items():
+                if not (missing & row_keys):
+                    continue
+                x1, y1, x2, y2 = FULL_STATS_REGIONS[row_name]
+                for dy in [-5, 5, -10, 10]:
+                    text = self.ocr.read_region(frame, (x1, y1 + dy, x2, y2 + dy))
+                    logger.debug("Retry %s dy=%d: '%s'", row_name, dy, text.strip())
+                    for k, v in _parse_row(text, pairs).items():
+                        if k not in aptitudes:
+                            aptitudes[k] = v
+                    if not (missing & row_keys - aptitudes.keys()):
+                        break
+
+        logger.info("Trainee aptitudes: %s", aptitudes)
+        return aptitudes
 
     # ------------------------------------------------------------------
     # Shop

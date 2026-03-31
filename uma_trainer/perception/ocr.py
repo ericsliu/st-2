@@ -184,7 +184,9 @@ class OCREngine:
         # The template reader struggles with split half-height regions.
         if h > 100:
             self._ensure_initialized()
-            raw_text = self.read_text(region).strip()
+            import cv2
+            inverted = cv2.bitwise_not(region)
+            raw_text = self.read_text(inverted).strip()
             plus_matches = re.findall(r"[+＋]\s*(\d+)", raw_text)
             if len(plus_matches) >= 2:
                 total = sum(int(m) for m in plus_matches)
@@ -204,16 +206,7 @@ class OCREngine:
                                          val, "tall_single_ocr")
                     return val
 
-        # Attempt 0: template matching (most reliable for single-row gain digits)
-        tmpl_reader = self._get_template_reader()
-        if tmpl_reader is not None:
-            tmpl_result = tmpl_reader.read_gain(region)
-            if tmpl_result is not None:
-                self._log_gain_sample(region, bbox, "", "", "",
-                                     tmpl_result, "template")
-                return tmpl_result
-
-        # Fall back to OCR-based approaches
+        # Primary: OCR with color inversion
         self._ensure_initialized()
         preprocessed = self._preprocess_number_region(region)
 
@@ -256,10 +249,24 @@ class OCREngine:
 
         # Both or neither have '+'; prefer upscaled
         result = up_result if up_result is not None else raw_result
-        if result is not None or up_text or raw_text:
+        if result is not None:
             self._log_gain_sample(region, bbox, hinted_text, up_text,
                                  raw_text, result, "fallback")
-        return result
+            return result
+
+        # Last resort: template matching
+        tmpl_reader = self._get_template_reader()
+        if tmpl_reader is not None:
+            tmpl_result = tmpl_reader.read_gain(region)
+            if tmpl_result is not None:
+                self._log_gain_sample(region, bbox, "", "", "",
+                                     tmpl_result, "template_fallback")
+                return tmpl_result
+
+        if up_text or raw_text:
+            self._log_gain_sample(region, bbox, hinted_text, up_text,
+                                 raw_text, None, "fallback")
+        return None
 
     @staticmethod
     def _log_gain_sample(
@@ -364,16 +371,18 @@ class OCREngine:
 
     @staticmethod
     def _preprocess_number_region(region: np.ndarray) -> np.ndarray:
-        """Upscale a region for better digit OCR.
+        """Upscale and invert a region for better digit OCR.
 
-        The game uses gradient-colored stat numbers with shadows.
-        Simple 3x upscale preserves the original colors which Apple Vision
-        handles better than binarized versions.
+        The game uses light-colored stat gain text (+N) on dark/mixed
+        backgrounds. Inverting colors makes digits dark-on-light which
+        dramatically improves OCR accuracy (especially '+' recognition).
         """
         import cv2
 
         h, w = region.shape[:2]
-        return cv2.resize(region, (w * 3, h * 3), interpolation=cv2.INTER_LANCZOS4)
+        upscaled = cv2.resize(region, (w * 3, h * 3), interpolation=cv2.INTER_LANCZOS4)
+        inverted = cv2.bitwise_not(upscaled)
+        return inverted
 
 
 class AppleVisionOCR:
