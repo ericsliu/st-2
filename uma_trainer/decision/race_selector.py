@@ -61,11 +61,13 @@ class RaceSelector:
         """Convert absolute turn to (year, month, half).
 
         Each year has 24 turns (2 per month).
+        Turn numbering is 1-based (turn 1 = Junior Early Jan).
         Returns (year_1based, month_1to12, "early"|"late").
         """
+        t = turn - 1  # convert to 0-based
         turns_per_year = max_turns // 3
-        year = turn // turns_per_year + 1
-        year_turn = turn % turns_per_year
+        year = t // turns_per_year + 1
+        year_turn = t % turns_per_year
         month = (year_turn // 2) + 1
         half = "early" if year_turn % 2 == 0 else "late"
         return year, month, half

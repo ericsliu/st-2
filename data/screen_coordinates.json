@@ -9,7 +9,7 @@
     "shop": {"x": 620, "y": 1750, "note": "Small target, between Recreation and Races"},
     "races": {"x": 920, "y": 1750},
     "full_stats": {"x": 990, "y": 1160, "note": "Right side, below trainee portrait. Training Items is left at ~800,1140"},
-    "training_items": {"x": 800, "y": 1160}
+    "training_items": {"x": 820, "y": 1250, "note": "Verified center, button spans x=780-860 y=1220-1280"}
   },
   "race_list": {
     "race_entry_1": {"x": 540, "y": 1050, "note": "First race row, tap to select"},
@@ -102,8 +102,9 @@
     "close": {"x": 540, "y": 1775, "note": "Close button on Umamusume Details / Full Stats screen"}
   },
   "item_effect_indicators": {
-    "_note": "Dumbbell icons on left side of career home showing active item effects and remaining turns. Tap to see details.",
-    "region": {"x": 0, "y": 420, "w": 120, "h": 120}
+    "_note": "Icons on left side showing active item effects. Tap to open Active Item Effects popup.",
+    "tap": {"x": 50, "y": 650, "note": "Tap the effect icon to open popup. Icon is below RANKING/Races text."},
+    "popup_close": {"x": 460, "y": 1361, "note": "Close button on Active Item Effects popup"}
   },
   "skill_screen": {
     "confirm": {"x": 540, "y": 1800, "note": "Green Confirm button at bottom-center"},

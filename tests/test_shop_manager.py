@@ -17,8 +17,8 @@ class TestItemCatalogue:
     def test_notepad_is_never_buy(self):
         assert ITEM_CATALOGUE["notepad"].tier == ItemTier.NEVER
 
-    def test_scroll_is_ss_tier(self):
-        assert ITEM_CATALOGUE["scroll"].tier == ItemTier.SS
+    def test_scroll_is_a_tier(self):
+        assert ITEM_CATALOGUE["scroll"].tier == ItemTier.A
 
     def test_all_items_have_effects(self):
         for key, item in ITEM_CATALOGUE.items():
