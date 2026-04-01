@@ -1,171 +1,125 @@
-# Uma Trainer — Autonomous Uma Musume: Pretty Derby Bot
+# Uma Trainer — CLAUDE.md
 
-## Development Rules
+## CRITICAL RULES — Read These First
 
-**Python execution**: ALWAYS use `.venv/bin/python scripts/some_script.py`. NEVER use bare `python`, `python3`, or `python -c "..."` inline commands. When you need to run any Python code, no matter how small, write it to a script file first and run it with `.venv/bin/python`.
+**Python execution**: ALWAYS use `.venv/bin/python scripts/some_script.py`. NEVER use bare `python`, `python3`, or `python -c "..."`. When you need to run ANY Python code, no matter how small, write it to a script file first and run it with `.venv/bin/python`.
 
 **Bash commands**: Never chain commands with `&&` or `;`. Never use multiline commands. One command per Bash call.
 
-## Project Overview
+**No blind taps**: NEVER tap without confirmed screen state. If you don't know what screen the game is on, screenshot first.
 
-An autonomous bot that plays Uma Musume: Pretty Derby (Global/English version, launched June 26 2025) on a MacBook Pro M1. It executes full Career Mode training runs with minimal human supervision, making strategic decisions about stat allocation, skill purchases, race entries, and event choices.
+**ADB**: Must manually run `adb connect 127.0.0.1:5555` before any scripts that interact with the emulator.
 
-The system runs entirely on-device except for optional Claude API calls for high-value research queries.
+**MuMu cannot be rooted**: The emulator does not support root. Never suggest root-dependent approaches.
 
-## Architecture
+**Screenshot coordinates are misleading**: When you view a 1080x1920 screenshot, it is displayed scaled down. Do NOT estimate tap coordinates by visually inspecting screenshots. Instead use percentage-based estimation (% across × 1080, % down × 1920) and verify with a single ADB tap. Cross-reference with known-good coordinates in `data/screen_coordinates.json`.
 
-Perception–reasoning–action loop: **Screen Capture → YOLO Object Detection → OCR → State Assembly → Decision Engine → Input Injection**
+---
 
-### Game Client
+## How to Run Things
 
-- **Target**: Android version via MuMuPlayer (macOS Android emulator for Apple Silicon) + scrcpy
-- **Why Android, not Steam**: The Steam client uses CrackProof kernel-level anti-cheat. The Android client does not. CrossOver/Proton on macOS crashes during races anyway.
-- **Input**: ADB tap/swipe commands via `adb shell input tap <x> <y>`
-- **Screen capture**: scrcpy screenshot API or macOS ScreenCaptureKit on the mirrored window
-- Frame rate: 1–2 FPS during decision points, 0.2 FPS during races/cutscenes
-
-### Perception Pipeline
-
-**Object Detection (YOLO)**
-- Model: YOLOv8n or YOLO11n (nano for speed on M1)
-- Export: CoreML for Metal GPU acceleration
-- Training data: 500–1000 labeled screenshots from the English global client, annotated via Label Studio
-- ~50 object classes: buttons, stat indicators, support card icons, rainbow/gold training indicators, mood icons, screen-state identifiers
-- Target: <50ms inference per frame on M1 GPU
-- Prior art: [Umaplay](https://github.com/Magody/Umaplay) demonstrates this working with 40+ classes on 300+ images
-
-**OCR**
-- Primary: Apple Vision framework via PyObjC (`VNRecognizeTextRequest`) — native, uses Neural Engine, zero GPU cost
-- Fallback: EasyOCR (pure Python, works on M1 CPU/MPS)
-- For numeric stats specifically: consider template matching or lightweight CNN (game uses consistent fonts)
-- PaddleOCR has historically poor Apple Silicon support — avoid unless the PaddlePaddle 3.2+ ARM builds stabilize
-
-**State Assembly** — combines YOLO + OCR into structured game state:
-- `current_screen` (enum: training, event, race, skill_shop, etc.)
-- `trainee_stats` (Speed, Stamina, Power, Guts, Wit)
-- `energy_level` (0–100)
-- `mood` (enum)
-- `training_tiles[5]` (stat type, support cards present, rainbow, gold, hint flags)
-- `bond_levels` (per support card)
-- `career_goals` (races + fan requirements)
-- `current_turn / max_turns`
-- `event_text + choices` (when on event screen)
-- `available_skills + costs` (when on skill screen)
-
-### Decision Engine (Three-Tier)
-
-**Tier 1: Scoring System (rule-based, handles ~90% of decisions)**
-Each training tile scored on: stat alignment with preset weights, support card stacking count, rainbow/gold indicators, director presence, hint icons, energy cost penalty, bond-building priority (early run). Highest score wins. Sub-millisecond, deterministic, highly tunable via presets.
-
-**Tier 2: Local LLM (ambiguous decisions)**
-- Model: Phi-4-mini 3.8B Q4_K_M (~2.5 GB RAM) or Llama 3.2 3B
-- Runtime: Ollama or MLX (MLX is 30–50% faster on Apple Silicon)
-- Use cases: unknown events (not in KB), skill build planning, unexpected screen recovery
-- ~15–20 tok/s on M1, sufficient for game-speed decisions
-
-**Tier 3: Claude API (research, low-frequency)**
-- Model: claude-sonnet-4-6
-- Use cases: support card evaluations, meta strategy, high-stakes unknown events, post-run analysis, knowledge base structuring
-- Expected: 2–5 calls/day, <$0.10/day
-- Always request structured JSON output for machine parsing
-- Cache responses by input hash
-
-### Input Injection
-
-- ADB via scrcpy for Android emulator
-- Human-like variance: ±5–15px random offset, 200–800ms random delay between taps, occasional 1–3s pauses, randomized breaks between runs (5–30min)
-- Never acts during loading screens, never faster than human speed
-
-## Knowledge Base
-
-SQLite database + JSON files, stored locally. Critical for minimizing AI calls.
-
-| Dataset | Source | ~Size |
-|---------|--------|-------|
-| Event choices (character + generic) | GameTora, Game8, wikis | ~2,000 events |
-| Skill database | In-game + wiki | ~800 skills |
-| Support card database | GameTora tier lists | ~400 cards |
-| Character aptitudes | In-game + wiki | ~80 characters |
-| Race calendar | In-game data | ~120 races |
-| Training presets | Community-optimized | ~30 presets |
-
-**Event matching**: exact hash → fuzzy match (>85% similarity via rapidfuzz) → local LLM → Claude API fallback
-
-## Resource Budget (M1 16GB)
-
-| Component | Memory |
-|-----------|--------|
-| Android Emulator + Game | ~3–4 GB |
-| YOLO nano (CoreML) | ~50–100 MB |
-| OCR (Apple Vision) | ~50 MB (ANE, not GPU) |
-| Local LLM (Phi-4-mini Q4) | ~2.5 GB |
-| Python runtime + bot | ~200–400 MB |
-| macOS overhead | ~3–4 GB |
-| **Total** | **~9.5–12 GB** |
-
-If on 8GB M1: drop local LLM, use Claude API for all AI decisions.
-
-## Project Structure
-
-```
-uma_trainer/
-├── capture/          # Screen capture, frame preprocessing
-├── perception/       # YOLO detection, OCR, state assembly
-├── decision/         # Scoring engine, LLM integration, strategy
-├── action/           # Input injection (ADB, PyAutoGUI), action sequences
-├── knowledge/        # SQLite DB, JSON loaders, event/skill/card lookup
-├── llm/              # Local LLM client (Ollama/MLX), Claude API client
-├── web/              # FastAPI dashboard for monitoring/config
-├── fsm/              # Finite state machine for game flow control
-models/               # YOLO weights, OCR models, LLM configs
-data/                 # Knowledge base JSON files, training presets
-datasets/             # YOLO training data (screenshots + labels)
-scripts/              # Data scrapers, model training, utilities
-tests/                # Unit and integration tests
+### Run one game turn
+```bash
+.venv/bin/python scripts/run_one.py
 ```
 
-## Key Dependencies
+### Dry run (screenshot + decide, no taps)
+```bash
+.venv/bin/python scripts/dry_run.py
+```
 
-- Python 3.11+
-- `ultralytics` — YOLO training/inference
-- `coremltools` — CoreML export for Metal
-- `pyobjc-framework-Vision` — Apple Vision OCR
-- `easyocr` — fallback OCR
-- `ollama` (Python client) — local LLM
-- `anthropic` — Claude API
-- `fastapi` + `uvicorn` — web dashboard
-- `adb-shell` — ADB for Android input
-- `Pillow`, `numpy` — image processing
-- `rapidfuzz` — fuzzy string matching for event lookup
-- `sqlite3` (stdlib) — knowledge base
+### Full career loop
+```bash
+.venv/bin/python scripts/run_career.py
+```
 
-## Game Context (Uma Musume Career Mode)
+### Run tests
+```bash
+.venv/bin/pytest tests/ -v
+```
 
-A Career run is the core loop (~20–40 min each). Player selects: 1 Trainee, 2 Legacy Umamusume, 6 Support Cards. The run spans ~72 turns across 3 in-game years.
+Do NOT use `python -m pytest`. Do NOT create new test files unless explicitly asked — tests already exist in `tests/`.
 
-Each turn the player picks one action: Train (stat), Rest, Infirmary, Go Out, or Race. Random events (2–3 choices) fire between turns. Career goals require winning specific races and hitting fan count thresholds. Winning all goals qualifies for the URA Finale (or scenario equivalent).
+---
 
-Key stats: Speed, Stamina, Power, Guts, Wit. Key resources: Energy (0–100), Mood, Support Card Bond gauges. Scenarios available: URA Finale, Unity Cup, Trackblazer (added March 2026).
+## Architecture (Actual, Not Aspirational)
 
-## Anti-Cheat Notes
+The bot does NOT use YOLO, local LLMs, or a web dashboard. Those exist in the codebase as scaffolding but are not wired into the main loop.
 
-- Steam version uses CrackProof (kernel-level) — **we avoid this entirely by using the Android client**
-- Bot operates purely via screen capture + ADB input — no memory reading, no packet manipulation
-- All game logic is server-side; client is display-only
-- Human-like input patterns + session limits to reduce behavioral detection risk
-- **Automation may violate ToS. Educational/research purposes. Users accept all risk.**
+**What actually runs:**
+```
+ADB Screenshot → Apple Vision OCR → Screen Detection → State Assembly → Rule-Based Scorer → ADB Tap
+```
 
-## Development Phases
+### Core file: `scripts/auto_turn.py`
 
-1. **Foundation (Weeks 1–3)**: Emulator setup, screen capture pipeline, YOLO dataset collection, OCR pipeline, initial knowledge base
-2. **Core Loop (Weeks 4–6)**: Train YOLO, state assembly, scoring engine, ADB input, FSM, first supervised end-to-end run
-3. **Intelligence (Weeks 7–9)**: Local LLM integration, Claude API client, event matching, skill purchase logic, error recovery, YOLO retrain
-4. **Polish (Weeks 10–12)**: Web dashboard, daily task automation, session management, KB scraper, performance tuning, docs
+This is the monolith. Nearly all bot logic lives here:
+- `screenshot()` — ADB screencap
+- `detect_screen(img)` — OCR-based screen identification
+- `build_game_state(img, screen)` — assembles stats, energy, mood, turn
+- `run_one_turn()` — main loop: detects screen, decides action, executes, loops through intermediate screens
+- `_handle_career_home()` — the big decision function for normal training turns
+- `handle_skill_shop()` — skill scanning and purchasing
+- `_use_training_items()` — opens Training Items bag and uses items
+- `_detect_active_effects()` — taps effect indicator icon, reads popup via OCR
+- `SKILL_PRIORITY` dict — skill purchase rankings
+- `_INTERMEDIATE_RESULTS` set — screens that `run_one_turn()` loops through automatically
 
-## Open Questions
+### OCR: `scripts/ocr_util.py`
 
-- MuMuPlayer stability under 6+ hour sustained load on M1 16GB
-- YOLO nano accuracy on subtle indicators (faint hint icons) — may need small variant
-- Phi-4-mini quality for game-specific reasoning — may need fine-tuning on Uma Musume Q&A data
-- OCR accuracy on decorative/stylized game fonts
-- Rate of new content additions to the global client (affects KB maintenance burden)
+Apple Vision OCR wrapper. Provides `ocr_image()`, `ocr_region()`, `ocr_full_screen()`. This is fast and accurate — do not replace with EasyOCR.
+
+### Decision logic: `uma_trainer/decision/`
+
+- `scorer.py` — scores training tiles based on stat weights from runspec
+- `race_selector.py` — picks races based on aptitude, goals, calendar
+- `shop_manager.py` — tracks inventory, active effects, purchase decisions
+
+### Configuration
+
+- `data/runspecs/parent_balanced_v1.yaml` — stat weight targets and thresholds
+- `data/screen_coordinates.json` — all button coordinates (1080x1920 portrait)
+- `data/race_calendar.json` — race schedule with grades, distances, turns
+- `data/inventory.yaml` — current item counts (auto-updated at runtime)
+
+---
+
+## Game State Flow
+
+Each `run_one.py` invocation starts a fresh Python process. Module-level globals (like `_game_state`, `_shop_manager`, `_current_turn`) reset every time.
+
+`run_one_turn()` loops through intermediate screens (race results, popups, cutscenes) in a single process so that `_game_state` stays alive within one turn. It returns a result string indicating what happened.
+
+There is NO disk persistence of game state between turns. If the bot is stopped, the next `run_one.py` call rebuilds state from scratch via OCR.
+
+---
+
+## Common Pitfalls — Don't Repeat These
+
+1. **Don't create parallel implementations**. All bot logic is in `auto_turn.py`. The `uma_trainer/core/` and `uma_trainer/state/` modules are a WIP refactor (phases 3-4 pending) — don't duplicate logic there.
+
+2. **Don't buy unknown skills**. Skills not in `SKILL_PRIORITY` get priority 0 and are skipped. Never buy unique/inherited skills (they scale with career wins and are worthless in parent runs).
+
+3. **Training Items button** is at (820, 1250), NOT where it visually appears in screenshots. Verified empirically.
+
+4. **Active effect detection** works by tapping the effect indicator icon at (50, 650), reading the "Active Item Effects" popup via OCR, then closing it at (460, 1361). It does NOT work by OCR-scanning the home screen — that produces false positives from TS Climax UI text.
+
+5. **View Results** skips race animation. Always use it. But it's locked for first-time race types — must tap Race instead.
+
+6. **Consecutive race limit**: Max 3 races in a row. Track with `_consecutive_races`.
+
+7. **Summer camp priority**: Stockpile megaphones + bracelets. Never train with >5% failure rate during summer.
+
+8. **Megaphone before everything else in TS Climax**: Use megaphone FIRST, then energy drink, then train. Reset Whistles are reactive only (after seeing bad tiles), never preemptive.
+
+9. **Scroll coordinates** for skill shop: swipe from y=750-1350 to stay within the scrollable list area. Previous y=700-1200 range hit the Confirm button.
+
+---
+
+## Emulator Details
+
+- MuMuPlayer in portrait mode, 1080x1920 resolution
+- ADB at 127.0.0.1:5555
+- Root is disabled (Uma Musume blocks rooted devices)
+- `tap(x, y)` calls `adb shell input tap` with small random jitter
+- `swipe(x1, y1, x2, y2)` for scrolling
