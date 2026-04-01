@@ -94,25 +94,22 @@ There is NO disk persistence of game state between turns. If the bot is stopped,
 
 ---
 
+## Game Strategy References
+
+Read these files before making game logic changes:
+- `data/advice/general.md` — universal mechanics: energy, mood, racing, skills, items
+- `data/advice/trackblazer.md` — Trackblazer-specific: grade points, shop tiers, TS Climax, phase flow
+- `data/scenarios/trackblazer.yaml` — scenario config: turn ranges, grade point targets, shop settings
+
 ## Common Pitfalls — Don't Repeat These
 
 1. **Don't create parallel implementations**. All bot logic is in `auto_turn.py`. The `uma_trainer/core/` and `uma_trainer/state/` modules are a WIP refactor (phases 3-4 pending) — don't duplicate logic there.
 
-2. **Don't buy unknown skills**. Skills not in `SKILL_PRIORITY` get priority 0 and are skipped. Never buy unique/inherited skills (they scale with career wins and are worthless in parent runs).
+2. **Training Items button** is at (820, 1250), NOT where it visually appears in screenshots. Verified empirically.
 
-3. **Training Items button** is at (820, 1250), NOT where it visually appears in screenshots. Verified empirically.
+3. **Active effect detection** works by tapping the effect indicator icon at (50, 650), reading the "Active Item Effects" popup via OCR, then closing it at (460, 1361). It does NOT work by OCR-scanning the home screen — that produces false positives from TS Climax UI text.
 
-4. **Active effect detection** works by tapping the effect indicator icon at (50, 650), reading the "Active Item Effects" popup via OCR, then closing it at (460, 1361). It does NOT work by OCR-scanning the home screen — that produces false positives from TS Climax UI text.
-
-5. **View Results** skips race animation. Always use it. But it's locked for first-time race types — must tap Race instead.
-
-6. **Consecutive race limit**: Max 3 races in a row. Track with `_consecutive_races`.
-
-7. **Summer camp priority**: Stockpile megaphones + bracelets. Never train with >5% failure rate during summer.
-
-8. **Megaphone before everything else in TS Climax**: Use megaphone FIRST, then energy drink, then train. Reset Whistles are reactive only (after seeing bad tiles), never preemptive.
-
-9. **Scroll coordinates** for skill shop: swipe from y=750-1350 to stay within the scrollable list area. Previous y=700-1200 range hit the Confirm button.
+4. **Scroll coordinates** for skill shop: swipe from y=750-1350 to stay within the scrollable list area. Previous y=700-1200 range hit the Confirm button.
 
 ---
 

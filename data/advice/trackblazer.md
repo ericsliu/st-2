@@ -225,6 +225,23 @@ Maximum: 30 VP. Distance/surface based on career race history.
 - Difficulty is lower than URA Finals
 - Save alarm clocks for G1 races during the career, not for TS
 
+### TS Climax Training Turns
+
+Between TS Climax races, you get training turns. The action order is critical:
+
+1. **Megaphone FIRST** — use Empowering (+60%) or Motivating (+40%) before anything else
+2. **Energy drink** — top up without overcapping (check current energy, pick appropriate vita)
+3. **Train** — tap into training selection
+
+Reset Whistles are REACTIVE only — use them after seeing bad training tiles, never preemptively.
+Do NOT skip the megaphone step. Every TS Climax training turn should have a megaphone active.
+
+### TS Climax Race Days
+
+On Race Day screens, use Master Cleat Hammer before entering the race.
+The bot detects `ts_climax_race` screen and handles cleat usage automatically.
+Retry TS Climax races if placement is >3rd.
+
 ---
 
 ## Turn-by-Turn Decision Priority
