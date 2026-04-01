@@ -125,6 +125,9 @@ class TrainingTile:
     tap_coords: tuple[int, int] = (0, 0)
     # Stat gains OCR'd from the tile: {stat_name: gain_value}
     stat_gains: dict[str, int] = field(default_factory=dict)
+    # Bond meter levels per card (0-100), read from portrait gauge bars.
+    # Ordered top to bottom matching support_cards list.
+    bond_levels: list[int] = field(default_factory=list)
 
     @property
     def total_stat_gain(self) -> int:
@@ -211,6 +214,13 @@ class GameState:
     # Keys: short, mile, medium, long, turf, dirt. Values: S/A/B/C/D/E/F/G.
     active_conditions: list[Condition] = field(default_factory=list)
     trainee_aptitudes: dict[str, str] = field(default_factory=dict)
+    # TS Climax state (only populated during Twinkle Star Climax phase)
+    ts_climax_races_done: int = 0   # e.g. 0 in "0/3 Races"
+    ts_climax_races_total: int = 0  # e.g. 3 in "0/3 Races" (0 = not in TS Climax)
+    ts_climax_pts: int = 0          # ranking points
+    is_race_day: bool = False       # True when career home shows "Race Day" (no training/rest)
+    result_pts: int = 0                 # Trackblazer Result Pts (e.g. 300)
+    result_pts_target: int = 0           # Target Result Pts for current year (e.g. 300)
     confidence: float = 1.0  # Assembler confidence in this reading
     raw_detections: list[Any] = field(default_factory=list)
     timestamp: float = field(default_factory=time.time)

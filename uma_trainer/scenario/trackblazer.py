@@ -66,23 +66,24 @@ class TrackblazerHandler(ScenarioHandler):
         if turn < race_cfg.skip_early_turns:
             return None
 
-        # 3. Grade Point urgency — if behind schedule, race aggressively.
+        # 3. Result Pts urgency — if behind schedule, race aggressively.
+        #    Formula: urgent if missing > turns_left * 70 pts.
         #    BUT: never race during summer camp — those turns are the most
-        #    valuable training turns in the entire run. GP can be caught up after.
+        #    valuable training turns in the entire run.
         summer_camp = self.get_event_turns("summer_camp")
         in_summer = turn in summer_camp
-        gp_deficit = self._grade_point_deficit(state)
-        if gp_deficit > 0 and not in_summer:
-            turns_left = self.turns_left_in_year(turn)
-            if turns_left <= 12 and gp_deficit > 60:
+        rp_deficit = self._result_pts_deficit(state)
+        if rp_deficit > 0 and not in_summer:
+            total_turns_left = state.max_turns - turn
+            if rp_deficit > total_turns_left * 70:
                 logger.info(
-                    "Grade Points: %d behind with %d turns left — must race",
-                    gp_deficit, turns_left,
+                    "Result Pts urgent: %d pts behind, %d turns left (threshold %d)",
+                    rp_deficit, total_turns_left, total_turns_left * 70,
                 )
                 return BotAction(
                     action_type=ActionType.RACE,
                     tap_coords=races_btn,
-                    reason=f"GP deficit {gp_deficit}, {turns_left} turns left",
+                    reason=f"Result Pts deficit {rp_deficit}, {total_turns_left} turns left",
                     tier_used=1,
                 )
 
@@ -115,15 +116,22 @@ class TrackblazerHandler(ScenarioHandler):
     def on_non_race_action(self) -> None:
         self._consecutive_races = 0
 
-    def _grade_point_deficit(self, state: "GameState") -> int:
-        """How many Grade Points behind the current year's target."""
+    def _result_pts_deficit(self, state: "GameState") -> int:
+        """How many Result Pts behind the current year's target.
+
+        Uses OCR'd values from the turn action screen. If target isn't
+        available, falls back to the scenario config grade point targets.
+        """
+        if state.result_pts_target > 0:
+            return max(0, state.result_pts_target - state.result_pts)
+
+        # Fallback: use scenario config targets
         year = self.current_year(state.current_turn)
-        # TODO: read preferred_surface from overrides
         surface = "turf"
         target = self.get_grade_point_target(year, surface)
-        # TODO: OCR Grade Points from the turn action screen
-        # For now, return a moderate deficit to encourage racing.
-        return max(0, target // 3)
+        if target > 0:
+            return max(0, target // 3)
+        return 0
 
     # ------------------------------------------------------------------
     # Shop decisions
@@ -262,7 +270,7 @@ class TrackblazerHandler(ScenarioHandler):
         # ── Queue Megaphone during Summer Camp ──
         # Use at first opportunity during summer camp (multi-turn effect)
         if in_summer:
-            for mega_key in ("empowering_mega", "motivating_mega", "coaching_mega"):
+            for mega_key in ("empowering_mega", "motivating_mega"):
                 if _has(mega_key):
                     queue.append(BotAction(
                         action_type=ActionType.USE_ITEM,

@@ -10,30 +10,30 @@ style_target: leader
 
 stat_targets:
   speed:
-    minimum: 400
-    target: 650
-    excellent: 750
-    values: [1.0, 0.7, 0.2, 0.05]
+    minimum: 500
+    target: 800
+    excellent: 1000
+    values: [1.2, 0.9, 0.3, 0.1]
   stamina:
-    minimum: 400
+    minimum: 350
     target: 600
-    excellent: 700
-    values: [1.0, 0.7, 0.2, 0.05]
+    excellent: 600
+    values: [0.9, 0.6, 0.0, 0.0]   # Hard cap at 600 — zero value above
   power:
     minimum: 350
-    target: 550
-    excellent: 650
-    values: [0.9, 0.65, 0.15, 0.0]
+    target: 600
+    excellent: 600
+    values: [0.9, 0.65, 0.0, 0.0]   # Hard cap at 600 — zero value above
   guts:
-    minimum: 300
-    target: 450
-    excellent: 550
-    values: [0.8, 0.5, 0.1, 0.0]
+    minimum: 200
+    target: 350
+    excellent: 450
+    values: [0.5, 0.3, 0.05, 0.0]   # Low priority for parent runs
   wit:
     minimum: 300
-    target: 450
-    excellent: 550
-    values: [0.8, 0.5, 0.1, 0.0]
+    target: 500
+    excellent: 600
+    values: [1.0, 0.7, 0.2, 0.0]
 
 policy:
   bond_future_value: 0.9

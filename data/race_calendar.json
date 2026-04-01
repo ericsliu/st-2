@@ -1,115 +1,1991 @@
 [
-  {"race_id": "february_stakes", "name": "February Stakes", "grade": "G1", "distance": 1600, "surface": "dirt", "direction": "left", "venue": "Tokyo", "course": "", "category": "mile", "month": 2, "half": "late", "fan_reward": 10500},
-  {"race_id": "osaka_hai", "name": "Osaka Hai", "grade": "G1", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "inner", "category": "medium", "month": 4, "half": "early", "fan_reward": 10500},
-  {"race_id": "oka_sho", "name": "Oka Sho", "grade": "G1", "distance": 1600, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "outer", "category": "mile", "month": 4, "half": "early", "fan_reward": 10500},
-  {"race_id": "satsuki_sho", "name": "Satsuki Sho", "grade": "G1", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "inner", "category": "medium", "month": 4, "half": "late", "fan_reward": 10500},
-  {"race_id": "tenno_sho_spring", "name": "Tenno Sho (Spring)", "grade": "G1", "distance": 3200, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "outer", "category": "long", "month": 5, "half": "early", "fan_reward": 12000},
-  {"race_id": "nhk_mile_cup", "name": "NHK Mile Cup", "grade": "G1", "distance": 1600, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "mile", "month": 5, "half": "early", "fan_reward": 10500},
-  {"race_id": "victoria_mile", "name": "Victoria Mile", "grade": "G1", "distance": 1600, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "mile", "month": 5, "half": "late", "fan_reward": 10500},
-  {"race_id": "japanese_oaks", "name": "Japanese Oaks", "grade": "G1", "distance": 2400, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "medium", "month": 5, "half": "late", "fan_reward": 10500},
-  {"race_id": "tokyo_yushun", "name": "Tokyo Yushun (Derby)", "grade": "G1", "distance": 2400, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "medium", "month": 6, "half": "early", "fan_reward": 12000},
-  {"race_id": "yasuda_kinen", "name": "Yasuda Kinen", "grade": "G1", "distance": 1600, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "mile", "month": 6, "half": "early", "fan_reward": 10500},
-  {"race_id": "takarazuka_kinen", "name": "Takarazuka Kinen", "grade": "G1", "distance": 2200, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "inner", "category": "medium", "month": 6, "half": "late", "fan_reward": 12000},
-  {"race_id": "sprinters_stakes", "name": "Sprinters Stakes", "grade": "G1", "distance": 1200, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "outer", "category": "short", "month": 10, "half": "early", "fan_reward": 10500},
-  {"race_id": "shuka_sho", "name": "Shuka Sho", "grade": "G1", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "inner", "category": "medium", "month": 10, "half": "late", "fan_reward": 10500},
-  {"race_id": "kikka_sho", "name": "Kikka Sho", "grade": "G1", "distance": 3000, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "outer", "category": "long", "month": 10, "half": "late", "fan_reward": 10500},
-  {"race_id": "tenno_sho_autumn", "name": "Tenno Sho (Autumn)", "grade": "G1", "distance": 2000, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "medium", "month": 11, "half": "early", "fan_reward": 12000},
-  {"race_id": "elizabeth_queen_cup", "name": "Elizabeth Queen Cup", "grade": "G1", "distance": 2200, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "medium", "month": 11, "half": "late", "fan_reward": 10500},
-  {"race_id": "mile_championship", "name": "Mile Championship", "grade": "G1", "distance": 1600, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "outer", "category": "mile", "month": 11, "half": "late", "fan_reward": 10500},
-  {"race_id": "japan_cup", "name": "Japan Cup", "grade": "G1", "distance": 2400, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "medium", "month": 11, "half": "late", "fan_reward": 15000},
-  {"race_id": "champions_cup", "name": "Champions Cup", "grade": "G1", "distance": 1800, "surface": "dirt", "direction": "left", "venue": "Chukyo", "course": "", "category": "mile", "month": 12, "half": "early", "fan_reward": 10500},
-  {"race_id": "arima_kinen", "name": "Arima Kinen", "grade": "G1", "distance": 2500, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "inner", "category": "long", "month": 12, "half": "late", "fan_reward": 15000},
-  {"race_id": "hopeful_stakes", "name": "Hopeful Stakes", "grade": "G1", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "inner", "category": "medium", "month": 12, "half": "late", "fan_reward": 10500},
-  {"race_id": "takamatsunomiya_kinen", "name": "Takamatsunomiya Kinen", "grade": "G1", "distance": 1200, "surface": "turf", "direction": "right", "venue": "Chukyo", "course": "", "category": "short", "month": 3, "half": "late", "fan_reward": 10500},
-  {"race_id": "asahi_hai_futurity_stakes", "name": "Asahi Hai Futurity Stakes", "grade": "G1", "distance": 1600, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "outer", "category": "mile", "month": 12, "half": "late", "fan_reward": 10500},
-  {"race_id": "hanshin_juvenile_fillies", "name": "Hanshin Juvenile Fillies", "grade": "G1", "distance": 1600, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "outer", "category": "mile", "month": 12, "half": "early", "fan_reward": 10500},
-
-  {"race_id": "nakayama_kinen", "name": "Nakayama Kinen", "grade": "G2", "distance": 1800, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "inner", "category": "mile", "month": 2, "half": "late", "fan_reward": 5500},
-  {"race_id": "hanshin_daishoten", "name": "Hanshin Daishoten", "grade": "G2", "distance": 3000, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "inner", "category": "long", "month": 3, "half": "late", "fan_reward": 5500},
-  {"race_id": "spring_stakes", "name": "Spring Stakes", "grade": "G2", "distance": 1800, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "inner", "category": "mile", "month": 3, "half": "late", "fan_reward": 5500},
-  {"race_id": "tulip_sho", "name": "Tulip Sho", "grade": "G2", "distance": 1600, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "outer", "category": "mile", "month": 3, "half": "early", "fan_reward": 5000},
-  {"race_id": "yayoi_sho", "name": "Yayoi Sho", "grade": "G2", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "inner", "category": "medium", "month": 3, "half": "early", "fan_reward": 5500},
-  {"race_id": "flora_stakes", "name": "Flora Stakes", "grade": "G2", "distance": 2000, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "medium", "month": 4, "half": "late", "fan_reward": 5000},
-  {"race_id": "aoba_sho", "name": "Aoba Sho", "grade": "G2", "distance": 2400, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "medium", "month": 5, "half": "early", "fan_reward": 5000},
-  {"race_id": "meguro_kinen", "name": "Meguro Kinen", "grade": "G2", "distance": 2500, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "long", "month": 6, "half": "early", "fan_reward": 5000},
-  {"race_id": "mainichi_okan", "name": "Mainichi Okan", "grade": "G2", "distance": 1800, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "inner", "category": "mile", "month": 10, "half": "early", "fan_reward": 5500},
-  {"race_id": "fuchu_himba_stakes", "name": "Fuchu Himba Stakes", "grade": "G2", "distance": 1800, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "mile", "month": 10, "half": "late", "fan_reward": 5000},
-  {"race_id": "kyoto_daishoten", "name": "Kyoto Daishoten", "grade": "G2", "distance": 2400, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "outer", "category": "medium", "month": 10, "half": "early", "fan_reward": 5500},
-  {"race_id": "rose_stakes", "name": "Rose Stakes", "grade": "G2", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "inner", "category": "medium", "month": 9, "half": "late", "fan_reward": 5000},
-  {"race_id": "st_lite_kinen", "name": "St. Lite Kinen", "grade": "G2", "distance": 2200, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "inner", "category": "medium", "month": 9, "half": "late", "fan_reward": 5000},
-  {"race_id": "all_comers", "name": "All Comers", "grade": "G2", "distance": 2200, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "inner", "category": "medium", "month": 9, "half": "late", "fan_reward": 5500},
-  {"race_id": "argentina_kyowakoku_hai", "name": "Argentina Kyowakoku Hai", "grade": "G2", "distance": 2500, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "long", "month": 11, "half": "early", "fan_reward": 5000},
-  {"race_id": "stayers_stakes", "name": "Stayers Stakes", "grade": "G2", "distance": 3600, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "inner", "category": "long", "month": 12, "half": "early", "fan_reward": 5500},
-  {"race_id": "nikkei_sho", "name": "Nikkei Sho", "grade": "G2", "distance": 2500, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "inner", "category": "long", "month": 3, "half": "late", "fan_reward": 5000},
-  {"race_id": "kinko_sho", "name": "Kinko Sho", "grade": "G2", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Chukyo", "course": "", "category": "medium", "month": 3, "half": "late", "fan_reward": 5500},
-  {"race_id": "nikkei_shinshun_hai", "name": "Nikkei Shinshun Hai", "grade": "G2", "distance": 2400, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "inner", "category": "medium", "month": 1, "half": "late", "fan_reward": 5000},
-  {"race_id": "american_jockey_club_cup", "name": "American Jockey Club Cup", "grade": "G2", "distance": 2200, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "inner", "category": "medium", "month": 1, "half": "late", "fan_reward": 5500},
-  {"race_id": "centaur_stakes", "name": "Centaur Stakes", "grade": "G2", "distance": 1200, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "inner", "category": "short", "month": 9, "half": "early", "fan_reward": 5000},
-  {"race_id": "keio_hai_spring_cup", "name": "Keio Hai Spring Cup", "grade": "G2", "distance": 1400, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "short", "month": 5, "half": "late", "fan_reward": 5000},
-  {"race_id": "swan_stakes", "name": "Swan Stakes", "grade": "G2", "distance": 1400, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "outer", "category": "short", "month": 10, "half": "late", "fan_reward": 5000},
-  {"race_id": "sankei_sho_all_comers", "name": "Sankei Sho Phoenix", "grade": "G2", "distance": 1400, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "inner", "category": "short", "month": 6, "half": "late", "fan_reward": 5000},
-  {"race_id": "sapporo_kinen", "name": "Sapporo Kinen", "grade": "G2", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Sapporo", "course": "", "category": "medium", "month": 8, "half": "late", "fan_reward": 5500},
-  {"race_id": "niigata_kinen", "name": "Niigata Kinen", "grade": "G2", "distance": 2000, "surface": "turf", "direction": "left", "venue": "Niigata", "course": "outer", "category": "medium", "month": 8, "half": "late", "fan_reward": 5000},
-  {"race_id": "kokura_kinen", "name": "Kokura Kinen", "grade": "G2", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Kokura", "course": "", "category": "medium", "month": 8, "half": "early", "fan_reward": 5000},
-  {"race_id": "daily_hai_nisai_stakes", "name": "Daily Hai Nisai Stakes", "grade": "G2", "distance": 1600, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "outer", "category": "mile", "month": 11, "half": "late", "fan_reward": 5000},
-  {"race_id": "keio_hai_nisai_stakes", "name": "Keio Hai Nisai Stakes", "grade": "G2", "distance": 1400, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "short", "month": 11, "half": "late", "fan_reward": 5000},
-
-  {"race_id": "fairy_stakes", "name": "Fairy Stakes", "grade": "G3", "distance": 1600, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "outer", "category": "mile", "month": 1, "half": "early", "fan_reward": 3500},
-  {"race_id": "kyoto_kimpai", "name": "Kyoto Kimpai", "grade": "G3", "distance": 1600, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "inner", "category": "mile", "month": 1, "half": "early", "fan_reward": 3500},
-  {"race_id": "shinzan_kinen", "name": "Shinzan Kinen", "grade": "G3", "distance": 1600, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "outer", "category": "mile", "month": 1, "half": "early", "fan_reward": 3500},
-  {"race_id": "nehan_stakes", "name": "Negishi Stakes", "grade": "G3", "distance": 1400, "surface": "dirt", "direction": "left", "venue": "Tokyo", "course": "", "category": "short", "month": 1, "half": "late", "fan_reward": 3500},
-  {"race_id": "silk_road_stakes", "name": "Silk Road Stakes", "grade": "G3", "distance": 1200, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "inner", "category": "short", "month": 1, "half": "late", "fan_reward": 3500},
-  {"race_id": "tokai_stakes", "name": "Tokai Stakes", "grade": "G2", "distance": 1800, "surface": "dirt", "direction": "left", "venue": "Chukyo", "course": "", "category": "mile", "month": 1, "half": "late", "fan_reward": 5500},
-  {"race_id": "kisaragi_sho", "name": "Kisaragi Sho", "grade": "G3", "distance": 1800, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "outer", "category": "mile", "month": 2, "half": "early", "fan_reward": 3500},
-  {"race_id": "kyoho_stakes", "name": "Kyoho Stakes", "grade": "G3", "distance": 1400, "surface": "dirt", "direction": "left", "venue": "Tokyo", "course": "", "category": "short", "month": 2, "half": "early", "fan_reward": 3500},
-  {"race_id": "diamond_stakes", "name": "Diamond Stakes", "grade": "G3", "distance": 3400, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "long", "month": 2, "half": "late", "fan_reward": 3500},
-  {"race_id": "hochi_hai_fillies_revue", "name": "Hochi Hai Fillies' Revue", "grade": "G2", "distance": 1400, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "inner", "category": "short", "month": 3, "half": "early", "fan_reward": 5000},
-  {"race_id": "ocean_stakes", "name": "Ocean Stakes", "grade": "G3", "distance": 1200, "surface": "turf", "direction": "right", "venue": "Chukyo", "course": "", "category": "short", "month": 3, "half": "early", "fan_reward": 3500},
-  {"race_id": "chunichi_shinbun_hai", "name": "Chunichi Shinbun Hai", "grade": "G3", "distance": 2000, "surface": "turf", "direction": "left", "venue": "Chukyo", "course": "", "category": "medium", "month": 3, "half": "late", "fan_reward": 3500},
-  {"race_id": "flower_cup", "name": "Flower Cup", "grade": "G3", "distance": 1800, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "inner", "category": "mile", "month": 3, "half": "late", "fan_reward": 3500},
-  {"race_id": "mainichi_hai", "name": "Mainichi Hai", "grade": "G3", "distance": 1800, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "outer", "category": "mile", "month": 3, "half": "late", "fan_reward": 3500},
-  {"race_id": "march_stakes", "name": "March Stakes", "grade": "G3", "distance": 1800, "surface": "dirt", "direction": "right", "venue": "Nakayama", "course": "", "category": "mile", "month": 3, "half": "late", "fan_reward": 3500},
-  {"race_id": "new_zealand_trophy", "name": "New Zealand Trophy", "grade": "G2", "distance": 1600, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "mile", "month": 4, "half": "early", "fan_reward": 5000},
-  {"race_id": "antares_stakes", "name": "Antares Stakes", "grade": "G3", "distance": 1800, "surface": "dirt", "direction": "right", "venue": "Hanshin", "course": "", "category": "mile", "month": 4, "half": "late", "fan_reward": 3500},
-  {"race_id": "fukushima_himba_stakes", "name": "Fukushima Himba Stakes", "grade": "G3", "distance": 1800, "surface": "turf", "direction": "right", "venue": "Fukushima", "course": "", "category": "mile", "month": 4, "half": "late", "fan_reward": 3500},
-  {"race_id": "niigata_daishoten", "name": "Niigata Daishoten", "grade": "G3", "distance": 2000, "surface": "turf", "direction": "left", "venue": "Niigata", "course": "outer", "category": "medium", "month": 5, "half": "early", "fan_reward": 3500},
-  {"race_id": "kyoto_shinbun_hai", "name": "Kyoto Shinbun Hai", "grade": "G2", "distance": 2200, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "inner", "category": "medium", "month": 5, "half": "early", "fan_reward": 5000},
-  {"race_id": "yomiuri_milers_cup", "name": "Yomiuri Milers Cup", "grade": "G2", "distance": 1600, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "outer", "category": "mile", "month": 4, "half": "late", "fan_reward": 5000},
-  {"race_id": "hakodate_sprint_stakes", "name": "Hakodate Sprint Stakes", "grade": "G3", "distance": 1200, "surface": "turf", "direction": "right", "venue": "Hakodate", "course": "", "category": "short", "month": 7, "half": "early", "fan_reward": 3500},
-  {"race_id": "tanabata_sho", "name": "Tanabata Sho", "grade": "G3", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Fukushima", "course": "", "category": "medium", "month": 7, "half": "early", "fan_reward": 3500},
-  {"race_id": "procyon_stakes", "name": "Procyon Stakes", "grade": "G3", "distance": 1400, "surface": "dirt", "direction": "right", "venue": "Hanshin", "course": "", "category": "short", "month": 7, "half": "early", "fan_reward": 3500},
-  {"race_id": "hakodate_kinen", "name": "Hakodate Kinen", "grade": "G3", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Hakodate", "course": "", "category": "medium", "month": 7, "half": "late", "fan_reward": 3500},
-  {"race_id": "cbc_sho", "name": "CBC Sho", "grade": "G3", "distance": 1200, "surface": "turf", "direction": "left", "venue": "Chukyo", "course": "", "category": "short", "month": 7, "half": "early", "fan_reward": 3500},
-  {"race_id": "ibis_summer_dash", "name": "Ibis Summer Dash", "grade": "G3", "distance": 1000, "surface": "turf", "direction": "left", "venue": "Niigata", "course": "outer", "category": "short", "month": 7, "half": "late", "fan_reward": 3500},
-  {"race_id": "elm_stakes", "name": "Elm Stakes", "grade": "G3", "distance": 1700, "surface": "dirt", "direction": "right", "venue": "Sapporo", "course": "", "category": "mile", "month": 8, "half": "early", "fan_reward": 3500},
-  {"race_id": "sapporo_nisai_stakes", "name": "Sapporo Nisai Stakes", "grade": "G3", "distance": 1800, "surface": "turf", "direction": "right", "venue": "Sapporo", "course": "", "category": "mile", "month": 9, "half": "early", "fan_reward": 3500},
-  {"race_id": "keeneland_cup", "name": "Keeneland Cup", "grade": "G3", "distance": 1200, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "inner", "category": "short", "month": 9, "half": "early", "fan_reward": 3500},
-  {"race_id": "niigata_nisai_stakes", "name": "Niigata Nisai Stakes", "grade": "G3", "distance": 1600, "surface": "turf", "direction": "left", "venue": "Niigata", "course": "outer", "category": "mile", "month": 8, "half": "late", "fan_reward": 3500},
-  {"race_id": "kokura_nisai_stakes", "name": "Kokura Nisai Stakes", "grade": "G3", "distance": 1200, "surface": "turf", "direction": "right", "venue": "Kokura", "course": "", "category": "short", "month": 9, "half": "early", "fan_reward": 3500},
-  {"race_id": "sirius_stakes", "name": "Sirius Stakes", "grade": "G3", "distance": 2000, "surface": "dirt", "direction": "right", "venue": "Hanshin", "course": "", "category": "medium", "month": 10, "half": "early", "fan_reward": 3500},
-  {"race_id": "artemis_stakes", "name": "Artemis Stakes", "grade": "G3", "distance": 1600, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "mile", "month": 10, "half": "late", "fan_reward": 3500},
-  {"race_id": "fantasy_stakes", "name": "Fantasy Stakes", "grade": "G3", "distance": 1400, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "inner", "category": "short", "month": 11, "half": "early", "fan_reward": 3500},
-  {"race_id": "kyoto_nisai_stakes", "name": "Kyoto Nisai Stakes", "grade": "G3", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "inner", "category": "medium", "month": 11, "half": "early", "fan_reward": 3500},
-  {"race_id": "capella_stakes", "name": "Capella Stakes", "grade": "G3", "distance": 1200, "surface": "dirt", "direction": "right", "venue": "Nakayama", "course": "", "category": "short", "month": 12, "half": "early", "fan_reward": 3500},
-  {"race_id": "tulip_sho_g3", "name": "Cattleya Sho", "grade": "G3", "distance": 1800, "surface": "dirt", "direction": "left", "venue": "Tokyo", "course": "", "category": "mile", "month": 11, "half": "late", "fan_reward": 3500},
-  {"race_id": "turquoise_stakes", "name": "Turquoise Stakes", "grade": "G3", "distance": 1600, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "outer", "category": "mile", "month": 12, "half": "late", "fan_reward": 3500},
-  {"race_id": "takeda_sho", "name": "Takeda Sho", "grade": "G3", "distance": 1600, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "inner", "category": "mile", "month": 6, "half": "early", "fan_reward": 3500},
-  {"race_id": "unicorn_stakes", "name": "Unicorn Stakes", "grade": "G3", "distance": 1600, "surface": "dirt", "direction": "left", "venue": "Tokyo", "course": "", "category": "mile", "month": 6, "half": "late", "fan_reward": 3500},
-  {"race_id": "epsom_cup", "name": "Epsom Cup", "grade": "G3", "distance": 1800, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "mile", "month": 6, "half": "early", "fan_reward": 3500},
-  {"race_id": "mermaid_stakes", "name": "Mermaid Stakes", "grade": "G3", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "inner", "category": "medium", "month": 6, "half": "late", "fan_reward": 3500},
-  {"race_id": "radio_nikkei_sho", "name": "Radio Nikkei Sho", "grade": "G3", "distance": 1800, "surface": "turf", "direction": "right", "venue": "Fukushima", "course": "", "category": "mile", "month": 7, "half": "early", "fan_reward": 3500},
-  {"race_id": "function_stakes", "name": "Function Stakes", "grade": "G3", "distance": 1200, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "inner", "category": "short", "month": 12, "half": "early", "fan_reward": 3500},
-  {"race_id": "challenge_cup", "name": "Challenge Cup", "grade": "G3", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "inner", "category": "medium", "month": 12, "half": "early", "fan_reward": 3500},
-
-  {"race_id": "junior_maiden_1", "name": "Junior Maiden (short)", "grade": "Pre-OP", "distance": 1200, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "", "category": "short", "month": 7, "half": "early", "fan_reward": 500},
-  {"race_id": "junior_maiden_2", "name": "Junior Maiden (mile)", "grade": "Pre-OP", "distance": 1600, "surface": "turf", "direction": "right", "venue": "Tokyo", "course": "", "category": "mile", "month": 7, "half": "early", "fan_reward": 500},
-  {"race_id": "junior_maiden_3", "name": "Junior Maiden (medium)", "grade": "Pre-OP", "distance": 1800, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "", "category": "mile", "month": 7, "half": "early", "fan_reward": 500},
-  {"race_id": "op_short_sprint", "name": "OP (1200 turf)", "grade": "OP", "distance": 1200, "surface": "turf", "direction": "right", "venue": "Nakayama", "course": "", "category": "short", "month": 1, "half": "early", "fan_reward": 2000},
-  {"race_id": "op_mile_turf", "name": "OP (1600 turf)", "grade": "OP", "distance": 1600, "surface": "turf", "direction": "right", "venue": "Tokyo", "course": "", "category": "mile", "month": 1, "half": "early", "fan_reward": 2000},
-  {"race_id": "op_medium_turf", "name": "OP (2000 turf)", "grade": "OP", "distance": 2000, "surface": "turf", "direction": "right", "venue": "Hanshin", "course": "", "category": "medium", "month": 1, "half": "early", "fan_reward": 2000},
-  {"race_id": "op_dirt_mile", "name": "OP (1600 dirt)", "grade": "OP", "distance": 1600, "surface": "dirt", "direction": "left", "venue": "Tokyo", "course": "", "category": "mile", "month": 1, "half": "early", "fan_reward": 2000},
-  {"race_id": "op_dirt_short", "name": "OP (1200 dirt)", "grade": "OP", "distance": 1200, "surface": "dirt", "direction": "right", "venue": "Nakayama", "course": "", "category": "short", "month": 1, "half": "early", "fan_reward": 2000},
-  {"race_id": "op_long_turf", "name": "OP (2600 turf)", "grade": "OP", "distance": 2600, "surface": "turf", "direction": "right", "venue": "Kyoto", "course": "", "category": "long", "month": 1, "half": "early", "fan_reward": 2000},
-
-  {"race_id": "ura_finale", "name": "URA Finale", "grade": "G1", "distance": 0, "surface": "turf", "direction": "left", "venue": "Tokyo", "course": "", "category": "medium", "month": 12, "half": "late", "fan_reward": 50000}
+  {
+    "race_id": "february_stakes",
+    "name": "February Stakes",
+    "grade": "G1",
+    "distance": 1600,
+    "surface": "dirt",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 2,
+    "half": "late",
+    "fan_reward": 10500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "osaka_hai",
+    "name": "Osaka Hai",
+    "grade": "G1",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "inner",
+    "category": "medium",
+    "month": 3,
+    "half": "late",
+    "fan_reward": 10500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "oka_sho",
+    "name": "Oka Sho",
+    "grade": "G1",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "outer",
+    "category": "mile",
+    "month": 4,
+    "half": "early",
+    "fan_reward": 10500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "satsuki_sho",
+    "name": "Satsuki Sho",
+    "grade": "G1",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "inner",
+    "category": "medium",
+    "month": 4,
+    "half": "early",
+    "fan_reward": 10500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "tenno_sho_spring",
+    "name": "Tenno Sho (Spring)",
+    "grade": "G1",
+    "distance": 3200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "outer",
+    "category": "long",
+    "month": 4,
+    "half": "late",
+    "fan_reward": 12000,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "nhk_mile_cup",
+    "name": "NHK Mile Cup",
+    "grade": "G1",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 5,
+    "half": "early",
+    "fan_reward": 10500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "victoria_mile",
+    "name": "Victoria Mile",
+    "grade": "G1",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 5,
+    "half": "early",
+    "fan_reward": 10500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "japanese_oaks",
+    "name": "Japanese Oaks",
+    "grade": "G1",
+    "distance": 2400,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "medium",
+    "month": 5,
+    "half": "late",
+    "fan_reward": 10500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "tokyo_yushun",
+    "name": "Tokyo Yushun (Derby)",
+    "grade": "G1",
+    "distance": 2400,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "medium",
+    "month": 5,
+    "half": "late",
+    "fan_reward": 12000,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "yasuda_kinen",
+    "name": "Yasuda Kinen",
+    "grade": "G1",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 6,
+    "half": "early",
+    "fan_reward": 10500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "takarazuka_kinen",
+    "name": "Takarazuka Kinen",
+    "grade": "G1",
+    "distance": 2200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "inner",
+    "category": "medium",
+    "month": 6,
+    "half": "late",
+    "fan_reward": 12000,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "sprinters_stakes",
+    "name": "Sprinters Stakes",
+    "grade": "G1",
+    "distance": 1200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "outer",
+    "category": "short",
+    "month": 9,
+    "half": "late",
+    "fan_reward": 10500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "shuka_sho",
+    "name": "Shuka Sho",
+    "grade": "G1",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "inner",
+    "category": "medium",
+    "month": 10,
+    "half": "late",
+    "fan_reward": 10500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "kikka_sho",
+    "name": "Kikka Sho",
+    "grade": "G1",
+    "distance": 3000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "outer",
+    "category": "long",
+    "month": 10,
+    "half": "late",
+    "fan_reward": 10500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "tenno_sho_autumn",
+    "name": "Tenno Sho (Autumn)",
+    "grade": "G1",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "medium",
+    "month": 10,
+    "half": "late",
+    "fan_reward": 12000,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "elizabeth_queen_cup",
+    "name": "Elizabeth Queen Cup",
+    "grade": "G1",
+    "distance": 2200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "outer",
+    "category": "medium",
+    "month": 11,
+    "half": "early",
+    "fan_reward": 10500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "mile_championship",
+    "name": "Mile Championship",
+    "grade": "G1",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "outer",
+    "category": "mile",
+    "month": 11,
+    "half": "late",
+    "fan_reward": 10500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "japan_cup",
+    "name": "Japan Cup",
+    "grade": "G1",
+    "distance": 2400,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "medium",
+    "month": 11,
+    "half": "late",
+    "fan_reward": 15000,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "champions_cup",
+    "name": "Champions Cup",
+    "grade": "G1",
+    "distance": 1800,
+    "surface": "dirt",
+    "direction": "left",
+    "venue": "Chukyo",
+    "course": "",
+    "category": "mile",
+    "month": 12,
+    "half": "early",
+    "fan_reward": 10500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "arima_kinen",
+    "name": "Arima Kinen",
+    "grade": "G1",
+    "distance": 2500,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "inner",
+    "category": "long",
+    "month": 12,
+    "half": "late",
+    "fan_reward": 15000,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "hopeful_stakes",
+    "name": "Hopeful Stakes",
+    "grade": "G1",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "inner",
+    "category": "medium",
+    "month": 12,
+    "half": "late",
+    "fan_reward": 10500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "takamatsunomiya_kinen",
+    "name": "Takamatsunomiya Kinen",
+    "grade": "G1",
+    "distance": 1200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Chukyo",
+    "course": "",
+    "category": "short",
+    "month": 3,
+    "half": "late",
+    "fan_reward": 10500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "asahi_hai_futurity_stakes",
+    "name": "Asahi Hai Futurity Stakes",
+    "grade": "G1",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "outer",
+    "category": "mile",
+    "month": 12,
+    "half": "early",
+    "fan_reward": 10500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "hanshin_juvenile_fillies",
+    "name": "Hanshin Juvenile Fillies",
+    "grade": "G1",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "outer",
+    "category": "mile",
+    "month": 12,
+    "half": "early",
+    "fan_reward": 10500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "nakayama_kinen",
+    "name": "Nakayama Kinen",
+    "grade": "G2",
+    "distance": 1800,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "inner",
+    "category": "mile",
+    "month": 2,
+    "half": "late",
+    "fan_reward": 5500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "hanshin_daishoten",
+    "name": "Hanshin Daishoten",
+    "grade": "G2",
+    "distance": 3000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "inner",
+    "category": "long",
+    "month": 3,
+    "half": "late",
+    "fan_reward": 5500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "spring_stakes",
+    "name": "Spring Stakes",
+    "grade": "G2",
+    "distance": 1800,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "inner",
+    "category": "mile",
+    "month": 3,
+    "half": "late",
+    "fan_reward": 5500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "tulip_sho",
+    "name": "Tulip Sho",
+    "grade": "G2",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "outer",
+    "category": "mile",
+    "month": 3,
+    "half": "early",
+    "fan_reward": 5000,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "yayoi_sho",
+    "name": "Yayoi Sho",
+    "grade": "G2",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "inner",
+    "category": "medium",
+    "month": 3,
+    "half": "early",
+    "fan_reward": 5500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "flora_stakes",
+    "name": "Flora Stakes",
+    "grade": "G2",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "medium",
+    "month": 4,
+    "half": "late",
+    "fan_reward": 5000,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "aoba_sho",
+    "name": "Aoba Sho",
+    "grade": "G2",
+    "distance": 2400,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "medium",
+    "month": 4,
+    "half": "late",
+    "fan_reward": 5000,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "meguro_kinen",
+    "name": "Meguro Kinen",
+    "grade": "G2",
+    "distance": 2500,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "long",
+    "month": 5,
+    "half": "late",
+    "fan_reward": 5000,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "mainichi_okan",
+    "name": "Mainichi Okan",
+    "grade": "G2",
+    "distance": 1800,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 10,
+    "half": "early",
+    "fan_reward": 5500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "fuchu_himba_stakes",
+    "name": "Fuchu Himba Stakes",
+    "grade": "G2",
+    "distance": 1800,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 10,
+    "half": "early",
+    "fan_reward": 5000,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "kyoto_daishoten",
+    "name": "Kyoto Daishoten",
+    "grade": "G2",
+    "distance": 2400,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "outer",
+    "category": "medium",
+    "month": 10,
+    "half": "early",
+    "fan_reward": 5500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "rose_stakes",
+    "name": "Rose Stakes",
+    "grade": "G2",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "inner",
+    "category": "medium",
+    "month": 9,
+    "half": "early",
+    "fan_reward": 5000,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "st_lite_kinen",
+    "name": "St. Lite Kinen",
+    "grade": "G2",
+    "distance": 2200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "inner",
+    "category": "medium",
+    "month": 9,
+    "half": "late",
+    "fan_reward": 5000,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "all_comers",
+    "name": "All Comers",
+    "grade": "G2",
+    "distance": 2200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "inner",
+    "category": "medium",
+    "month": 9,
+    "half": "late",
+    "fan_reward": 5500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "argentina_kyowakoku_hai",
+    "name": "Argentina Kyowakoku Hai",
+    "grade": "G2",
+    "distance": 2500,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "long",
+    "month": 11,
+    "half": "early",
+    "fan_reward": 5000,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "stayers_stakes",
+    "name": "Stayers Stakes",
+    "grade": "G2",
+    "distance": 3600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "inner",
+    "category": "long",
+    "month": 12,
+    "half": "early",
+    "fan_reward": 5500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "nikkei_sho",
+    "name": "Nikkei Sho",
+    "grade": "G2",
+    "distance": 2500,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "inner",
+    "category": "long",
+    "month": 3,
+    "half": "late",
+    "fan_reward": 5000,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "kinko_sho",
+    "name": "Kinko Sho",
+    "grade": "G2",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Chukyo",
+    "course": "",
+    "category": "medium",
+    "month": 3,
+    "half": "early",
+    "fan_reward": 5500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "nikkei_shinshun_hai",
+    "name": "Nikkei Shinshun Hai",
+    "grade": "G2",
+    "distance": 2400,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "outer",
+    "category": "medium",
+    "month": 1,
+    "half": "early",
+    "fan_reward": 5000,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "american_jockey_club_cup",
+    "name": "American Jockey Club Cup",
+    "grade": "G2",
+    "distance": 2200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "inner",
+    "category": "medium",
+    "month": 1,
+    "half": "late",
+    "fan_reward": 5500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "centaur_stakes",
+    "name": "Centaur Stakes",
+    "grade": "G2",
+    "distance": 1200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "inner",
+    "category": "short",
+    "month": 9,
+    "half": "early",
+    "fan_reward": 5000,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "keio_hai_spring_cup",
+    "name": "Keio Hai Spring Cup",
+    "grade": "G2",
+    "distance": 1400,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "short",
+    "month": 5,
+    "half": "early",
+    "fan_reward": 5000,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "swan_stakes",
+    "name": "Swan Stakes",
+    "grade": "G2",
+    "distance": 1400,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "outer",
+    "category": "short",
+    "month": 10,
+    "half": "late",
+    "fan_reward": 5000,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "sankei_sho_all_comers",
+    "name": "Sankei Sho Phoenix",
+    "grade": "G2",
+    "distance": 1400,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "inner",
+    "category": "short",
+    "month": 6,
+    "half": "late",
+    "fan_reward": 5000,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "sapporo_kinen",
+    "name": "Sapporo Kinen",
+    "grade": "G2",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Sapporo",
+    "course": "",
+    "category": "medium",
+    "month": 8,
+    "half": "late",
+    "fan_reward": 5500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "niigata_kinen",
+    "name": "Niigata Kinen",
+    "grade": "G2",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Niigata",
+    "course": "outer",
+    "category": "medium",
+    "month": 8,
+    "half": "late",
+    "fan_reward": 5000,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "kokura_kinen",
+    "name": "Kokura Kinen",
+    "grade": "G2",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kokura",
+    "course": "",
+    "category": "medium",
+    "month": 8,
+    "half": "early",
+    "fan_reward": 5000,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "daily_hai_nisai_stakes",
+    "name": "Daily Hai Nisai Stakes",
+    "grade": "G2",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "outer",
+    "category": "mile",
+    "month": 11,
+    "half": "early",
+    "fan_reward": 5000,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "keio_hai_nisai_stakes",
+    "name": "Keio Hai Nisai Stakes",
+    "grade": "G2",
+    "distance": 1400,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "short",
+    "month": 11,
+    "half": "early",
+    "fan_reward": 5000,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "fairy_stakes",
+    "name": "Fairy Stakes",
+    "grade": "G3",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "outer",
+    "category": "mile",
+    "month": 1,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "kyoto_kimpai",
+    "name": "Kyoto Kimpai",
+    "grade": "G3",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "inner",
+    "category": "mile",
+    "month": 1,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "shinzan_kinen",
+    "name": "Shinzan Kinen",
+    "grade": "G3",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "outer",
+    "category": "mile",
+    "month": 1,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "nehan_stakes",
+    "name": "Negishi Stakes",
+    "grade": "G3",
+    "distance": 1400,
+    "surface": "dirt",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "short",
+    "month": 1,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "silk_road_stakes",
+    "name": "Silk Road Stakes",
+    "grade": "G3",
+    "distance": 1200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "inner",
+    "category": "short",
+    "month": 1,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "tokai_stakes",
+    "name": "Tokai Stakes",
+    "grade": "G2",
+    "distance": 1800,
+    "surface": "dirt",
+    "direction": "left",
+    "venue": "Chukyo",
+    "course": "",
+    "category": "mile",
+    "month": 1,
+    "half": "late",
+    "fan_reward": 5500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "kisaragi_sho",
+    "name": "Kisaragi Sho",
+    "grade": "G3",
+    "distance": 1800,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "outer",
+    "category": "mile",
+    "month": 2,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "kyoho_stakes",
+    "name": "Kyoho Stakes",
+    "grade": "G3",
+    "distance": 1400,
+    "surface": "dirt",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "short",
+    "month": 2,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "diamond_stakes",
+    "name": "Diamond Stakes",
+    "grade": "G3",
+    "distance": 3400,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "long",
+    "month": 2,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "hochi_hai_fillies_revue",
+    "name": "Hochi Hai Fillies' Revue",
+    "grade": "G2",
+    "distance": 1400,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "inner",
+    "category": "short",
+    "month": 3,
+    "half": "early",
+    "fan_reward": 5000,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "ocean_stakes",
+    "name": "Ocean Stakes",
+    "grade": "G3",
+    "distance": 1200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Chukyo",
+    "course": "",
+    "category": "short",
+    "month": 3,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "chunichi_shinbun_hai",
+    "name": "Chunichi Shinbun Hai",
+    "grade": "G3",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Chukyo",
+    "course": "",
+    "category": "medium",
+    "month": 3,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "flower_cup",
+    "name": "Flower Cup",
+    "grade": "G3",
+    "distance": 1800,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "inner",
+    "category": "mile",
+    "month": 3,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "mainichi_hai",
+    "name": "Mainichi Hai",
+    "grade": "G3",
+    "distance": 1800,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "outer",
+    "category": "mile",
+    "month": 3,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "march_stakes",
+    "name": "March Stakes",
+    "grade": "G3",
+    "distance": 1800,
+    "surface": "dirt",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "",
+    "category": "mile",
+    "month": 3,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "new_zealand_trophy",
+    "name": "New Zealand Trophy",
+    "grade": "G2",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 4,
+    "half": "early",
+    "fan_reward": 5000,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "antares_stakes",
+    "name": "Antares Stakes",
+    "grade": "G3",
+    "distance": 1800,
+    "surface": "dirt",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "",
+    "category": "mile",
+    "month": 4,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "fukushima_himba_stakes",
+    "name": "Fukushima Himba Stakes",
+    "grade": "G3",
+    "distance": 1800,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Fukushima",
+    "course": "",
+    "category": "mile",
+    "month": 4,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "niigata_daishoten",
+    "name": "Niigata Daishoten",
+    "grade": "G3",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Niigata",
+    "course": "outer",
+    "category": "medium",
+    "month": 5,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "kyoto_shinbun_hai",
+    "name": "Kyoto Shinbun Hai",
+    "grade": "G2",
+    "distance": 2200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "inner",
+    "category": "medium",
+    "month": 5,
+    "half": "early",
+    "fan_reward": 5000,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "yomiuri_milers_cup",
+    "name": "Yomiuri Milers Cup",
+    "grade": "G2",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "outer",
+    "category": "mile",
+    "month": 4,
+    "half": "late",
+    "fan_reward": 5000,
+    "years": [
+      3
+    ]
+  },
+  {
+    "race_id": "hakodate_sprint_stakes",
+    "name": "Hakodate Sprint Stakes",
+    "grade": "G3",
+    "distance": 1200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hakodate",
+    "course": "",
+    "category": "short",
+    "month": 7,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "tanabata_sho",
+    "name": "Tanabata Sho",
+    "grade": "G3",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Fukushima",
+    "course": "",
+    "category": "medium",
+    "month": 7,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "procyon_stakes",
+    "name": "Procyon Stakes",
+    "grade": "G3",
+    "distance": 1400,
+    "surface": "dirt",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "",
+    "category": "short",
+    "month": 7,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "hakodate_kinen",
+    "name": "Hakodate Kinen",
+    "grade": "G3",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hakodate",
+    "course": "",
+    "category": "medium",
+    "month": 7,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "cbc_sho",
+    "name": "CBC Sho",
+    "grade": "G3",
+    "distance": 1200,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Chukyo",
+    "course": "",
+    "category": "short",
+    "month": 7,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "ibis_summer_dash",
+    "name": "Ibis Summer Dash",
+    "grade": "G3",
+    "distance": 1000,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Niigata",
+    "course": "outer",
+    "category": "short",
+    "month": 7,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "elm_stakes",
+    "name": "Elm Stakes",
+    "grade": "G3",
+    "distance": 1700,
+    "surface": "dirt",
+    "direction": "right",
+    "venue": "Sapporo",
+    "course": "",
+    "category": "mile",
+    "month": 8,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "sapporo_nisai_stakes",
+    "name": "Sapporo Nisai Stakes",
+    "grade": "G3",
+    "distance": 1800,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Sapporo",
+    "course": "",
+    "category": "mile",
+    "month": 9,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "keeneland_cup",
+    "name": "Keeneland Cup",
+    "grade": "G3",
+    "distance": 1200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "inner",
+    "category": "short",
+    "month": 9,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "niigata_nisai_stakes",
+    "name": "Niigata Nisai Stakes",
+    "grade": "G3",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Niigata",
+    "course": "outer",
+    "category": "mile",
+    "month": 8,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "kokura_nisai_stakes",
+    "name": "Kokura Nisai Stakes",
+    "grade": "G3",
+    "distance": 1200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kokura",
+    "course": "",
+    "category": "short",
+    "month": 9,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "sirius_stakes",
+    "name": "Sirius Stakes",
+    "grade": "G3",
+    "distance": 2000,
+    "surface": "dirt",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "",
+    "category": "medium",
+    "month": 10,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "artemis_stakes",
+    "name": "Artemis Stakes",
+    "grade": "G3",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 10,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "fantasy_stakes",
+    "name": "Fantasy Stakes",
+    "grade": "G3",
+    "distance": 1400,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "inner",
+    "category": "short",
+    "month": 11,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "kyoto_nisai_stakes",
+    "name": "Kyoto Nisai Stakes",
+    "grade": "G3",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "inner",
+    "category": "medium",
+    "month": 11,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "capella_stakes",
+    "name": "Capella Stakes",
+    "grade": "G3",
+    "distance": 1200,
+    "surface": "dirt",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "",
+    "category": "short",
+    "month": 12,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "tulip_sho_g3",
+    "name": "Cattleya Sho",
+    "grade": "G3",
+    "distance": 1800,
+    "surface": "dirt",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 11,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "turquoise_stakes",
+    "name": "Turquoise Stakes",
+    "grade": "G3",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "outer",
+    "category": "mile",
+    "month": 12,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "takeda_sho",
+    "name": "Takeda Sho",
+    "grade": "G3",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "inner",
+    "category": "mile",
+    "month": 6,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "unicorn_stakes",
+    "name": "Unicorn Stakes",
+    "grade": "G3",
+    "distance": 1600,
+    "surface": "dirt",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 6,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "epsom_cup",
+    "name": "Epsom Cup",
+    "grade": "G3",
+    "distance": 1800,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 6,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "mermaid_stakes",
+    "name": "Mermaid Stakes",
+    "grade": "G3",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "inner",
+    "category": "medium",
+    "month": 6,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "radio_nikkei_sho",
+    "name": "Radio Nikkei Sho",
+    "grade": "G3",
+    "distance": 1800,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Fukushima",
+    "course": "",
+    "category": "mile",
+    "month": 7,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "function_stakes",
+    "name": "Function Stakes",
+    "grade": "G3",
+    "distance": 1200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "inner",
+    "category": "short",
+    "month": 12,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "challenge_cup",
+    "name": "Challenge Cup",
+    "grade": "G3",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "inner",
+    "category": "medium",
+    "month": 12,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "junior_maiden_1",
+    "name": "Junior Maiden (short)",
+    "grade": "Pre-OP",
+    "distance": 1200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "",
+    "category": "short",
+    "month": 7,
+    "half": "early",
+    "fan_reward": 500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "junior_maiden_2",
+    "name": "Junior Maiden (mile)",
+    "grade": "Pre-OP",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 7,
+    "half": "early",
+    "fan_reward": 500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "junior_maiden_3",
+    "name": "Junior Maiden (medium)",
+    "grade": "Pre-OP",
+    "distance": 1800,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "",
+    "category": "mile",
+    "month": 7,
+    "half": "early",
+    "fan_reward": 500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "op_short_sprint",
+    "name": "OP (1200 turf)",
+    "grade": "OP",
+    "distance": 1200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "",
+    "category": "short",
+    "month": 1,
+    "half": "early",
+    "fan_reward": 2000,
+    "years": [
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "op_mile_turf",
+    "name": "OP (1600 turf)",
+    "grade": "OP",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 1,
+    "half": "early",
+    "fan_reward": 2000,
+    "years": [
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "op_medium_turf",
+    "name": "OP (2000 turf)",
+    "grade": "OP",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hanshin",
+    "course": "",
+    "category": "medium",
+    "month": 1,
+    "half": "early",
+    "fan_reward": 2000,
+    "years": [
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "op_dirt_mile",
+    "name": "OP (1600 dirt)",
+    "grade": "OP",
+    "distance": 1600,
+    "surface": "dirt",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 1,
+    "half": "early",
+    "fan_reward": 2000,
+    "years": [
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "op_dirt_short",
+    "name": "OP (1200 dirt)",
+    "grade": "OP",
+    "distance": 1200,
+    "surface": "dirt",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "",
+    "category": "short",
+    "month": 1,
+    "half": "early",
+    "fan_reward": 2000,
+    "years": [
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "op_long_turf",
+    "name": "OP (2600 turf)",
+    "grade": "OP",
+    "distance": 2600,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Kyoto",
+    "course": "",
+    "category": "long",
+    "month": 1,
+    "half": "early",
+    "fan_reward": 2000,
+    "years": [
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "ura_finale",
+    "name": "URA Finale",
+    "grade": "G1",
+    "distance": 0,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "medium",
+    "month": 12,
+    "half": "late",
+    "fan_reward": 50000,
+    "years": [
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "race_id": "hakodate_nisai_stakes",
+    "name": "Hakodate Nisai Stakes",
+    "grade": "G3",
+    "distance": 1200,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Hakodate",
+    "course": "",
+    "category": "short",
+    "month": 7,
+    "half": "late",
+    "fan_reward": 3500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "tokyo_sports_hai_nisai_stakes",
+    "name": "Tokyo Sports Hai Nisai Stakes",
+    "grade": "G2",
+    "distance": 1800,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 11,
+    "half": "late",
+    "fan_reward": 5000,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "saudi_arabia_royal_cup",
+    "name": "Saudi Arabia Royal Cup",
+    "grade": "G3",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 10,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      1
+    ]
+  },
+  {
+    "race_id": "queen_cup",
+    "name": "Queen Cup",
+    "grade": "G3",
+    "distance": 1600,
+    "surface": "turf",
+    "direction": "left",
+    "venue": "Tokyo",
+    "course": "",
+    "category": "mile",
+    "month": 2,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      2
+    ]
+  },
+  {
+    "race_id": "nakayama_kimpai",
+    "name": "Nakayama Kimpai",
+    "grade": "G3",
+    "distance": 2000,
+    "surface": "turf",
+    "direction": "right",
+    "venue": "Nakayama",
+    "course": "inner",
+    "category": "medium",
+    "month": 1,
+    "half": "early",
+    "fan_reward": 3500,
+    "years": [
+      3
+    ]
+  }
 ]

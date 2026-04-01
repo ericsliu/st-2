@@ -246,8 +246,8 @@ TURN_ACTION_REGIONS: dict[str, Region] = {
 
     # Energy and mood
     "energy_bar":        (260, 240, 750, 275),     # The energy bar itself
-    "mood_label":        (830, 230, 1000, 275),    # "GREAT" / mood text
-    "mood_icon":         (780, 230, 830, 275),     # Arrow/face icon for mood
+    "mood_label":        (830, 205, 980, 280),     # "GREAT" / mood text
+    "mood_pill":         (800, 205, 975, 280),     # Full pink pill (for color sampling)
 
     # Scenario-specific
     "junior_result_pts": (30, 310, 250, 400),      # "Classic Result Pts 154 pts"

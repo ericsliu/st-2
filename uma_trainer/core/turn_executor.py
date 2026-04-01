@@ -20,7 +20,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from uma_trainer.types import ActionType, ScreenState
+from uma_trainer.types import ActionType, BotAction, ScreenState
 
 if TYPE_CHECKING:
     from uma_trainer.action.game_actions import GameActionExecutor
@@ -201,19 +201,45 @@ class TurnExecutor:
                             result_state.energy, result_state.mood.value)
             return True
 
-        # Check if we should race
-        race_action = self.engine.race_selector.should_race_this_turn(state)
+        # Check if goal race warning popup was seen (forces racing)
+        goal_urgent = self.actions.goal_race_urgent or self.context.goal_race_urgent
+        if goal_urgent:
+            logger.info("Goal race urgent flag set — forcing race this turn")
+            from uma_trainer.perception.regions import TURN_ACTION_REGIONS, get_tap_center
+            races_btn = get_tap_center(TURN_ACTION_REGIONS["btn_races"])
+            race_action = BotAction(
+                action_type=ActionType.RACE,
+                tap_coords=races_btn,
+                reason="Goal race urgent (popup warning)",
+                tier_used=1,
+            )
+            self.actions.goal_race_urgent = False
+            self.context.goal_race_urgent = False
+            self.context.save_to_disk()
+        else:
+            # Check if we should race
+            race_action = self.engine.race_selector.should_race_this_turn(state)
 
         if race_action:
             pre = self.engine.race_selector.pre_select_race(state)
             if pre:
                 logger.info("Pre-selected: %s (%s, %dm)", pre.name, pre.grade, pre.distance)
 
-        # Bond urgency can override non-goal races
-        if race_action and "Goal race" not in race_action.reason:
+        # Bond urgency / extraordinary training can override non-mandatory races
+        is_mandatory = race_action and ("Goal race" in race_action.reason or "urgent" in race_action.reason)
+        is_g1 = race_action and "G1 available" in race_action.reason
+        if race_action and not is_mandatory:
+            need_scan = False
+            # Bond urgency check — but NOT for G1 races (G1 > bonds)
             bond_deadline = self.engine.scorer._get_friendship_deadline(state)
-            if state.current_turn < bond_deadline:
-                logger.info("Scanning tiles to check bond urgency before racing...")
+            if state.current_turn < bond_deadline and not is_g1:
+                need_scan = True
+            # G1 races can be overridden by extraordinary training (70+ total)
+            if is_g1:
+                need_scan = True
+
+            if need_scan:
+                logger.info("Scanning tiles to check overrides before racing...")
                 from uma_trainer.perception.regions import TURN_ACTION_REGIONS, get_tap_center
                 train_btn = get_tap_center(TURN_ACTION_REGIONS["btn_training"])
                 self.actions.injector.tap(*train_btn)
@@ -226,15 +252,27 @@ class TurnExecutor:
                 if is_stat and scan_state.training_tiles:
                     self.actions.sequences.scan_training_gains(
                         scan_state, self.provider.capture, self.actions.assembler)
-                    high_bond = self.engine.scorer.has_high_bond_urgency(scan_state)
 
-                    if high_bond:
-                        logger.info("HIGH BOND URGENCY — overriding race")
-                        race_action = None
-                    else:
-                        logger.info("Bond urgency not high — proceeding with race")
+                    # Extraordinary training override for G1 races
+                    if "G1 available" in race_action.reason:
+                        best_gain = max(t.total_stat_gain for t in scan_state.training_tiles)
+                        if best_gain >= 70:
+                            logger.info(
+                                "EXTRAORDINARY TRAINING (%d stats) — overriding G1 race",
+                                best_gain,
+                            )
+                            race_action = None
 
-                logger.info("Returning to career home after bond check")
+                    # Bond urgency override — skip for G1 races
+                    if race_action and state.current_turn < bond_deadline and not is_g1:
+                        high_bond = self.engine.scorer.has_high_bond_urgency(scan_state)
+                        if high_bond:
+                            logger.info("HIGH BOND URGENCY — overriding race")
+                            race_action = None
+                        else:
+                            logger.info("Bond urgency not high — proceeding with race")
+
+                logger.info("Returning to career home after override check")
                 self.actions.injector.tap(95, 1875)
                 time.sleep(2.0)
 

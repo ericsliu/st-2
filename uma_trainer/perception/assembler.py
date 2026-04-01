@@ -17,7 +17,6 @@ from uma_trainer.config import AppConfig
 from uma_trainer.perception.ocr import OCREngine
 from uma_trainer.perception.pixel_analysis import (
     count_support_cards,
-    detect_mood,
     detect_mood_from_text,
     detect_training_indicators,
 )
@@ -46,6 +45,30 @@ from uma_trainer.types import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _mood_from_pill_color(hue: int) -> Mood:
+    """Map the mood pill's median hue (saturated pixels only) to a Mood.
+
+    Calibrated values (OpenCV hue 0-180):
+      GREAT:    H ~170  (pink/magenta)
+      GOOD:     H ~20   (orange)       — estimated, needs calibration
+      NORMAL:   H ~55   (yellow-green) — estimated, needs calibration
+      BAD:      H ~105  (blue)         — estimated, needs calibration
+      TERRIBLE: H ~135  (purple)       — estimated, needs calibration
+
+    These will be refined as we collect more samples from the logs.
+    """
+    if hue >= 160 or hue < 5:
+        return Mood.GREAT
+    elif 5 <= hue < 30:
+        return Mood.GOOD
+    elif 30 <= hue < 75:
+        return Mood.NORMAL
+    elif 75 <= hue < 120:
+        return Mood.BAD
+    else:
+        return Mood.TERRIBLE
 
 
 class StateAssembler:
@@ -153,6 +176,25 @@ class StateAssembler:
         race_day_text = self.ocr.read_region(frame, (300, 1490, 750, 1570)).strip().lower()
         if "race day" in race_day_text:
             state.is_race_day = True
+
+        # Result Pts (Trackblazer scenario)
+        rp_region = TURN_ACTION_REGIONS.get("result_pts")
+        if rp_region:
+            rp_text = self.ocr.read_region(frame, rp_region).strip()
+            rp_match = re.search(r"(\d+)\s*Result", rp_text, re.IGNORECASE)
+            if rp_match:
+                state.result_pts_target = int(rp_match.group(1))
+
+        # Goal progress line: "Progress: After XX pts"
+        gp_region = TURN_ACTION_REGIONS.get("goal_progress")
+        if gp_region:
+            # Read a wider region to catch the full "After XXX pts" text
+            x1, y1, x2, y2 = gp_region
+            gp_text = self.ocr.read_region(frame, (x1, y1, x2 + 200, y2)).strip()
+            gp_match = re.search(r"(\d+)\s*pts", gp_text, re.IGNORECASE)
+            if gp_match:
+                state.result_pts = int(gp_match.group(1))
+                logger.debug("Result Pts: %d / %d target", state.result_pts, state.result_pts_target)
 
     # ------------------------------------------------------------------
     # Training stat selection screen
@@ -573,24 +615,73 @@ class StateAssembler:
 
     def _parse_mood(
         self,
-        frame: np.ndarray,
+        frame: "np.ndarray",
         regions: dict[str, tuple[int, int, int, int]],
-        state: GameState,
+        state: "GameState",
     ) -> None:
-        """Detect mood from the mood indicator region."""
-        # Try OCR on the mood text label first (e.g. "NORMAL")
+        """Detect mood from OCR text + pill background color.
+
+        Uses both signals for confidence:
+        - Both agree → high confidence, use result
+        - Disagree → trust pill color (fixed crop, more stable than OCR)
+        - Only one available → use whichever we have
+        """
+        import cv2
+
+        # 1. Sample pill background color (filter out white text/arrow pixels)
+        pill_region = regions.get("mood_pill")
+        pill_hsv = None
+        pill_mood = None
+        if pill_region:
+            x1, y1, x2, y2 = pill_region
+            roi = frame[y1:y2, x1:x2]
+            if roi.size > 0:
+                hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+                sat_mask = hsv[:, :, 1] > 60
+                if np.any(sat_mask):
+                    h_vals = hsv[:, :, 0][sat_mask]
+                    s_vals = hsv[:, :, 1][sat_mask]
+                    v_vals = hsv[:, :, 2][sat_mask]
+                    pill_hsv = (
+                        int(np.median(h_vals)),
+                        int(np.median(s_vals)),
+                        int(np.median(v_vals)),
+                    )
+                    pill_mood = _mood_from_pill_color(pill_hsv[0])
+
+        # 2. OCR on the mood text label
+        ocr_mood = None
+        ocr_text = ""
         mood_region = regions.get("mood_label")
         if mood_region:
-            text = self.ocr.read_region(frame, mood_region)
-            mood = detect_mood_from_text(text)
-            if mood != Mood.NORMAL or "NORMAL" in text.upper():
-                state.mood = mood
-                return
+            ocr_text = self.ocr.read_region(frame, mood_region)
+            parsed = detect_mood_from_text(ocr_text)
+            if parsed != Mood.NORMAL or "NORMAL" in ocr_text.upper():
+                ocr_mood = parsed
 
-        # Fall back to pixel colour analysis
-        mood_icon_region = regions.get("mood_icon")
-        if mood_icon_region:
-            state.mood = detect_mood(frame, mood_icon_region)
+        # 3. Cross-check and decide
+        if ocr_mood and pill_mood:
+            if ocr_mood == pill_mood:
+                logger.info(
+                    "Mood: %s (OCR + pill agree, HSV=%d/%d/%d)",
+                    ocr_mood.value, *pill_hsv,
+                )
+                state.mood = ocr_mood
+            else:
+                logger.warning(
+                    "Mood CONFLICT: OCR='%s'→%s, pill HSV=%d/%d/%d→%s — trusting pill",
+                    ocr_text.strip(), ocr_mood.value, *pill_hsv, pill_mood.value,
+                )
+                state.mood = pill_mood
+        elif ocr_mood:
+            logger.info("Mood: %s (OCR only, no pill)", ocr_mood.value)
+            state.mood = ocr_mood
+        elif pill_mood:
+            logger.info(
+                "Mood: %s (pill only, OCR failed, HSV=%d/%d/%d)",
+                pill_mood.value, *pill_hsv,
+            )
+            state.mood = pill_mood
         else:
             state.mood = Mood.NORMAL
 
@@ -685,6 +776,7 @@ class StateAssembler:
 
         text = self.ocr.read_region(frame, region).strip().lower()
         if not text:
+            logger.warning("Period text empty — cannot determine turn")
             return
 
         # Parse year
@@ -694,6 +786,7 @@ class StateAssembler:
                 year_offset = offset
                 break
         if year_offset is None:
+            logger.warning("No year found in period text: '%s'", text)
             return
 
         # Handle "Pre-Debut" phase: use turns-left counter to derive turn.
@@ -706,22 +799,29 @@ class StateAssembler:
                 m = re.search(r"(\d+)", turn_text)
                 if m:
                     turns_left = int(m.group(1))
-                    state.current_turn = 12 - turns_left + 1
+                    state.current_turn = 12 - turns_left  # 0-indexed
                     return
-            # Fallback: assume turn 1
-            state.current_turn = 1
+            # Fallback: assume turn 0
+            state.current_turn = 0
             return
 
-        # Parse month
+        # Parse month — strip the year name first to avoid substring
+        # collisions like "jun" matching inside "junior"
+        month_text = text
+        for year_name in self._YEAR_OFFSETS:
+            month_text = month_text.replace(year_name, "")
+        month_text = month_text.replace("year", "")
+
         month_offset = None
         for month_abbr, offset in self._MONTH_OFFSETS.items():
-            if month_abbr in text:
+            if month_abbr in month_text:
                 month_offset = offset
                 break
         if month_offset is None:
+            logger.warning("No month found in period text: '%s'", text)
             return
 
         # Parse half (Early=0, Late=1)
         half = 1 if "late" in text else 0
 
-        state.current_turn = year_offset + month_offset + half + 1  # 1-indexed
+        state.current_turn = year_offset + month_offset + half  # 0-indexed, matches turn_to_month_half

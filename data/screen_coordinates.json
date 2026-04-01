@@ -1,15 +1,15 @@
 {
   "_note": "Button coordinates for 1080x1920 portrait resolution. Discovered via pixel scanning.",
   "career_home": {
-    "rest": {"x": 162, "y": 1540},
-    "training": {"x": 540, "y": 1540},
-    "skills": {"x": 918, "y": 1540},
-    "infirmary": {"x": 162, "y": 1660},
-    "recreation": {"x": 378, "y": 1660},
-    "shop": {"x": 620, "y": 1640, "note": "Small target, green pixels at x=600-640 y=1630-1650"},
-    "races": {"x": 918, "y": 1660},
+    "rest": {"x": 185, "y": 1535},
+    "training": {"x": 540, "y": 1535},
+    "skills": {"x": 918, "y": 1535},
+    "infirmary": {"x": 162, "y": 1750},
+    "recreation": {"x": 378, "y": 1750},
+    "shop": {"x": 620, "y": 1750, "note": "Small target, between Recreation and Races"},
+    "races": {"x": 920, "y": 1750},
     "full_stats": {"x": 990, "y": 1160, "note": "Right side, below trainee portrait. Training Items is left at ~800,1140"},
-    "training_items": {"x": 800, "y": 1140}
+    "training_items": {"x": 800, "y": 1160}
   },
   "race_list": {
     "race_entry_1": {"x": 540, "y": 1050, "note": "First race row, tap to select"},
@@ -104,5 +104,19 @@
   "item_effect_indicators": {
     "_note": "Dumbbell icons on left side of career home showing active item effects and remaining turns. Tap to see details.",
     "region": {"x": 0, "y": 420, "w": 120, "h": 120}
+  },
+  "skill_screen": {
+    "confirm": {"x": 540, "y": 1800, "note": "Green Confirm button at bottom-center"},
+    "learn_popup_learn": {"x": 810, "y": 1830, "note": "Green Learn button on 'Learn the above skills?' popup"},
+    "learn_popup_cancel": {"x": 270, "y": 1830},
+    "skills_learned_close": {"x": 540, "y": 1200, "note": "Close on 'Skills Learned' popup"},
+    "exit_without_learning_ok": {"x": 810, "y": 1260, "note": "OK on 'Exit without learning skills?' popup"},
+    "reset": {"x": 810, "y": 1800},
+    "back": {"x": 40, "y": 1830},
+    "plus_x": 980
+  },
+  "complete_career": {
+    "skills": {"x": 270, "y": 1630, "note": "Bottom-left button showing 'Skills / Skill Pts N'"},
+    "complete": {"x": 810, "y": 1630, "note": "Bottom-right pink 'Complete Career' button"}
   }
 }

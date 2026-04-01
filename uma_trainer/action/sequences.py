@@ -234,6 +234,27 @@ class ActionSequences:
                 tile.stat_type.value, e,
             )
 
+        # Read bond meter levels from portrait gauge bars.
+        # Bond bars are authoritative for support card count — they filter out
+        # NPC portraits (Director Akikawa, Reporter) which don't have bars.
+        try:
+            from uma_trainer.perception.pixel_analysis import read_bond_levels
+            bonds = read_bond_levels(frame)
+            tile.bond_levels = bonds
+            if bonds:
+                # Use bond bar count as the true support card count,
+                # since panel portrait detection may include NPCs.
+                tile.support_cards = [f"card_{j}" for j in range(len(bonds))]
+                logger.info(
+                    "Tile %s: %d support cards, bond levels %s",
+                    tile.stat_type.value, len(bonds), bonds,
+                )
+        except Exception as e:
+            logger.debug(
+                "Failed to read bond levels for %s: %s",
+                tile.stat_type.value, e,
+            )
+
         return ok
 
     @staticmethod
@@ -310,7 +331,9 @@ class ActionSequences:
             for scroll_attempt in range(3):
                 logger.info("Item not visible — scrolling down (attempt %d)", scroll_attempt + 1)
                 self.injector.swipe(540, 1200, 540, 400, duration_ms=500)
-                time.sleep(1.5)
+                time.sleep(0.8)
+                self.injector.tap(540, 350)  # halt scroll momentum
+                time.sleep(1.0)
                 frame = capture.grab_frame()
                 found_row = self._find_item_row(frame, ocr, target_lower)
                 if found_row is not None:
@@ -390,7 +413,9 @@ class ActionSequences:
                 for scroll_attempt in range(3):
                     logger.info("Item '%s' not visible — scrolling (attempt %d)", item_name, scroll_attempt + 1)
                     self.injector.swipe(540, 1200, 540, 400, duration_ms=500)
-                    time.sleep(1.5)
+                    time.sleep(0.8)
+                    self.injector.tap(540, 350)  # halt scroll momentum
+                    time.sleep(1.0)
                     frame = capture.grab_frame()
                     found_row = self._find_item_row(frame, ocr, target_lower)
                     if found_row is not None:
@@ -425,10 +450,29 @@ class ActionSequences:
             self.injector.tap(810, 1785)
             time.sleep(2.0)
 
-        # Step 5: Close bag
+        # Step 5: Handle any additional confirmation popups and close bag
+        # Sometimes there's a second confirmation or result popup
+        for _ in range(2):
+            frame = capture.grab_frame()
+            popup_text = ocr.read_region(frame, (0, 1500, 1080, 1900)).lower()
+            if "ok" in popup_text or "close" in popup_text:
+                logger.info("Post-use popup detected — tapping OK/Close")
+                self.injector.tap(540, 1785)
+                time.sleep(1.5)
+            else:
+                break
+
         logger.info("Closing item bag")
         self.injector.tap(*self.ITEM_BAG_CLOSE)
         time.sleep(1.5)
+
+        # Verify bag is actually closed
+        frame = capture.grab_frame()
+        header_text = ocr.read_region(frame, (0, 0, 400, 60)).lower()
+        if "training item" in header_text or "item" in header_text:
+            logger.warning("Item bag still open after Close — retrying")
+            self.injector.tap(*self.ITEM_BAG_CLOSE)
+            time.sleep(1.5)
 
         logger.info("Batch item use complete: %s", selected)
         return selected
@@ -537,15 +581,17 @@ class ActionSequences:
             frame = capture.grab_frame()
             coords = self._find_race_in_frame(
                 frame, ocr, target_grade, target_distance, target_surface,
+                target_name,
             )
             if coords:
                 return coords
 
             # Scroll down one page (~2 rows).
-            # Use a slow swipe so the list settles predictably,
-            # then wait for the scroll animation to fully complete.
+            # Use a slow swipe, tap to halt momentum, then wait.
             self.injector.swipe(540, 1300, 540, 1060, duration_ms=400)
-            time.sleep(2.0)
+            time.sleep(0.8)
+            self.injector.tap(540, 350)  # halt scroll momentum
+            time.sleep(1.0)
 
         logger.warning(
             "Could not find race '%s' (%s %dm %s) after %d scrolls",
@@ -561,28 +607,79 @@ class ActionSequences:
         target_grade: str,
         target_distance: int,
         target_surface: str,
+        target_name: str = "",
     ) -> tuple[int, int] | None:
-        """Scan overlapping slices of the race list area for a matching
-        grade+distance+surface detail line."""
+        """Find a specific race on the race list screen.
+
+        Strategy: OCR the full visible area in strips. For each strip,
+        check if it contains the race name (primary) or the detail line
+        grade/distance/surface (secondary). A race is confirmed when
+        BOTH name and detail line are found near each other.
+        """
+        name_words = [w.lower() for w in target_name.split() if len(w) > 3]
+        grade_lower = target_grade.lower()
+        dist_str = f"{target_distance}m"
+        surface_lower = target_surface.lower()
+
+        # Pass 1: OCR all strips and collect name hits + detail hits
+        name_hits = []    # y values where race name words appear
+        detail_hits = []  # (y, y_end) where grade+dist+surface match
+
         y = self._RACE_SCAN_Y_START
         while y + self._RACE_SCAN_SLICE_HEIGHT <= self._RACE_SCAN_Y_END:
             y_end = y + self._RACE_SCAN_SLICE_HEIGHT
-            region = (250, y, 1060, y_end)
-            text = ocr.read_region(frame, region)
-            if text.strip():
-                text_lower = text.lower()
-                grade_ok = target_grade.lower() in text_lower
-                dist_ok = f"{target_distance}m" in text_lower
-                surface_ok = target_surface.lower() in text_lower
+            region = (0, y, 1080, y_end)
+            text = ocr.read_region(frame, region).strip()
+            if not text:
+                y += self._RACE_SCAN_STEP
+                continue
+            text_lower = text.lower()
 
-                if grade_ok and dist_ok and surface_ok:
-                    y_center = (y + y_end) // 2
-                    logger.info(
-                        "Found race: %s %dm %s at y=%d-%d (OCR: '%s')",
-                        target_grade, target_distance, target_surface,
-                        y, y_end, text.strip(),
-                    )
-                    return (540, y_center)
+            # Check for race name
+            if name_words:
+                matches = sum(1 for w in name_words if w in text_lower)
+                if matches >= max(1, len(name_words) // 2):
+                    name_hits.append((y, y_end, matches, text))
+
+            # Check for detail line
+            if grade_lower in text_lower and dist_str in text_lower and surface_lower in text_lower:
+                detail_hits.append((y, y_end, text))
+
             y += self._RACE_SCAN_STEP
+
+        # Pass 2: Match name hits to nearby detail hits (within 250px below)
+        if name_words and name_hits:
+            for ny, ny_end, n_matches, n_text in name_hits:
+                for dy, dy_end, d_text in detail_hits:
+                    # Detail line should be below or overlapping the name
+                    if 0 <= dy - ny <= 250:
+                        tap_y = (dy + dy_end) // 2
+                        logger.info(
+                            "Found race '%s': name at y=%d (%d/%d words), "
+                            "detail at y=%d (OCR: '%s')",
+                            target_name, ny, n_matches, len(name_words),
+                            dy, d_text,
+                        )
+                        return (540, tap_y)
+
+            # Name found but no nearby detail line — tap near name
+            best = max(name_hits, key=lambda h: h[2])
+            ny, ny_end, n_matches, n_text = best
+            tap_y = ny_end + 60  # slightly below name banner
+            logger.info(
+                "Found race '%s' by name only at y=%d (%d/%d words, no detail line)",
+                target_name, ny, n_matches, len(name_words),
+            )
+            return (540, tap_y)
+
+        # Pass 3: No name match — fall back to detail line only
+        if detail_hits:
+            dy, dy_end, d_text = detail_hits[0]
+            tap_y = (dy + dy_end) // 2
+            logger.warning(
+                "Race '%s' name not found — using detail match at y=%d (OCR: '%s')",
+                target_name, dy, d_text,
+            )
+            return (540, tap_y)
 
         return None

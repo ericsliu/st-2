@@ -224,16 +224,28 @@ class TrainingScorer:
     def _get_effective_weights(self, state: GameState) -> dict[str, float]:
         """Return stat weights merged with any active override weights."""
         if self.overrides is None:
-            return self.config.stat_weights
+            weights = dict(self.config.stat_weights)
+        else:
+            phase_checker = None
+            if self.scenario:
+                phase_checker = lambda phase: self.scenario.is_phase(state.current_turn, phase)
+            weights = self.overrides.get_stat_weights(
+                self.config.stat_weights, state.current_turn, state.max_turns,
+                phase_checker=phase_checker,
+            )
 
-        phase_checker = None
-        if self.scenario:
-            phase_checker = lambda phase: self.scenario.is_phase(state.current_turn, phase)
+        # Zero out stats that have reached their hard cap
+        stat_caps = {"stamina": 600, "power": 600}
+        current = {
+            "speed": state.stats.speed, "stamina": state.stats.stamina,
+            "power": state.stats.power, "guts": state.stats.guts,
+            "wit": state.stats.wit,
+        }
+        for stat, cap in stat_caps.items():
+            if current.get(stat, 0) >= cap:
+                weights[stat] = 0.0
 
-        return self.overrides.get_stat_weights(
-            self.config.stat_weights, state.current_turn, state.max_turns,
-            phase_checker=phase_checker,
-        )
+        return weights
 
     # ------------------------------------------------------------------
     # Scoring
@@ -260,8 +272,11 @@ class TrainingScorer:
 
         # 1. Base stat value — RunSpec piecewise utility if available, else flat weights
         #    Item boost (Megaphones, Ankle Weights) scales the effective gain.
+        _valid_stats = {s.value for s in StatType}
         if self.runspec and tile.stat_gains:
             for stat_name, gain in tile.stat_gains.items():
+                if stat_name not in _valid_stats:
+                    continue
                 current = state.stats.get(StatType(stat_name))
                 score += self.runspec.stat_utility(
                     stat_name, current, int(gain * boost_mult),
@@ -282,8 +297,11 @@ class TrainingScorer:
                     stat_weight = weights.get(stat_name, 1.0)
                     score += stat_weight * int(gain * boost_mult) * 0.7
 
-        # 2. Support card stacking bonus
-        score += len(tile.support_cards) * self.config.card_stack_per_card * 5.0
+        # 2. Support card stacking bonus (reduced during summer — bonds already maxed)
+        if self._is_summer_camp(state):
+            score += len(tile.support_cards) * self.config.card_stack_per_card * 1.0
+        else:
+            score += len(tile.support_cards) * self.config.card_stack_per_card * 5.0
 
         # 3. Rainbow/gold indicators — the stat gains already reflect the
         #    boosted values from the preview, so we only add a small flat
@@ -303,32 +321,61 @@ class TrainingScorer:
         if tile.has_director:
             score += 6.0
 
-        # 6. Bond-building priority: maximize friendship before Classic summer camp.
-        #    Friendship activates at bond >= 80. The bonus scales with urgency
-        #    as the deadline approaches (turn 36 = Classic year summer camp).
+        # 6. Bond-building priority: maximize friendship (bond >= 80).
+        #    Reaching 80 friendship unlocks the training bonus for that card,
+        #    which compounds across every remaining turn. Getting there early
+        #    (Junior year) is far more valuable than getting there late.
+        #
+        #    Phase A (Junior year, turns 0-23): High flat bonus per low-bond
+        #    card. Friendship is the #2 priority after race points/megaphones.
+        #    Phase B (Early Classic, turns 24-deadline): Urgency ramps up
+        #    sharply — any card still below 80 is an emergency.
+        #    Phase C (Post-deadline): Persistent bonus, still want to max.
         bond_deadline = self._get_friendship_deadline(state)
-        turns_left = max(1, bond_deadline - state.current_turn)
-        if state.current_turn < bond_deadline:
-            low_bond_cards = [
-                c for c in tile.support_cards
-                if self._get_card_bond(c, state) < 80
+        # Use per-tile bond_levels if available (read from gauge bars),
+        # otherwise fall back to state.support_cards lookup.
+        if tile.bond_levels:
+            card_bonds = tile.bond_levels
+        else:
+            card_bonds = [
+                self._get_card_bond(c, state)
+                for c in tile.support_cards
             ]
-            # Urgency: bonus ramps from ~4 to ~12 as deadline nears
-            urgency = min(3.0, bond_deadline / turns_left)
-            bond_score = len(low_bond_cards) * 4.0 * urgency
+        low_bond_values = [b for b in card_bonds if b < 80]
+        if low_bond_values and not self._is_summer_camp(state):
+            turn = state.current_turn
+            # Score = card count (primary) + bond-need tiebreaker.
+            # 2 cards should always beat 1 card. Within same card count,
+            # prefer tiles with lower-bond cards (more room to grow).
+            # Tiebreaker is small: max 0.5 per card, so 2 cards at bond 79
+            # (2*15 + 2*0.006 = 30.01) still beats 1 card at bond 0
+            # (1*15 + 1*0.5 = 15.5).
+            n = len(low_bond_values)
+            bond_tiebreaker = sum(
+                (80 - b) / 80.0 * 0.5
+                for b in low_bond_values
+            )
+            if turn < 24:
+                bond_score = n * 15.0 + bond_tiebreaker
+            elif turn < bond_deadline:
+                turns_left = max(1, bond_deadline - turn)
+                urgency = min(3.0, (bond_deadline - 24) / turns_left)
+                bond_score = n * 6.0 * urgency + bond_tiebreaker
+            else:
+                bond_score = n * 6.0 + bond_tiebreaker
 
-            # Hint icon means extra friendship gauge increase on this tile,
-            # so low-bond cards benefit more from hint training.
-            if tile.has_hint and low_bond_cards:
+            # Hint icon means extra friendship gauge increase on this tile
+            if tile.has_hint and low_bond_values:
                 bond_score *= 1.5
 
             score += bond_score
 
         # 7. Summer camp wit energy recovery bonus.
         #    During summer camp, wit training recovers ~5 energy per use.
-        #    When energy is low, this makes wit significantly more valuable
-        #    because resting wastes a precious summer turn.
+        #    Wit is always valuable in summer (energy regen sustains training),
+        #    and even more so when energy is low.
         if self._is_summer_camp(state) and tile.stat_type == StatType.WIT:
+            score += 5.0   # Base summer wit bonus (energy regen value)
             if state.energy < 50:
                 score += 15.0  # Strong push toward wit when energy is critical
             elif state.energy < 80:
@@ -362,25 +409,21 @@ class TrainingScorer:
         Used by the strategy engine to override non-goal races when friendship
         building is critical (hint tiles with low-bond cards present).
         """
-        bond_deadline = self._get_friendship_deadline(state)
-        if state.current_turn >= bond_deadline:
-            return False
-
-        turns_left = max(1, bond_deadline - state.current_turn)
-        urgency = min(3.0, bond_deadline / turns_left)
-
         for tile in state.training_tiles:
-            low_bond_cards = [
-                c for c in tile.support_cards
-                if self._get_card_bond(c, state) < 80
-            ]
-            if not low_bond_cards:
+            if tile.bond_levels:
+                low_bond_count = sum(1 for b in tile.bond_levels if b < 80)
+            else:
+                low_bond_count = sum(
+                    1 for c in tile.support_cards
+                    if self._get_card_bond(c, state) < 80
+                )
+            if low_bond_count == 0:
                 continue
             # A tile with hint + low-bond cards is high-urgency (hint boosts
             # friendship gain). Without hint, need 3+ low-bond cards.
-            if tile.has_hint and len(low_bond_cards) >= 1:
+            if tile.has_hint and low_bond_count >= 1:
                 return True
-            if len(low_bond_cards) >= 3:
+            if low_bond_count >= 3:
                 return True
 
         return False

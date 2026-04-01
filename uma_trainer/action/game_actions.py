@@ -59,6 +59,7 @@ class GameActionExecutor:
         self.assembler = assembler
         self.screen_id = screen_id
         self.ocr = ocr
+        self.goal_race_urgent: bool = False
 
     # ------------------------------------------------------------------
     # Post-action screen navigation
@@ -314,6 +315,17 @@ class GameActionExecutor:
                 self.injector.tap(540, 1810)
                 continue
 
+            # Insufficient Goal Race Result Pts popup — tap Race
+            if "requirement" in unknown_text_lower or ("result" in unknown_text_lower and "race" in unknown_text_lower):
+                logger.info("Goal race warning popup — setting goal_race_urgent flag")
+                self.goal_race_urgent = True
+                # Persist flag to disk for cross-invocation continuity
+                from pathlib import Path
+                Path("data/goal_race_urgent.txt").write_text("1")
+                self.injector.tap(810, 1370)
+                time.sleep(2.0)
+                continue
+
             # Tutorial slide — has "Back" + "Next" or "Close" in bottom area
             if "back" in unknown_text_lower and ("next" in unknown_text_lower or "close" in unknown_text_lower):
                 if "next" in unknown_text_lower:
@@ -566,10 +578,19 @@ class GameActionExecutor:
         {"turf": "A", "dirt": "E", "short": "D", "mile": "A", ...}.
         """
         logger.info("Checking conditions + aptitudes via Full Stats")
-        self.injector.tap(990, 1160)
-        time.sleep(1.5)
+        self.injector.tap(1015, 1120)
+        time.sleep(2.0)
 
+        # Wait for Full Stats screen to load — verify header says "Umamusume"
         frame = self.provider.refresh_frame()
+        header_text = self.ocr.read_region(frame, (0, 40, 600, 120)).lower()
+        if "umamusume" not in header_text:
+            logger.info("Full Stats not loaded yet ('%s') — waiting and retrying", header_text.strip())
+            time.sleep(2.0)
+            frame = self.provider.refresh_frame()
+            header_text = self.ocr.read_region(frame, (0, 40, 600, 120)).lower()
+            if "umamusume" not in header_text:
+                logger.warning("Full Stats still not visible ('%s') — reading anyway", header_text.strip())
 
         # --- Conditions ---
         condition_text = self.ocr.read_region(frame, (0, 950, 1080, 1250)).lower()
@@ -606,6 +627,7 @@ class GameActionExecutor:
 
     def _read_aptitudes(self, frame) -> dict[str, str]:
         """Parse aptitude grades from the Full Stats screen frame."""
+        import cv2
         from uma_trainer.perception.regions import FULL_STATS_REGIONS
 
         valid_grades = {"S", "A", "B", "C", "D", "E", "F", "G"}
@@ -618,41 +640,54 @@ class GameActionExecutor:
                     result[key] = m.group(1).upper()
             return result
 
+        def _read_row_adaptive(region_crop):
+            """Read a row with adaptive threshold (inverted) for better grade detection."""
+            h, w = region_crop.shape[:2]
+            up = cv2.resize(region_crop, (w * 3, h * 3), interpolation=cv2.INTER_LANCZOS4)
+            gray = cv2.cvtColor(up, cv2.COLOR_BGR2GRAY)
+            binarized = cv2.adaptiveThreshold(
+                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                cv2.THRESH_BINARY_INV, 31, 10,
+            )
+            bgr = cv2.cvtColor(binarized, cv2.COLOR_GRAY2BGR)
+            return self.ocr.read_text(bgr).strip()
+
         aptitudes: dict[str, str] = {}
 
-        # Track row: "Track  Turf A  Dirt E"
-        track_pairs = [("turf", "turf"), ("dirt", "dirt")]
-        track_text = self.ocr.read_region(frame, FULL_STATS_REGIONS["track_row"])
-        logger.debug("Track row OCR: '%s'", track_text)
-        aptitudes.update(_parse_row(track_text, track_pairs))
+        row_defs = [
+            ("track_row", [("turf", "turf"), ("dirt", "dirt")]),
+            ("distance_row", [("sprint", "short"), ("mile", "mile"),
+                              ("medium", "medium"), ("long", "long")]),
+        ]
 
-        # Distance row: "Distance  Sprint D  Mile A  Medium A  Long S"
-        dist_pairs = [("sprint", "short"), ("mile", "mile"),
-                      ("medium", "medium"), ("long", "long")]
-        dist_text = self.ocr.read_region(frame, FULL_STATS_REGIONS["distance_row"])
-        logger.debug("Distance row OCR: '%s'", dist_text)
-        aptitudes.update(_parse_row(dist_text, dist_pairs))
+        # Pass 1: raw OCR on each row
+        for row_name, pairs in row_defs:
+            text = self.ocr.read_region(frame, FULL_STATS_REGIONS[row_name])
+            logger.debug("%s OCR: '%s'", row_name, text.strip())
+            aptitudes.update(_parse_row(text, pairs))
 
         # Style row (informational logging only)
         style_text = self.ocr.read_region(frame, FULL_STATS_REGIONS["style_row"])
         logger.debug("Style row OCR: '%s'", style_text)
 
-        # Retry any missing keys with shifted y (OCR sensitive to crop)
+        # Pass 2: retry missing with adaptive_inv binarization + shifted y
         expected_keys = {"turf", "dirt", "short", "mile", "medium", "long"}
         missing = expected_keys - aptitudes.keys()
         if missing:
             logger.info("Aptitude retry for missing: %s", missing)
-            row_map = {
-                "track_row": (track_pairs, {"turf", "dirt"}),
-                "distance_row": (dist_pairs, {"short", "mile", "medium", "long"}),
+            row_key_map = {
+                "track_row": {"turf", "dirt"},
+                "distance_row": {"short", "mile", "medium", "long"},
             }
-            for row_name, (pairs, row_keys) in row_map.items():
+            for row_name, pairs in row_defs:
+                row_keys = row_key_map[row_name]
                 if not (missing & row_keys):
                     continue
                 x1, y1, x2, y2 = FULL_STATS_REGIONS[row_name]
-                for dy in [-5, 5, -10, 10]:
-                    text = self.ocr.read_region(frame, (x1, y1 + dy, x2, y2 + dy))
-                    logger.debug("Retry %s dy=%d: '%s'", row_name, dy, text.strip())
+                for dy in [0, -5, 5, -10, 10]:
+                    crop = frame[y1 + dy:y2 + dy, x1:x2]
+                    text = _read_row_adaptive(crop)
+                    logger.debug("Retry %s adaptive dy=%d: '%s'", row_name, dy, text)
                     for k, v in _parse_row(text, pairs).items():
                         if k not in aptitudes:
                             aptitudes[k] = v

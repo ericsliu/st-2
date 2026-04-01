@@ -71,10 +71,17 @@ class RaceSelector:
         return year, month, half
 
     def get_races_for_turn(self, turn: int, max_turns: int = 72) -> list[dict]:
-        """Return all calendar races available at the given turn."""
-        _, month, half = self.turn_to_month_half(turn, max_turns)
+        """Return all calendar races available at the given turn.
+
+        Filters by both month/half AND year (Junior/Classic/Senior).
+        """
+        year, month, half = self.turn_to_month_half(turn, max_turns)
         results = []
         for entry in self._calendar:
+            # Year filter: skip races not available in this year
+            allowed_years = entry.get("years")
+            if allowed_years and year not in allowed_years:
+                continue
             grade = entry.get("grade", "")
             if grade in ("OP", "Pre-OP"):
                 results.append(entry)
@@ -93,6 +100,12 @@ class RaceSelector:
         calendar_races = self.get_races_for_turn(
             state.current_turn, state.max_turns,
         )
+        if not calendar_races:
+            self._pre_selected = None
+            return None
+
+        # Filter out scenario-specific races (URA Finale etc.) — 0m distance
+        calendar_races = [r for r in calendar_races if r.get("distance", 0) > 0]
         if not calendar_races:
             self._pre_selected = None
             return None
@@ -245,6 +258,21 @@ class RaceSelector:
                 tier_used=1,
             )
 
+        # --- G1 race available this turn? Always race G1s. ---
+        g1 = self._find_best_g1(state)
+        if g1:
+            logger.info(
+                "G1 available: '%s' (%dm, %s, fans=%d)",
+                g1["name"], g1.get("distance", 0),
+                g1.get("surface", "?"), g1.get("fan_reward", 0),
+            )
+            return BotAction(
+                action_type=ActionType.RACE,
+                tap_coords=races_btn,
+                reason=f"G1 available: {g1['name']} (fans={g1.get('fan_reward', 0)})",
+                tier_used=1,
+            )
+
         # Delegate scenario-specific logic
         if self.scenario:
             return self.scenario.should_race_this_turn(state, races_btn)
@@ -283,6 +311,15 @@ class RaceSelector:
         """Score a single race option."""
         score = 0.0
         strategy = self._get_race_strategy()
+
+        # 0. After Junior Year, only enter Graded races (G1/G2/G3) or goal races
+        if state.current_turn > 24 and race.grade in ("OP", "Pre-OP", "Debut", ""):
+            if not race.is_goal_race:
+                logger.info(
+                    "Race '%s' blocked: grade %s not allowed after Junior Year",
+                    race.name, race.grade or "unknown",
+                )
+                return 0.0
 
         # 1. Goal race — highest priority
         if race.is_goal_race:
@@ -380,8 +417,12 @@ class RaceSelector:
 
     @staticmethod
     def _distance_category(distance_m: int) -> str:
-        """Map race distance in metres to aptitude category."""
-        if distance_m <= 1200:
+        """Map race distance in metres to aptitude category.
+
+        Game categories: Sprint 1000-1400, Mile 1600-1800,
+        Medium 2000-2400, Long 2500+.
+        """
+        if distance_m <= 1400:
             return "short"
         elif distance_m <= 1800:
             return "mile"
@@ -389,6 +430,48 @@ class RaceSelector:
             return "medium"
         else:
             return "long"
+
+    def _find_best_g1(self, state: GameState) -> dict | None:
+        """Return the best G1 race available this turn, or None.
+
+        Filters by aptitude (distance + surface must be B or better).
+        Among eligible G1s, picks the one with the highest fan reward.
+        """
+        calendar_races = self.get_races_for_turn(
+            state.current_turn, state.max_turns,
+        )
+        g1s = [r for r in calendar_races if r.get("grade") == "G1" and r.get("distance", 0) > 0]
+        if not g1s:
+            return None
+
+        blocked = {"C", "D", "E", "F", "G"}
+        apt = state.trainee_aptitudes or {}
+
+        eligible = []
+        for race in g1s:
+            dist = race.get("distance", 0)
+            surface = race.get("surface", "turf")
+            if dist > 0 and apt:  # 0m = scenario race (URA Finale etc), skip aptitude check
+                dist_cat = self._distance_category(dist)
+                if apt.get(dist_cat, "") in blocked:
+                    logger.info(
+                        "G1 '%s' blocked: %s aptitude %s",
+                        race["name"], dist_cat, apt.get(dist_cat, "?"),
+                    )
+                    continue
+                if apt.get(surface, "") in blocked:
+                    logger.info(
+                        "G1 '%s' blocked: %s surface aptitude %s",
+                        race["name"], surface, apt.get(surface, "?"),
+                    )
+                    continue
+            eligible.append(race)
+
+        if not eligible:
+            return None
+
+        eligible.sort(key=lambda r: r.get("fan_reward", 0), reverse=True)
+        return eligible[0]
 
     def _find_required_race(self, state: GameState) -> str | None:
         """Return a race name if a career goal race must be entered."""

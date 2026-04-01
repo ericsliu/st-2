@@ -50,11 +50,11 @@ class LLMConfig(BaseModel):
 class ScorerConfig(BaseModel):
     stat_weights: dict[str, float] = Field(
         default_factory=lambda: {
-            "speed": 1.2,
-            "stamina": 1.0,
+            "speed": 1.5,
+            "stamina": 0.7,
             "power": 0.9,
-            "guts": 0.8,
-            "wit": 0.7,
+            "guts": 0.4,
+            "wit": 0.6,
         }
     )
     rainbow_bonus: float = 2.0
