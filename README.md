@@ -1,332 +1,184 @@
 # Uma Trainer
 
-An autonomous bot that plays **Uma Musume: Pretty Derby** (Global/English version) on a MacBook Pro M1. It executes full Career Mode training runs with minimal human supervision.
+An autonomous bot that plays **Uma Musume: Pretty Derby** (Global/English version) on a MacBook Pro M1. It executes full Career Mode training runs (Trackblazer scenario) with minimal human supervision.
 
 > **Disclaimer**: Automation may violate the game's Terms of Service. This project is for educational and research purposes. Users accept all risk.
 
 ---
 
-## Architecture
+## How It Works
 
 ```
-Screen Capture → YOLO Object Detection → OCR → State Assembly → Decision Engine → ADB Input
+Screen Capture (ADB) → Apple Vision OCR → State Assembly → Rule-Based Scorer → ADB Input
 ```
 
-**Three-tier decision engine:**
-1. **Tier 1 (Rule-based scorer)** — handles ~90% of decisions in <1ms
-2. **Tier 2 (Local LLM via Ollama)** — handles ambiguous events (~15-20 tok/s on M1)
-3. **Tier 3 (Claude API)** — high-value fallback (2–5 calls/day, <$0.10/day)
+The bot runs a perception-reasoning-action loop at ~1 FPS. It screenshots the emulator via ADB, reads text/numbers with Apple Vision OCR, assembles game state, scores possible actions with a tunable rule-based engine, and injects taps via `adb shell input tap`.
+
+No YOLO model or local LLM is required. The bot operates entirely on OCR + rule-based logic.
 
 ---
 
 ## System Requirements
 
 - macOS with Apple Silicon (M1/M2/M3)
-- 16 GB RAM recommended (8 GB minimum — see Memory section)
 - Python 3.11+
-- [MuMuPlayer](https://www.mumuplayer.com/) — Android emulator for macOS Apple Silicon
-- [Android Platform Tools](https://developer.android.com/tools/releases/platform-tools) (for `adb`)
+- [MuMuPlayer](https://www.mumuplayer.com/mac/) (Android emulator for Apple Silicon)
+- [Android Platform Tools](https://developer.android.com/tools/releases/platform-tools) (`adb`)
 - Uma Musume: Pretty Derby (Global) installed in MuMuPlayer
 
 ---
 
 ## Installation
 
-### 1. Clone the repository
-
 ```bash
 git clone <repo-url>
 cd st-2
-```
-
-### 2. Create a Python virtual environment
-
-```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
-```
-
-### 3. Install dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
-For development (includes testing tools):
+For development (pytest, ruff, mypy):
 ```bash
 pip install -r requirements-dev.txt
-```
-
-### 4. Configure environment variables
-
-```bash
-cp .env.example .env
-# Edit .env and fill in your ANTHROPIC_API_KEY
-```
-
-### 5. Extract the game's master database
-
-The game ships with `master.mdb`, an SQLite database containing all static game data (events, skills, characters, races, support cards). Extracting it requires temporarily enabling root on MuMu:
-
-1. **Close Uma Musume** (it won't start while rooted)
-2. **Enable root** in MuMu: Settings → Other → Root Permission
-3. **Pull the database**:
-   ```bash
-   adb connect 127.0.0.1:5555
-   adb pull /data/data/com.cygames.umamusume/files/master/master.mdb data/master.mdb
-   ```
-4. **Disable root** in MuMu settings and restart the emulator
-5. **Verify** (optional):
-   ```bash
-   python scripts/pull_master_mdb.py --info
-   ```
-
-> **Re-extract after game updates** — Cygames patches `master.mdb` with new events, skills, and characters. Re-pull it after major game updates to keep the knowledge base current.
-
-### 6. Import the knowledge base
-
-Loads the bundled event, skill, support card, and race calendar data into SQLite:
-
-```bash
-python main.py import-kb
 ```
 
 ---
 
 ## Setup: MuMuPlayer + ADB
 
-1. **Install MuMuPlayer** from https://www.mumuplayer.com/mac/
-
-2. **Enable ADB in MuMuPlayer**:
-   - Settings → Other → Enable ADB debugging
-
-3. **Install Android Platform Tools** (if not already):
+1. Install MuMuPlayer and set it to **portrait mode (1080x1920)**
+2. Enable ADB debugging in MuMuPlayer: Settings > Other > Enable ADB
+3. Install Uma Musume inside MuMuPlayer and log in
+4. Connect ADB before every session:
    ```bash
-   brew install android-platform-tools
+   adb connect 127.0.0.1:5555
+   adb devices  # Should show the emulator
    ```
-
-4. **Connect ADB**:
-   ```bash
-   adb connect 127.0.0.1:7555   # Default MuMuPlayer ADB port
-   adb devices                   # Should show the emulator
-   ```
-
-5. **Install the game**: Launch Uma Musume: Pretty Derby inside MuMuPlayer and log in.
-
----
-
-## Configuration
-
-Edit `config/default.yaml` to tune behavior:
-
-```yaml
-capture:
-  backend: scrcpy        # Use 'screencapturekit' for window capture without ADB
-  fps_decision: 1.5      # Frames/sec during active turns
-
-scorer:
-  stat_weights:
-    speed: 1.2           # Increase to prioritize speed training
-    stamina: 1.0
-    # ...
-  rest_energy_threshold: 20  # Rest if energy drops below this
-
-llm:
-  claude_daily_limit: 5  # Max Claude API calls per day
-```
-
-### Training presets
-
-Pre-built stat weight presets are in `data/presets/`. Apply one with:
-```bash
-python main.py run --preset speed_stam_ura
-```
 
 ---
 
 ## Running the Bot
 
-Mumuplayer must be running for the following to work.
+**Always use `.venv/bin/python`** — never bare `python` or `python3`.
 
-### Basic run (with web dashboard)
-
+### Single turn (supervised)
 ```bash
-python main.py run
+.venv/bin/python scripts/run_one.py
 ```
+Executes one full game turn, looping through intermediate screens (race results, popups, cutscenes) automatically.
 
-Open the dashboard at http://127.0.0.1:8080
-
-### Headless run
-
+### Dry run (no taps)
 ```bash
-python main.py run --headless
+.venv/bin/python scripts/dry_run.py
 ```
+Screenshots the current screen, runs the decision engine, and logs what it *would* do without touching the game.
 
-### With a specific config file
-
+### Full career
 ```bash
-python main.py run --config config/my_config.yaml
+.venv/bin/python scripts/run_career.py
 ```
+Loops `run_one_turn()` until the career ends. Logs each turn to a markdown file.
 
-### Dashboard only (no bot running)
-
+### Multiple turns
 ```bash
-python main.py dashboard
+.venv/bin/python scripts/run_few_turns.py
 ```
 
 ---
 
-## YOLO Model Setup
+## Configuration
 
-The bot runs in **stub mode** (no object detection) until you train the YOLO model. Core functionality still works via fallback fixed-region OCR, but detection accuracy is lower.
+### Runspec (stat weights + targets)
 
-### Step 1: Collect screenshots
+The bot's stat priorities are defined in `data/runspecs/parent_balanced_v1.yaml`:
 
-With the game running in MuMuPlayer:
-```bash
-python main.py collect --output datasets/images --interval 5
-```
-Collect 500–1000 screenshots across all screen types.
-
-### Step 2: Annotate in Label Studio
-
-```bash
-pip install label-studio
-label-studio start
-```
-- Create a new project, import the screenshots
-- Annotate the 50 classes defined in `uma_trainer/perception/class_map.py`
-- Export in YOLO format to `datasets/`
-
-See `datasets/README.md` for detailed annotation instructions.
-
-### Step 3: Train
-
-```bash
-python scripts/train_yolo.py --epochs 100 --export-coreml
+```yaml
+stat_targets:
+  speed:
+    minimum: 500
+    target: 800
+    excellent: 1000
+    values: [1.2, 0.9, 0.6, 0.2]  # [below_min, min_to_target, target_to_excellent, above_excellent]
 ```
 
-The trained CoreML model is automatically placed at `models/uma_yolo.mlpackage`.
+Each stat has four weight tiers based on current value relative to thresholds. The scorer multiplies training gains by these weights to rank actions.
+
+### Skill purchase priority
+
+Skills are ranked in `SKILL_PRIORITY` inside `scripts/auto_turn.py`. Higher number = buy first. Unknown skills (not in the list) are never purchased.
+
+### Screen coordinates
+
+All button positions are in `data/screen_coordinates.json`, calibrated for 1080x1920 portrait.
+
+### Item usage
+
+Shop purchasing and item usage are managed by `uma_trainer/decision/shop_manager.py`. Item tiers and purchase rules are configured there.
 
 ---
 
-## Local LLM Setup (Optional — Tier 2 decisions)
+## Key Files
 
-Install [Ollama](https://ollama.com/) and pull the recommended model:
-
-```bash
-# Install Ollama (macOS)
-brew install ollama
-
-# Start Ollama server
-ollama serve
-
-# Pull the model
-ollama pull phi4-mini:q4_K_M     # ~2.5 GB, recommended
-# or
-ollama pull llama3.2:3b           # ~2 GB, alternative
-```
-
-If Ollama is not running, the bot skips Tier 2 and falls back to Claude API.
-
----
-
-## Claude API Setup (Optional — Tier 3 decisions)
-
-Add your key to `.env`:
-```
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-The bot uses Claude only for unknown events not in the knowledge base. Default limit: 5 calls/day.
-
----
-
-## Memory Budget (M1 16 GB)
-
-| Component | RAM |
-|-----------|-----|
-| MuMuPlayer + Game | ~3–4 GB |
-| YOLO nano (CoreML) | ~50–100 MB |
-| Apple Vision OCR | ~50 MB |
-| Phi-4-mini Q4 (Ollama) | ~2.5 GB |
-| Python bot process | ~200–400 MB |
-| macOS overhead | ~3–4 GB |
-| **Total** | **~9.5–12 GB** |
-
-**On 8 GB M1**: Set `llm.local_model: ""` in config to disable local LLM. The bot will use the Claude API for all AI decisions (higher API cost).
-
----
-
-## Knowledge Base
-
-The knowledge base (`data/uma_trainer.db`) stores:
-- **Events**: ~2,000 event choices (generic + character-specific)
-- **Skills**: ~800 skills with priorities
-- **Support cards**: ~400 cards with tier ratings
-- **Race calendar**: ~120 races with grades and distances
-
-Bundled sample data is in `data/`. To expand it:
-
-1. Add JSON files following the schemas in `data/events/generic_events.json`, `data/skills.json`, etc.
-2. Re-import: `python main.py import-kb`
-
-Community data sources: [GameTora](https://gametora.com/umamusume), [Game8](https://game8.jp/umamusume)
-
----
-
-## Running Tests
-
-```bash
-pytest tests/ -v
-```
-
-Run a specific test file:
-```bash
-pytest tests/test_scorer.py -v
-pytest tests/test_event_lookup.py -v
-pytest tests/test_fsm.py -v
-```
+| File | Purpose |
+|------|---------|
+| `scripts/auto_turn.py` | Core bot logic: screen detection, OCR, state assembly, decision engine, action execution |
+| `scripts/ocr_util.py` | Apple Vision OCR wrapper |
+| `scripts/run_one.py` | Single-turn entry point |
+| `scripts/run_career.py` | Full career loop |
+| `scripts/dry_run.py` | Decision testing without taps |
+| `data/screen_coordinates.json` | Button coordinates for all screens |
+| `data/runspecs/parent_balanced_v1.yaml` | Stat weight configuration |
+| `data/race_calendar.json` | Race schedule with grades, distances, turn numbers |
+| `data/inventory.yaml` | Current item inventory (auto-updated) |
+| `uma_trainer/decision/shop_manager.py` | Shop automation and item usage |
+| `uma_trainer/decision/race_selector.py` | Race entry decisions |
+| `uma_trainer/decision/scorer.py` | Training tile scoring engine |
 
 ---
 
 ## Project Structure
 
 ```
+scripts/              # Bot entry points and utilities
 uma_trainer/
-├── capture/          # Screen capture (ADB screencap or macOS Quartz)
-├── perception/       # YOLO detection, Apple Vision OCR, state assembly
-├── decision/         # Scoring engine, event handler, skill buyer
-├── action/           # ADB input injection with human-like timing
-├── knowledge/        # SQLite DB, event/skill/card lookups
-├── llm/              # Ollama client, Claude API client, cache
-├── web/              # FastAPI dashboard
-└── fsm/              # Finite state machine orchestration
-config/               # YAML configuration files
-data/                 # Knowledge base JSON source files
-datasets/             # YOLO training images + labels (gitignored)
-models/               # Trained model weights (gitignored)
-scripts/              # Training, data collection, import utilities
+├── action/           # ADB input injection
+├── capture/          # Screen capture backends
+├── core/             # Run context and turn execution (WIP refactor)
+├── decision/         # Scorer, race selector, shop manager, skill buyer
+├── fsm/              # Finite state machine for game flow
+├── knowledge/        # SQLite knowledge base lookups
+├── llm/              # Claude API client (low-frequency fallback)
+├── perception/       # Screen detection and state assembly
+├── scenario/         # Game scenario definitions
+├── state/            # Game state providers (WIP refactor)
+└── web/              # FastAPI dashboard (not currently used)
+data/                 # Config, race calendar, coordinates, templates, runspecs
 tests/                # Pytest test suite
-main.py               # CLI entry point
 ```
 
 ---
 
-## Development Phases
+## Running Tests
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| Foundation | ✅ Code complete | Capture, perception stubs, KB, action injection |
-| Core Loop | 🔲 Needs YOLO model | YOLO training, state assembly, end-to-end run |
-| Intelligence | 🔲 Needs data | LLM integration, event matching, skill logic |
-| Polish | 🔲 | Dashboard, scraper, performance tuning |
+```bash
+.venv/bin/pytest tests/ -v
+```
 
-**Next steps to get the bot running end-to-end:**
-1. Set up MuMuPlayer + ADB (see above)
-2. Collect 500+ screenshots with `python main.py collect`
-3. Annotate in Label Studio and train YOLO
-4. Run `python main.py run` with supervised monitoring
+---
+
+## Game Context
+
+The bot plays **Trackblazer** scenario Career Mode. A career spans ~72 turns across 3 in-game years. Each turn the bot picks one action: Train, Rest, Infirmary, Race, or Shop. Random events fire between turns.
+
+Key mechanics the bot handles:
+- **Training scoring**: Weighs stat gains, support card stacking, bond building, energy cost
+- **Race selection**: Checks distance aptitude, prioritizes goal races, avoids consecutive race penalties
+- **Shop automation**: Buys megaphones, energy drinks, cleats; uses items at optimal times
+- **Summer camp**: Stockpiles megaphones, manages energy for boosted training
+- **TS Climax**: Uses megaphones + energy drinks every training turn, cleats before races
+- **Skill purchasing**: Priority-ranked skill buying with SP reserve management
+- **Active effects**: Detects item buffs by tapping the effect indicator icons
 
 ---
 
@@ -335,17 +187,11 @@ main.py               # CLI entry point
 **ADB not connecting:**
 ```bash
 adb kill-server && adb start-server
-adb connect 127.0.0.1:7555
+adb connect 127.0.0.1:5555
 ```
 
-**YOLO model warnings at startup:**
-Normal — the bot runs in stub mode until you train the model.
+**Bot stuck on unknown screen:**
+Run `dry_run.py` to see what the bot detects. Check if OCR is reading the screen correctly.
 
-**Claude API budget exceeded:**
-Increase `llm.claude_daily_limit` in `config/default.yaml`.
-
-**High memory usage:**
-Disable local LLM: set `llm.local_model: ""` in config.
-
-**Bot stuck in error recovery:**
-Check the dashboard at http://127.0.0.1:8080. Click Resume after investigating.
+**Wrong button coordinates:**
+Coordinates are calibrated for 1080x1920 portrait in MuMuPlayer. If your resolution differs, recalibrate using `scripts/calibrate_regions.py`.
