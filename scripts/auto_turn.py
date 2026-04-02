@@ -347,10 +347,20 @@ def build_game_state(img, screen_type: str, energy: int = -1) -> GameState:
         log(f"Period OCR failed: {e}")
     # Read current stat values from the stat bar (y=1240-1360)
     # Layout: Speed | Stamina | Power | Guts | Wit | Skill Pts
-    # Each shows grade letter, value, "/1200"
+    # Blend out diamond dividers between columns to prevent "1" misreads
     try:
         from scripts.ocr_util import ocr_image as _ocr_img
         stat_crop = img.crop((0, 1240, 1080, 1360))
+        # Blend out diamond separators between columns (horizontal avg, 5px wide)
+        import numpy as np
+        arr = np.array(stat_crop)
+        for dx in (208, 378, 546, 715):
+            left = arr[:, max(0, dx - 4):max(0, dx - 3), :].mean(axis=1, keepdims=True)
+            right = arr[:, min(arr.shape[1]-1, dx + 3):min(arr.shape[1], dx + 4), :].mean(axis=1, keepdims=True)
+            blend = ((left + right) / 2).astype(np.uint8)
+            arr[:, dx - 2:dx + 3, :] = blend
+        from PIL import Image as _Img
+        stat_crop = _Img.fromarray(arr)
         stat_crop.save("/tmp/stat_bar_crop.png")
         stat_cols = [
             (0.0, 0.20, "speed"),
@@ -363,18 +373,15 @@ def build_game_state(img, screen_type: str, energy: int = -1) -> GameState:
         for text, conf, bbox in _ocr_img("/tmp/stat_bar_crop.png"):
             if conf < 0.3:
                 continue
-            t = text.strip().replace(":", "").replace("|", "").replace("-", "").replace("—", "")
-            # Skip "/1200" denominator text
+            t = text.strip().replace(":", "").replace("|", "").replace("-", "").replace("—", "").replace("\\", "")
             if t.startswith("/"):
                 continue
-            # Extract longest digit sequence from possibly messy OCR
             digits = re.findall(r'\d+', t)
             if not digits:
                 continue
-            t = max(digits, key=len)  # Take longest digit run
+            t = max(digits, key=len)
             val = int(t)
             cx = bbox[0] + bbox[2] / 2
-            # Determine which column this value belongs to
             matched_stat = None
             for x_min, x_max, stat_name in stat_cols:
                 if x_min <= cx < x_max:
@@ -383,12 +390,10 @@ def build_game_state(img, screen_type: str, energy: int = -1) -> GameState:
             if matched_stat is None:
                 continue
             if matched_stat == "skill_pts":
-                # SP can be 0-9999, no truncation needed
                 if val > 9999:
                     continue
                 _skill_pts = val
             else:
-                # Stats range 50-1200; truncate merged OCR (e.g. "1271" → "127")
                 if val > 1200 and len(t) >= 4:
                     val = int(t[:3])
                 if val < 50 or val > 1200:
