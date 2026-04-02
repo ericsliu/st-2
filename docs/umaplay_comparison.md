@@ -51,6 +51,25 @@ Comparison of our bot (Uma Trainer) against [Umaplay](https://github.com/Magody/
 ### 10. PAL Memory
 **Verdict: Future, for URA/Unity.** Tracks special ability availability and cooldowns.
 
+## Data Worth Importing from Umaplay
+
+### Event Choice Outcomes
+Umaplay's `events.json` has ~100 support card events with quantified reward deltas per choice option (e.g., speed+10, energy+15, mood+1) and a `default_preference` field indicating the best choice. Our `generic_events.json` has 61 events with text descriptions of effects but not structured numeric values.
+
+**Plan**: Enrich our event DB with their numeric reward data. Match events across JP→EN by event structure/choice count since text won't match directly. Their reward values are version-independent game mechanics — the stat deltas are the same in Global. Import into our SQLite `events` table alongside existing records.
+
+**Caveat**: Their data is Japanese version. Matching requires either skill ID crossref or manual mapping of event titles.
+
+### Skill Grade Ratings
+Umaplay has 484 skills with effectiveness ratings using ◎ (excellent), ○ (good), × (poor) grade symbols. We have 535 skills with `grade_value` (numeric) but no effectiveness tier.
+
+**Plan**: Match by `skill_id` (shared between JP and Global) to pull their ◎/○/× ratings into our DB. This improves skill purchase prioritization — the scorer can prefer ◎ skills over × skills at the same SP cost.
+
+**Important**: Our existing `grade_value` data takes priority. Only backfill Umaplay ratings for skills where we don't already have our own rating. Our data is Global-specific and more authoritative for our use case.
+
+### Skill Matching Constraints
+**Verdict: Skip.** Umaplay has `skill_matching_overrides.json` with require/forbid token rules for mutually exclusive skills. Not needed for our use case — we're targeting parent runs where having more skills is fine, not competitive min-maxing where conflicts matter.
+
 ## Stat Divider OCR Fix
 
 ### Problem
