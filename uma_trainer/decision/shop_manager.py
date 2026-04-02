@@ -102,7 +102,7 @@ ITEM_CATALOGUE: dict[str, ShopItem] = {
     "ankle_weights":        ShopItem("Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% stat / +20% energy, 1 turn", save_for="summer_camp"),
     "training_application": ShopItem("Training Application", 150, ItemTier.NEVER, max_stock=1, effect="Training level +1"),
     "good_luck_charm":      ShopItem("Good-Luck Charm", 40, ItemTier.S, max_stock=2, effect="0% failure, 1 turn", save_for="exceptional_training"),
-    "reset_whistle":        ShopItem("Reset Whistle", 20, ItemTier.SS, max_stock=2, effect="Rearrange support cards", save_for="summer_no_rainbow"),
+    "reset_whistle":        ShopItem("Reset Whistle", 20, ItemTier.SS, max_stock=5, effect="Rearrange support cards", save_for="summer_no_rainbow"),
 
     # -- Race Items --
     # Master Cleat Hammer: need 3 for Twinkle Star Climax races (sizable stat boost)

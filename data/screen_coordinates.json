@@ -2,14 +2,14 @@
   "_note": "Button coordinates for 1080x1920 portrait resolution. Discovered via pixel scanning.",
   "career_home": {
     "rest": {"x": 185, "y": 1535},
-    "training": {"x": 540, "y": 1535},
+    "training": {"x": 540, "y": 1550},
     "skills": {"x": 918, "y": 1535},
     "infirmary": {"x": 162, "y": 1750},
     "recreation": {"x": 378, "y": 1750},
     "shop": {"x": 620, "y": 1750, "note": "Small target, between Recreation and Races"},
     "races": {"x": 920, "y": 1750},
     "full_stats": {"x": 990, "y": 1160, "note": "Right side, below trainee portrait. Training Items is left at ~800,1140"},
-    "training_items": {"x": 820, "y": 1250, "note": "Verified center, button spans x=780-860 y=1220-1280"}
+    "training_items": {"x": 826, "y": 1160, "note": "OCR-verified center, button spans x=767-884 y=1127-1188"}
   },
   "race_list": {
     "race_entry_1": {"x": 540, "y": 1050, "note": "First race row, tap to select"},
