@@ -72,6 +72,7 @@ _cached_aptitudes = None  # Read once from Full Stats screen, then reused
 _active_conditions = []   # Negative conditions detected this session
 _game_state = None        # Last built GameState, reused across screens
 _summer_whistle_used = False  # Reset each turn; prevents double-whistling
+_ts_climax_retries = 0        # Retry counter for TS Climax races (max 3)
 
 # Map negative conditions to their cure items in the shop catalogue
 CONDITION_CURES = {
@@ -90,7 +91,7 @@ BTN_TRAINING = (540, 1550)
 BTN_HOME_SKILLS = (918, 1535)
 BTN_HOME_RACES = (920, 1750)
 BTN_SHOP = (620, 1640)
-BTN_TRAINING_ITEMS = (827, 1240)
+BTN_TRAINING_ITEMS = (827, 1130)
 BTN_ITEMS_CONFIRM = (779, 1772)  # "Confirm Use" / "Use Training Items" right button
 BTN_ITEMS_CLOSE = (303, 1772)    # "Close" left button
 
@@ -408,9 +409,9 @@ def build_game_state(img, screen_type: str, energy: int = -1) -> GameState:
                     continue
                 _skill_pts = val
             else:
-                if val > 1200 and len(t) >= 4:
-                    val = int(t[:3])
-                if val < 50 or val > 1200:
+                if val >= 1200:
+                    continue  # Skip "/1200" denominator labels
+                if val < 50:
                     continue
                 setattr(_current_stats, stat_name, val)
         log(f"Stats: Spd={_current_stats.speed} Sta={_current_stats.stamina} Pow={_current_stats.power} Gut={_current_stats.guts} Wit={_current_stats.wit} SP={_skill_pts}")
@@ -2937,11 +2938,15 @@ def _run_one_turn_inner(stop_before=None):
             pass
         global _last_race_placement
         _last_race_placement = placement
-        # TS Climax: retry if placed worse than 3rd
-        if is_climax and placement > 3:
-            log(f"TS Climax race — placed {placement}th, tapping Try Again")
+        # TS Climax: retry if placed worse than 3rd (max 3 retries)
+        global _ts_climax_retries
+        if is_climax and placement > 3 and _ts_climax_retries < 3:
+            _ts_climax_retries += 1
+            log(f"TS Climax race — placed {placement}th, tapping Try Again (retry {_ts_climax_retries}/3)")
             tap(270, 1780)
             return "retry_race"
+        if is_climax and placement <= 3:
+            _ts_climax_retries = 0  # Reset on success
         if placement == 1:
             _needs_shop_visit = True
             log(f"Won race! Will visit shop next career_home")
