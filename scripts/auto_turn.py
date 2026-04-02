@@ -71,6 +71,7 @@ _skill_pts = 0
 _cached_aptitudes = None  # Read once from Full Stats screen, then reused
 _active_conditions = []   # Negative conditions detected this session
 _game_state = None        # Last built GameState, reused across screens
+_summer_whistle_used = False  # Reset each turn; prevents double-whistling
 
 # Map negative conditions to their cure items in the shop catalogue
 CONDITION_CURES = {
@@ -89,7 +90,9 @@ BTN_TRAINING = (540, 1550)
 BTN_HOME_SKILLS = (918, 1535)
 BTN_HOME_RACES = (920, 1750)
 BTN_SHOP = (620, 1640)
-BTN_TRAINING_ITEMS = (826, 1160)
+BTN_TRAINING_ITEMS = (827, 1240)
+BTN_ITEMS_CONFIRM = (779, 1772)  # "Confirm Use" / "Use Training Items" right button
+BTN_ITEMS_CLOSE = (303, 1772)    # "Close" left button
 
 
 def log(msg):
@@ -351,14 +354,25 @@ def build_game_state(img, screen_type: str, energy: int = -1) -> GameState:
     try:
         from scripts.ocr_util import ocr_image as _ocr_img
         stat_crop = img.crop((0, 1240, 1080, 1360))
-        # Blend out diamond separators between columns (horizontal avg, 5px wide)
         import numpy as np
         arr = np.array(stat_crop)
+        # Blend out diamond separators between columns (horizontal avg, 5px wide)
         for dx in (208, 378, 546, 715):
             left = arr[:, max(0, dx - 4):max(0, dx - 3), :].mean(axis=1, keepdims=True)
             right = arr[:, min(arr.shape[1]-1, dx + 3):min(arr.shape[1], dx + 4), :].mean(axis=1, keepdims=True)
             blend = ((left + right) / 2).astype(np.uint8)
             arr[:, dx - 2:dx + 3, :] = blend
+        # White-out grade badges at the start of each stat column (value + denom rows)
+        # Badge is ~40px wide; fill with white to prevent OCR merging with numbers
+        grade_badge_regions = [
+            (38, 90),    # speed: badge at x=38-88
+            (222, 264),  # stamina: badge at x=222-262
+            (397, 443),  # power: badge at x=397-442
+            (572, 600),  # guts: badge at x=572-598
+            (734, 768),  # wit: badge at x=734-766
+        ]
+        for gx_start, gx_end in grade_badge_regions:
+            arr[45:, gx_start:gx_end, :] = 255  # White-out below the header row
         from PIL import Image as _Img
         stat_crop = _Img.fromarray(arr)
         stat_crop.save("/tmp/stat_bar_crop.png")
@@ -1233,7 +1247,7 @@ SKILL_PRIORITY = {
     # === Priority 9: Top-tier acceleration ===
     "sturm und drang": 9,
     "masterful gambit": 9,
-    "daring strike": 9,
+    "daring strike": 10,
     # === Priority 8: Core End Closer + distance corners ===
     "end closer straightaways": 8,
     "end closer corners": 8,
@@ -2073,14 +2087,14 @@ def _use_training_items(item_keys):
 
     if used_any:
         log("Tapping Confirm Use")
-        tap(810, 1752, delay=2.0)  # Confirm Use (right button)
-        # Confirmation popup: "Use Training Items" green button (lower than Confirm Use)
-        tap(810, 1830, delay=3.0)
-        # Result screen with "Close" — tap it (left side button)
-        tap(170, 1752, delay=2.0)
+        tap(*BTN_ITEMS_CONFIRM, delay=2.0)
+        # Confirmation popup: "Use Training Items" — same position
+        tap(*BTN_ITEMS_CONFIRM, delay=3.0)
+        # Result screen with "Close"
+        tap(*BTN_ITEMS_CLOSE, delay=2.0)
     else:
         log("No items found to use — tapping Close")
-        tap(270, 1752, delay=1.5)
+        tap(*BTN_ITEMS_CLOSE, delay=1.5)
     return used_any
 
 
@@ -2226,7 +2240,34 @@ def handle_training():
     state.training_tiles = tiles
 
     action = _scorer.best_action(state)
+    scored_tiles = _scorer.score_tiles(state) if state.training_tiles else []
+    best_score = scored_tiles[0][1] if scored_tiles else 0
     log(f"Scorer decision: {action.action_type.value} — {action.reason}")
+    for st_tile, st_score in scored_tiles:
+        log(f"  {st_tile.stat_type.value:8s}: score={st_score:5.1f}  cards={len(st_tile.support_cards)}  gains={dict(st_tile.stat_gains) if st_tile.stat_gains else {}}")
+
+    # Summer camp: use reset whistle if best score is underwhelming
+    global _summer_whistle_used
+    SUMMER_WHISTLE_THRESHOLD = 30
+    summer_turns = set(range(37, 41)) | set(range(61, 65))
+    if (_current_turn in summer_turns
+            and best_score < SUMMER_WHISTLE_THRESHOLD
+            and not _summer_whistle_used
+            and _shop_manager.inventory.get("reset_whistle", 0) > 0):
+        log(f"SUMMER CAMP — Best score {best_score:.1f} < {SUMMER_WHISTLE_THRESHOLD}, backing out to use Reset Whistle")
+        _summer_whistle_used = True
+        tap(80, 1855)  # Back to career home
+        time.sleep(2)
+        if _use_training_items(["reset_whistle"]):
+            if _shop_manager._inventory.get("reset_whistle", 0) > 0:
+                _shop_manager._inventory["reset_whistle"] -= 1
+                if _shop_manager._inventory["reset_whistle"] <= 0:
+                    del _shop_manager._inventory["reset_whistle"]
+            _shop_manager.save_inventory()
+            log("SUMMER CAMP — Whistle used, re-entering training")
+        else:
+            log("SUMMER CAMP — Failed to use Reset Whistle")
+        return "training_back_to_rest"  # Re-enters training via summer handler
 
     if action.action_type == ActionType.REST:
         log("Scorer says rest — tapping Back to return to career home")
@@ -2255,10 +2296,12 @@ def _wait_for_career_home(tag=""):
         if s == "career_home":
             return img
         # Try dismissing popups/dialogs
-        if s in ("warning_popup", "rest_confirm"):
+        if s == "warning_popup":
             ok = find_green_button(img, (1150, 1350))
             if ok:
                 tap(ok[0], ok[1])
+        elif s == "rest_confirm":
+            tap(270, 1250)  # Cancel — never confirm unintended rest
         elif s == "recreation_confirm":
             tap(270, 1260)  # Cancel
         elif s == "unknown":
@@ -2276,12 +2319,13 @@ def _wait_for_career_home(tag=""):
 def _handle_career_home(img):
     """Full career_home handler: gather state → housekeeping → decide → act."""
     global _game_state, _skill_shop_done, _needs_shop_visit, _last_shop_turn
-    global _consecutive_races, _inventory_checked
+    global _consecutive_races, _inventory_checked, _summer_whistle_used
 
     # =====================================================================
     # PHASE 1: Gather state (stats, aptitudes, conditions, inventory)
     # =====================================================================
     _skill_shop_done = False
+    _summer_whistle_used = False
     energy = get_energy_level(img)
     build_game_state(img, "career_home", energy=energy)
 
@@ -2409,7 +2453,7 @@ def _handle_career_home(img):
                 return "recovering"
 
     # Skill shop
-    sp_threshold = 1000
+    sp_threshold = 1200
     if _skill_pts > sp_threshold and not _skill_shop_done:
         log(f"SP {_skill_pts} > {sp_threshold} — visiting skill shop")
         tap(*BTN_HOME_SKILLS)
@@ -2545,7 +2589,7 @@ _INTERMEDIATE_RESULTS = {
     "recovering", "placement_next", "ts_climax_racing", "race_day_racing",
     "ts_climax_standings", "ts_standings_next", "post_career_next",
     "post_career_confirm", "career_finishing", "warning_ok",
-    "recreation_cancel", "rest_confirm", "race_back",
+    "recreation_cancel", "rest_confirm", "race_back", "training_back_to_rest",
 }
 
 def run_one_turn(stop_before=None):
@@ -2711,6 +2755,8 @@ def _run_one_turn_inner(stop_before=None):
         return "race_day_racing"
 
     if screen == "ts_climax_race":
+        # Dismiss any trainee dialogue overlay first
+        tap(540, 500, delay=1.0)
         if not _inventory_checked:
             read_inventory_from_training_items()
             time.sleep(1)
@@ -2719,6 +2765,7 @@ def _run_one_turn_inner(stop_before=None):
                 return "recovering"
         log("TS CLIMAX Race Day — using Master Cleat and racing")
         _use_cleat_for_race(is_ts_climax=True)
+        # Only one race in TS Climax — tap Race directly
         tap(620, 1680)
         return "ts_climax_racing"
 
@@ -2833,12 +2880,16 @@ def _run_one_turn_inner(stop_before=None):
         return "recreation_cancel"
 
     elif screen == "rest_confirm":
-        log("Rest confirm — tapping OK")
-        ok = find_green_button(img, (1150, 1350))
-        if ok:
-            tap(ok[0], ok[1])
+        if _last_result == "rest":
+            log("Rest confirm — tapping OK (intentional rest)")
+            ok = find_green_button(img, (1150, 1350))
+            if ok:
+                tap(ok[0], ok[1])
+            else:
+                tap(730, 1250)
         else:
-            tap(730, 1250)
+            log(f"Rest confirm — unexpected (last_result={_last_result}), tapping Cancel")
+            tap(270, 1250)
         return "rest_confirm"
 
     elif screen == "pre_race":

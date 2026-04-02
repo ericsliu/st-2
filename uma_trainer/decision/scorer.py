@@ -322,18 +322,12 @@ class TrainingScorer:
             score += 6.0
 
         # 6. Bond-building priority: maximize friendship (bond >= 80).
-        #    Reaching 80 friendship unlocks the training bonus for that card,
-        #    which compounds across every remaining turn. Getting there early
-        #    (Junior year) is far more valuable than getting there late.
-        #
-        #    Phase A (Junior year, turns 0-23): High flat bonus per low-bond
-        #    card. Friendship is the #2 priority after race points/megaphones.
-        #    Phase B (Early Classic, turns 24-deadline): Urgency ramps up
-        #    sharply — any card still below 80 is an emergency.
-        #    Phase C (Post-deadline): Persistent bonus, still want to max.
+        #    Before the friendship deadline (Classic Summer), bond is the
+        #    PRIMARY scoring factor. Card count dominates; stat gains are
+        #    just a tiebreaker. One extra unbonded card should always beat
+        #    any stat difference between tiles.
+        #    After deadline: reduced but still significant bonus.
         bond_deadline = self._get_friendship_deadline(state)
-        # Use per-tile bond_levels if available (read from gauge bars),
-        # otherwise fall back to state.support_cards lookup.
         if tile.bond_levels:
             card_bonds = tile.bond_levels
         else:
@@ -344,27 +338,20 @@ class TrainingScorer:
         low_bond_values = [b for b in card_bonds if b < 80]
         if low_bond_values and not self._is_summer_camp(state):
             turn = state.current_turn
-            # Score = card count (primary) + bond-need tiebreaker.
-            # 2 cards should always beat 1 card. Within same card count,
-            # prefer tiles with lower-bond cards (more room to grow).
-            # Tiebreaker is small: max 0.5 per card, so 2 cards at bond 79
-            # (2*15 + 2*0.006 = 30.01) still beats 1 card at bond 0
-            # (1*15 + 1*0.5 = 15.5).
             n = len(low_bond_values)
+            # Small tiebreaker: prefer lower-bond cards (more room to grow)
             bond_tiebreaker = sum(
                 (80 - b) / 80.0 * 0.5
                 for b in low_bond_values
             )
-            if turn < 24:
-                bond_score = n * 15.0 + bond_tiebreaker
-            elif turn < bond_deadline:
-                turns_left = max(1, bond_deadline - turn)
-                urgency = min(3.0, (bond_deadline - 24) / turns_left)
-                bond_score = n * 6.0 * urgency + bond_tiebreaker
+            if turn < bond_deadline:
+                # Pre-deadline: 50 per card makes bond the dominant factor.
+                # Max stat utility per tile is ~40-50, so 1 extra card
+                # always outweighs any stat difference.
+                bond_score = n * 50.0 + bond_tiebreaker
             else:
                 bond_score = n * 6.0 + bond_tiebreaker
 
-            # Hint icon means extra friendship gauge increase on this tile
             if tile.has_hint and low_bond_values:
                 bond_score *= 1.5
 
@@ -391,15 +378,12 @@ class TrainingScorer:
             score -= (self.config.energy_penalty_threshold - state.energy) * 0.5
 
         # 9. Failure rate penalty (Good-Luck Charm zeroes this out)
+        #    Flat penalty: 10 points per 1% failure rate.
+        #    5% failure = -50, 10% = -100. Harsh enough to override bond scores.
         effective_failure = 0.0 if boost_zero_failure else tile.failure_rate
         if effective_failure > 0:
-            if self.runspec:
-                penalty = self.runspec.policy.failure_risk_penalty
-                score *= (1.0 - effective_failure * penalty)
-                if effective_failure > self.runspec.constraints.max_failure_rate:
-                    score *= 0.1
-            else:
-                score *= (1.0 - effective_failure * 0.5)
+            failure_pct = effective_failure * 100  # 0.05 → 5
+            score -= failure_pct * 10.0
 
         return max(0.0, score)
 
@@ -449,7 +433,7 @@ class TrainingScorer:
         for card in state.support_cards:
             if card.card_id == card_id:
                 return card.bond_level
-        return 0  # Unknown card defaults to 0
+        return 80  # Unknown card assumed bonded (avoids phantom bond scores)
 
     # ------------------------------------------------------------------
     # Preset management

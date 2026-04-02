@@ -25,13 +25,20 @@ def tap(x: int, y: int, delay: float = 2.0):
     time.sleep(delay)
 
 
+TARGET_W, TARGET_H = 1080, 1920
+
+
 def screenshot(name: str) -> Image.Image:
     path = SCREENSHOTS_DIR / f"{name}.png"
     subprocess.run(
         ["adb", "-s", DEVICE, "exec-out", "screencap", "-p"],
         stdout=open(path, "wb"), timeout=10,
     )
-    return Image.open(path)
+    img = Image.open(path)
+    if img.size != (TARGET_W, TARGET_H):
+        img = img.resize((TARGET_W, TARGET_H), Image.LANCZOS)
+        img.save(path)
+    return img
 
 
 def detect_screen(img: Image.Image) -> str:

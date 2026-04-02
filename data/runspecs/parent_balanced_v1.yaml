@@ -13,27 +13,27 @@ stat_targets:
     minimum: 500
     target: 800
     excellent: 1000
-    values: [1.2, 0.9, 0.6, 0.2]
+    values: [1.2, 0.9, 0.7, 0.4]
   stamina:
     minimum: 350
     target: 600
-    excellent: 600
-    values: [0.9, 0.6, 0.1, 0.0]   # Low value above target
+    excellent: 800
+    values: [0.9, 0.6, 0.3, 0.1]
   power:
     minimum: 350
     target: 600
-    excellent: 600
-    values: [0.9, 0.65, 0.1, 0.0]  # Low value above target
+    excellent: 800
+    values: [0.9, 0.5, 0.3, 0.1]
   guts:
     minimum: 200
     target: 350
     excellent: 450
-    values: [0.5, 0.3, 0.05, 0.0]   # Low priority for parent runs
+    values: [0.5, 0.3, 0.1, 0.0]
   wit:
     minimum: 300
     target: 500
-    excellent: 600
-    values: [1.0, 0.7, 0.5, 0.1]
+    excellent: 800
+    values: [1.0, 0.8, 0.6, 0.3]
 
 policy:
   bond_future_value: 0.9
