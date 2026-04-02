@@ -5,6 +5,15 @@
 #
 # choice: 0-based index (0 = first option, 1 = second, etc.)
 
+# === Character-specific event chains (check FIRST) ===
+
+# Kitasan Black — "Paying It Forward" event chain, pick choice 2
+- text_contains: "paying it forward"
+  choice: 1
+  note: "Kitasan Black event chain — choice 2 for better rewards"
+
+# === Generic overrides ===
+
 # Tutorial events — always decline the explanation
 - text_contains: "tutorial"
   choice: 1

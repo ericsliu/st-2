@@ -1272,6 +1272,8 @@ SKILL_PRIORITY = {
     # === Priority 4: Scaling skills (OK but not priority) ===
     "radiant star": 7,
     "glittering star": 4,
+    # === Priority 0: Never buy ===
+    "flustered": 0,
 }
 
 
@@ -2465,7 +2467,6 @@ def _handle_career_home(img):
     strategy = _overrides.get_strategy()
     race_config = strategy.raw.get("race_strategy", {})
     skip_early = race_config.get("skip_early_turns", 5)
-    race_interval = race_config.get("race_interval", 4)
 
     if _current_turn < skip_early:
         if energy < 20:
@@ -2477,11 +2478,7 @@ def _handle_career_home(img):
         tap(*BTN_TRAINING)
         return "going_to_training"
 
-    # Check for races (G1/goal take priority over energy)
-    friendship_deadline = 36
-    in_bond_phase = _current_turn < friendship_deadline
-    is_interval_turn = _current_turn % race_interval == 0
-
+    # Check for G1/goal races
     _game_state.energy = energy
     race_action = _race_selector.should_race_this_turn(_game_state)
     has_g1_or_goal = race_action is not None
@@ -2490,29 +2487,30 @@ def _handle_career_home(img):
     race_reason = ""
 
     if has_g1_or_goal:
-        should_race = True
-        race_reason = race_action.reason
-    elif in_bond_phase and is_interval_turn:
-        should_race = True
-        race_reason = f"bond phase race turn (interval={race_interval})"
-    elif not in_bond_phase and is_interval_turn:
-        should_race = True
-        race_reason = f"race turn (interval={race_interval})"
-
-    # Pre-summer energy saving — rest unless we have a G1 AND energy items to recover
-    pre_summer_turns = (35, 36, 59, 60)
-    if _current_turn in pre_summer_turns and energy < 80:
-        inventory = _shop_manager.inventory
-        has_energy_items = any(inventory.get(k, 0) > 0 for k in ("vita_65", "vita_40", "vita_20", "royal_kale"))
-        if should_race and has_energy_items:
-            log(f"Pre-summer turn {_current_turn}, energy {energy}% — racing G1 (have energy items to recover)")
+        # Allow 3 consecutive races only during fall G1 string (Oct-Dec)
+        # Classic: turns 43-48 (Tenno Sho Autumn / Japan Cup / Arima Kinen)
+        # Senior: turns 67-72
+        fall_g1_turns = set(range(43, 49)) | set(range(67, 73))
+        if _consecutive_races >= 2 and _current_turn not in fall_g1_turns:
+            log(f"G1/goal available but {_consecutive_races} consecutive races — training to recover")
         else:
-            if should_race:
-                log(f"Pre-summer turn {_current_turn}, energy {energy}% — skipping race, no energy items for recovery")
-            else:
-                log(f"Pre-summer turn {_current_turn}, energy {energy}% — resting for camp")
+            should_race = True
+            race_reason = race_action.reason
+
+    # Pre-summer energy management — need 50+ by Early Jun to race G1, 80+ by Late Jun for camp
+    early_jun_turns = (35, 59)  # Early Jun — can race G1 if energy >= 50
+    late_jun_turns = (36, 60)   # Late Jun — must rest unless energy >= 80
+    if _current_turn in early_jun_turns:
+        if energy < 50:
+            log(f"Pre-summer turn {_current_turn}, energy {energy}% < 50 — resting to prep for summer")
             tap(*BTN_REST)
             return "rest"
+        elif should_race:
+            log(f"Pre-summer turn {_current_turn}, energy {energy}% >= 50 — racing G1")
+    if _current_turn in late_jun_turns and energy < 80:
+        log(f"Pre-summer turn {_current_turn}, energy {energy}% < 80 — resting for camp")
+        tap(*BTN_REST)
+        return "rest"
 
     if should_race:
         log(f"Racing: {race_reason}")
@@ -2526,13 +2524,13 @@ def _handle_career_home(img):
         tap(*BTN_REST)
         return "rest"
 
-    if in_bond_phase and energy < 50:
-        log(f"Bond phase energy {energy}% too low — resting to train next turn")
+    if energy < 50:
+        log(f"Energy {energy}% too low — resting to train next turn")
         _consecutive_races = 0
         tap(*BTN_REST)
         return "rest"
 
-    log(f"Training turn (interval={race_interval}), energy {energy}%")
+    log(f"Training turn, energy {energy}%")
     _use_megaphone_if_needed()
     tap(*BTN_TRAINING)
     return "going_to_training"
@@ -2547,7 +2545,7 @@ _INTERMEDIATE_RESULTS = {
     "recovering", "placement_next", "ts_climax_racing", "race_day_racing",
     "ts_climax_standings", "ts_standings_next", "post_career_next",
     "post_career_confirm", "career_finishing", "warning_ok",
-    "recreation_cancel", "rest_confirm",
+    "recreation_cancel", "rest_confirm", "race_back",
 }
 
 def run_one_turn(stop_before=None):
