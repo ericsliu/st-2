@@ -553,6 +553,8 @@ class RaceSelector:
                 race.distance = best_match["distance"]
             if best_match.get("surface"):
                 race.surface = best_match["surface"]
+            if best_match.get("fan_reward") and race.fan_reward == 0:
+                race.fan_reward = best_match["fan_reward"]
 
     def lookup_race_info(self, race_name: str) -> dict | None:
         """Look up race metadata from the race calendar JSON."""

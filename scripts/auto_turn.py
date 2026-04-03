@@ -42,7 +42,6 @@ DEVICE = "127.0.0.1:5555"
 # State tracking to avoid loops
 _last_result = None
 # Consecutive race counter — negative effects possible after 3
-_consecutive_races = 0
 # Last race placement (1=win, 99=unknown)
 _last_race_placement = 99
 
@@ -61,7 +60,7 @@ _runspec = load_runspec("parent_balanced_v1")
 _scorer.scenario = _scenario
 _scorer.runspec = _runspec
 # Inventory is read from Training Items screen on first career_home — no yaml loading
-_race_selector = RaceSelector(kb=None, overrides=_overrides)
+_race_selector = RaceSelector(kb=None, overrides=_overrides, scenario=_scenario)
 _event_handler = EventHandler(kb=None, local_llm=None, claude_client=None, overrides=_overrides)
 
 # Persistent state across turns (updated as we learn more)
@@ -73,6 +72,7 @@ _active_conditions = []   # Negative conditions detected this session
 _game_state = None        # Last built GameState, reused across screens
 _summer_whistle_used = False  # Reset each turn; prevents double-whistling
 _ts_climax_retries = 0        # Retry counter for TS Climax races (max 3)
+_prev_stats = None                # Previous turn's stats for suspicious jump detection
 
 # Map negative conditions to their cure items in the shop catalogue
 CONDITION_CURES = {
@@ -415,6 +415,31 @@ def build_game_state(img, screen_type: str, energy: int = -1) -> GameState:
                     continue
                 setattr(_current_stats, stat_name, val)
         log(f"Stats: Spd={_current_stats.speed} Sta={_current_stats.stamina} Pow={_current_stats.power} Gut={_current_stats.guts} Wit={_current_stats.wit} SP={_skill_pts}")
+        # Detect suspicious stat jumps and save upscaled screenshot for debugging
+        global _prev_stats
+        if _prev_stats is not None:
+            JUMP_THRESHOLD = 80
+            for sname in ("speed", "stamina", "power", "guts", "wit"):
+                prev_val = getattr(_prev_stats, sname)
+                curr_val = getattr(_current_stats, sname)
+                if prev_val > 0 and curr_val > 0 and abs(curr_val - prev_val) > JUMP_THRESHOLD:
+                    log(f"⚠ Suspicious OCR: {sname} jumped {prev_val}→{curr_val} (Δ{curr_val - prev_val})")
+                    try:
+                        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        ocr_debug_dir = Path("screenshots/ocr_debug")
+                        ocr_debug_dir.mkdir(parents=True, exist_ok=True)
+                        upscaled = img.resize((img.width * 2, img.height * 2), Image.LANCZOS)
+                        debug_path = ocr_debug_dir / f"suspicious_{sname}_{prev_val}to{curr_val}_t{_current_turn}_{ts}.png"
+                        upscaled.save(debug_path)
+                        stat_crop.save(ocr_debug_dir / f"suspicious_{sname}_{prev_val}to{curr_val}_t{_current_turn}_{ts}_statbar.png")
+                        log(f"  Saved debug screenshot: {debug_path}")
+                    except Exception as e:
+                        log(f"  Failed to save debug screenshot: {e}")
+                    break  # One save per turn is enough
+        _prev_stats = TraineeStats(
+            speed=_current_stats.speed, stamina=_current_stats.stamina,
+            power=_current_stats.power, guts=_current_stats.guts, wit=_current_stats.wit
+        )
     except Exception:
         pass
 
@@ -849,10 +874,11 @@ def _ocr_race_list(img):
         if not name:
             continue
 
-        # Parse distance from card text (e.g. "1400m", "1600m")
+        # Parse distance and fans from card text (e.g. "1400m", "+6,500 fans")
         import re
         distance = 0
         surface = "turf"
+        fan_reward = 0
         for text, y_pos in card_texts:
             m = re.search(r'(\d{4})m', text)
             if m:
@@ -862,6 +888,10 @@ def _ocr_race_list(img):
                 surface = "dirt"
             elif "turf" in tl:
                 surface = "turf"
+            # Parse fan reward: "+6,500 fans" or "+7000 fans"
+            fm = re.search(r'\+?([\d,]+)\s*fans?', tl)
+            if fm:
+                fan_reward = int(fm.group(1).replace(",", ""))
 
         # Check aptitude from green badges
         apt_ok = has_green_aptitude_badge(img, y_min + 100, y_max - 30)
@@ -871,12 +901,13 @@ def _ocr_race_list(img):
             grade=grade,
             distance=distance,
             surface=surface,
+            fan_reward=fan_reward,
             is_aptitude_ok=apt_ok,
             position=i,
             tap_coords=(540, region["tap_y"]),
         )
         races.append(race)
-        log(f"  Race {i+1}: '{name}' grade={grade} dist={distance}m {surface} apt_ok={apt_ok}")
+        log(f"  Race {i+1}: '{name}' grade={grade} dist={distance}m {surface} fans={fan_reward} apt_ok={apt_ok}")
 
     return races
 
@@ -1239,70 +1270,14 @@ def handle_event(img):
 # Higher number = buy first. Skills not listed get priority 1 (low).
 # Hint-discounted skills get +3 bonus.
 # Format: partial skill name (case-insensitive) → priority
-SKILL_PRIORITY = {
-    # === Priority 10: Must-buy ===
-    "straightaway spurt": 10,
-    "uma star": 10,
-    "encroaching shadow": 10,
-    "blast forward": 10,
-    # === Priority 9: Top-tier acceleration ===
-    "sturm und drang": 9,
-    "masterful gambit": 9,
-    "daring strike": 10,
-    # === Priority 8: Core End Closer + distance corners ===
-    "end closer straightaways": 8,
-    "end closer corners": 8,
-    "end closer savvy": 8,
-    "come what may": 8,
-    "crusader": 8,
-    "strategist": 8,
-    "the coast is clear": 8,
-    "i can see right through": 8,
-    "mile corners": 8,
-    "mid-distance corners": 8,
-    "long-distance corners": 8,
-    "short-distance corners": 8,
-    "mile straightaways": 8,
-    "mid-distance straightaways": 8,
-    "long-distance straightaways": 8,
-    "short-distance straightaways": 8,
-    "straightaway recover": 8,
-    "outer post efficiency": 8,
-    # === Priority 7: Good speed/position skills ===
-    "lead the charge": 7,
-    "forward, march": 7,
-    "early start": 7,
-    "firm course menace": 7,
-    # === Priority 6: Recovery skills ===
-    "sleeping lion": 6,
-    "standing by": 6,
-    "go-home specialist": 6,
-    "after-school stroll": 6,
-    "levelheaded": 6,
-    # === Priority 5: Decent general skills ===
-    "corner adept": 5,
-    "long straightaways": 5,
-    "inner lane": 5,
-    "intense gaze": 5,
-    # === Priority 4: Scaling skills (OK but not priority) ===
-    "radiant star": 7,
-    "glittering star": 4,
-    # === Priority 0: Never buy ===
-    "flustered": 0,
-}
-
-
 def _get_skill_priority(name):
-    """Look up skill priority by fuzzy matching against SKILL_PRIORITY."""
-    nl = name.lower().strip()
-    # Exact match first
-    if nl in SKILL_PRIORITY:
-        return SKILL_PRIORITY[nl]
-    # Partial match — check if any key is contained in the name or vice versa
-    for key, prio in SKILL_PRIORITY.items():
-        if key in nl or nl in key:
-            return prio
-    # Unknown skill — don't buy
+    """Look up skill priority from strategy overrides (fuzzy match)."""
+    strategy = _overrides.get_strategy()
+    if strategy.is_blacklisted(name):
+        return 0
+    sp = strategy.is_priority_skill(name)
+    if sp is not None:
+        return sp.priority
     return 0
 
 
@@ -1521,7 +1496,8 @@ def handle_skill_shop(img):
     all_skills.sort(key=lambda s: (-s.priority, s.cost))
 
     is_end_game = _last_result in ("complete_career",)
-    sp_reserve = 0 if is_end_game else 800
+    strategy = _overrides.get_strategy()
+    sp_reserve = 0 if is_end_game else strategy.raw.get("skill_pts_reserve", 800)
 
     # Decide which skills to buy
     to_buy = []
@@ -2173,7 +2149,6 @@ def _ocr_training_gains(img):
 
 def handle_training():
     """Preview all 5 training tiles and pick the best using uma_trainer scorer."""
-    global _consecutive_races
     log("Training — previewing all tiles")
 
     # Check which tile is pre-raised by reading gains before tapping
@@ -2219,9 +2194,20 @@ def handle_training():
 
             gains = _ocr_training_gains(img)
 
-        # Count support card portraits visible on this tile
+        # Count support card portraits and read bond levels
         n_cards = count_portraits(img)
         card_ids = [f"card_{i}" for i in range(n_cards)]
+
+        # Read bond gauge fill levels for each card on this tile
+        import numpy as np
+        from uma_trainer.perception.pixel_analysis import read_bond_levels
+        frame_rgb = np.array(img.convert("RGB"))
+        frame_bgr = frame_rgb[:, :, ::-1].copy()
+        bond_levels = read_bond_levels(frame_bgr)
+        # Pad/trim to match card count
+        if len(bond_levels) < n_cards:
+            bond_levels.extend([80] * (n_cards - len(bond_levels)))
+        bond_levels = bond_levels[:n_cards]
 
         stat_type = StatType(tile_name.lower())
         tile = TrainingTile(
@@ -2229,11 +2215,13 @@ def handle_training():
             tap_coords=(tx, ty),
             stat_gains={k.lower(): v for k, v in gains.items()},
             support_cards=card_ids,
+            bond_levels=bond_levels,
         )
         tiles.append(tile)
 
+        bond_str = f" bonds={bond_levels}" if bond_levels else ""
         gains_str = ", ".join(f"{k}+{v}" for k, v in sorted(gains.items()))
-        log(f"  {tile_name}: total={tile.total_stat_gain}, cards={n_cards} ({gains_str})")
+        log(f"  {tile_name}: total={tile.total_stat_gain}, cards={n_cards}{bond_str} ({gains_str})")
 
     # Build GameState and let the scorer decide
     energy = get_energy_level(img)
@@ -2272,12 +2260,12 @@ def handle_training():
 
     if action.action_type == ActionType.REST:
         log("Scorer says rest — tapping Back to return to career home")
-        _consecutive_races = 0
+        _scenario.on_non_race_action()
         tap(80, 1855)
         return "training_back_to_rest"
 
     # Find the tile the scorer chose and tap it
-    _consecutive_races = 0
+    _scenario.on_non_race_action()
     if action.tap_coords != (0, 0):
         tx, ty = action.tap_coords
     else:
@@ -2320,7 +2308,7 @@ def _wait_for_career_home(tag=""):
 def _handle_career_home(img):
     """Full career_home handler: gather state → housekeeping → decide → act."""
     global _game_state, _skill_shop_done, _needs_shop_visit, _last_shop_turn
-    global _consecutive_races, _inventory_checked, _summer_whistle_used
+    global _inventory_checked, _summer_whistle_used
 
     # =====================================================================
     # PHASE 1: Gather state (stats, aptitudes, conditions, inventory)
@@ -2338,7 +2326,7 @@ def _handle_career_home(img):
         if img is None:
             return "recovering"
         energy = get_energy_level(img)
-    log(f"Energy: ~{energy}% | Turn: {_current_turn} | Consecutive races: {_consecutive_races}")
+    log(f"Energy: ~{energy}% | Turn: {_current_turn} | Consecutive races: {_scenario._consecutive_races}")
 
     # Read Full Stats (aptitudes + conditions)
     read_fullstats()
@@ -2453,8 +2441,8 @@ def _handle_career_home(img):
             if img is None:
                 return "recovering"
 
-    # Skill shop
-    sp_threshold = 1200
+    # Skill shop — visit if SP exceeds threshold (configurable via strategy.yaml)
+    sp_threshold = _overrides.get_strategy().raw.get("skill_shop_sp_threshold", 1200)
     if _skill_pts > sp_threshold and not _skill_shop_done:
         log(f"SP {_skill_pts} > {sp_threshold} — visiting skill shop")
         tap(*BTN_HOME_SKILLS)
@@ -2486,92 +2474,33 @@ def _handle_career_home(img):
     # PHASE 3: Decide action (rest / race / train)
     # =====================================================================
 
-    # After 3 consecutive races, break the streak (rest if low energy, else train)
-    if _consecutive_races >= 3:
-        _consecutive_races = 0
-        if energy < 30:
-            log(f"3+ consecutive races, energy {energy}% too low — resting")
-            tap(*BTN_REST)
-            return "rest"
-        log(f"3+ consecutive races — training to avoid penalty")
-        tap(*BTN_TRAINING)
-        return "going_to_training"
-
     # If we just came back from race_list with no good races, train or rest
     if _last_result == "race_back":
-        _consecutive_races = 0
-        if energy < 30:
-            log(f"No good races, energy {energy}% too low — resting")
+        _scenario.on_non_race_action()
+        if energy < 50:
+            log(f"No good races, energy {energy}% — resting")
             tap(*BTN_REST)
             return "rest"
         log("No good races available — going to Training instead")
         tap(*BTN_TRAINING)
         return "going_to_training"
 
-    # Race strategy
-    strategy = _overrides.get_strategy()
-    race_config = strategy.raw.get("race_strategy", {})
-    skip_early = race_config.get("skip_early_turns", 5)
-
-    if _current_turn < skip_early:
-        if energy < 20:
-            log(f"Turn {_current_turn} < {skip_early} early game, but energy {energy}% — resting")
-            _consecutive_races = 0
-            tap(*BTN_REST)
-            return "rest"
-        log(f"Turn {_current_turn} < {skip_early} — training (early game)")
-        tap(*BTN_TRAINING)
-        return "going_to_training"
-
-    # Check for G1/goal races
+    # Ask the race selector (handles: hard cap, pre-summer energy, G1/goal,
+    # scenario fatigue chain, early game skip, race rhythm, low energy racing)
     _game_state.energy = energy
     race_action = _race_selector.should_race_this_turn(_game_state)
-    has_g1_or_goal = race_action is not None
 
-    should_race = False
-    race_reason = ""
-
-    if has_g1_or_goal:
-        # Allow 3 consecutive races only during fall G1 string (Oct-Dec)
-        # Classic: turns 43-48 (Tenno Sho Autumn / Japan Cup / Arima Kinen)
-        # Senior: turns 67-72
-        fall_g1_turns = set(range(43, 49)) | set(range(67, 73))
-        if _consecutive_races >= 2 and _current_turn not in fall_g1_turns:
-            log(f"G1/goal available but {_consecutive_races} consecutive races — training to recover")
-        else:
-            should_race = True
-            race_reason = race_action.reason
-
-    # Pre-summer energy management — need 50+ by Early Jun to race G1, 80+ by Late Jun for camp
-    early_jun_turns = (35, 59)  # Early Jun — can race G1 if energy >= 50
-    late_jun_turns = (36, 60)   # Late Jun — must rest unless energy >= 80
-    if _current_turn in early_jun_turns:
-        if energy < 50:
-            log(f"Pre-summer turn {_current_turn}, energy {energy}% < 50 — resting to prep for summer")
-            tap(*BTN_REST)
-            return "rest"
-        elif should_race:
-            log(f"Pre-summer turn {_current_turn}, energy {energy}% >= 50 — racing G1")
-    if _current_turn in late_jun_turns and energy < 80:
-        log(f"Pre-summer turn {_current_turn}, energy {energy}% < 80 — resting for camp")
-        tap(*BTN_REST)
-        return "rest"
-
-    if should_race:
-        log(f"Racing: {race_reason}")
+    if race_action:
+        log(f"Racing: {race_action.reason}")
         tap(*BTN_HOME_RACES)
         return "going_to_races"
 
-    # Not racing — check energy for rest vs train
-    if energy < 30:
-        log(f"Low energy {energy}% on training turn — resting")
-        _consecutive_races = 0
-        tap(*BTN_REST)
-        return "rest"
+    # Not racing — notify scenario to reset consecutive race counter
+    _scenario.on_non_race_action()
 
+    # Rest vs train based on energy
     if energy < 50:
-        log(f"Energy {energy}% too low — resting to train next turn")
-        _consecutive_races = 0
+        log(f"Energy {energy}% too low — resting")
         tap(*BTN_REST)
         return "rest"
 
@@ -2615,7 +2544,7 @@ def run_one_turn(stop_before=None):
 
 def _run_one_turn_inner(stop_before=None):
     """Internal: execute one game action."""
-    global _last_result, _consecutive_races, _needs_shop_visit, _last_shop_turn, _inventory_checked, _skill_shop_done
+    global _last_result, _needs_shop_visit, _last_shop_turn, _inventory_checked, _skill_shop_done
 
     img = screenshot(f"auto_{int(time.time())}")
     screen = detect_screen(img)
@@ -2703,7 +2632,7 @@ def _run_one_turn_inner(stop_before=None):
 
         if not can_train:
             log(f"SUMMER CAMP — Energy ~{energy}%, no recovery items — resting")
-            _consecutive_races = 0
+            _scenario.on_non_race_action()
             tap(*BTN_REST)
             time.sleep(2)
             img2 = screenshot(f"rest_check_{int(time.time())}")
@@ -2851,8 +2780,8 @@ def _run_one_turn_inner(stop_before=None):
     elif screen == "warning_popup":
         # If we just came from race flow, this is a race energy warning
         if _last_result in ("going_to_races", "race_enter"):
-            _consecutive_races += 1
-            log(f"Race warning popup — tapping OK (consecutive: {_consecutive_races})")
+            _scenario.on_race_completed()
+            log(f"Race warning popup — tapping OK (consecutive: {_scenario._consecutive_races})")
         else:
             log("Warning popup — tapping OK")
         ok = find_green_button(img, (1150, 1350))
@@ -2866,8 +2795,8 @@ def _run_one_turn_inner(stop_before=None):
         return handle_race_list(img)
 
     elif screen == "race_confirm":
-        _consecutive_races += 1
-        log(f"Race confirm — tapping Race button (consecutive: {_consecutive_races})")
+        _scenario.on_race_completed()
+        log(f"Race confirm — tapping Race button (consecutive: {_scenario._consecutive_races})")
         race_btn = find_green_button(img, (1250, 1450))
         if race_btn:
             tap(race_btn[0], race_btn[1])

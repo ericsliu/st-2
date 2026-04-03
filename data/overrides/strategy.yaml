@@ -24,22 +24,59 @@ stat_weight_overrides:
 skill_blacklist:
   - "Recovery (Medium)"
   - "Healing Wave"
+  - "Flustered"
 
 # Skills the AI will actively try to acquire.
-# Each entry can be a simple name (string) or an object with max_circle:
-#   - "Acceleration Boost"              # single-circle only (default)
-#   - name: "Late Bloomer"
-#     max_circle: 2                     # allow double-circle for this skill
-#
-# Skills on this list bypass normal cost thresholds and are always bought
-# if available and affordable.
+# priority: 0=never, 1-4=low, 5-7=mid, 8-9=high, 10=must-buy
+# Unknown skills default to priority 0 (skip).
 skill_priority_list:
-  - "Late Bloomer"
-  - "Acceleration Boost"
-  - "Uma Stan"
-  - "Professor of Curvature"
-  - "Nimble Navigator"
-  - "Straightaway Adept"
+  # Must-buy (10)
+  - {name: "Straightaway Spurt", priority: 10}
+  - {name: "Uma Star", priority: 10}
+  - {name: "Encroaching Shadow", priority: 10}
+  - {name: "Blast Forward", priority: 10}
+  - {name: "Daring Strike", priority: 10}
+  # Top-tier acceleration (9)
+  - {name: "Sturm und Drang", priority: 9}
+  - {name: "Masterful Gambit", priority: 9}
+  # Core End Closer + distance corners/straights (8)
+  - {name: "End Closer Straightaways", priority: 8}
+  - {name: "End Closer Corners", priority: 8}
+  - {name: "End Closer Savvy", priority: 8}
+  - {name: "Come What May", priority: 8}
+  - {name: "Crusader", priority: 8}
+  - {name: "Strategist", priority: 8}
+  - {name: "The Coast Is Clear", priority: 8}
+  - {name: "I Can See Right Through", priority: 8}
+  - {name: "Mile Corners", priority: 8}
+  - {name: "Mid-Distance Corners", priority: 8}
+  - {name: "Long-Distance Corners", priority: 8}
+  - {name: "Short-Distance Corners", priority: 8}
+  - {name: "Mile Straightaways", priority: 8}
+  - {name: "Mid-Distance Straightaways", priority: 8}
+  - {name: "Long-Distance Straightaways", priority: 8}
+  - {name: "Short-Distance Straightaways", priority: 8}
+  - {name: "Straightaway Recover", priority: 8}
+  - {name: "Outer Post Efficiency", priority: 8}
+  # Good speed/position skills (7)
+  - {name: "Lead the Charge", priority: 7}
+  - {name: "Forward, March", priority: 7}
+  - {name: "Early Start", priority: 7}
+  - {name: "Firm Course Menace", priority: 7}
+  - {name: "Radiant Star", priority: 7}
+  # Recovery skills (6)
+  - {name: "Sleeping Lion", priority: 6}
+  - {name: "Standing By", priority: 6}
+  - {name: "Go-Home Specialist", priority: 6}
+  - {name: "After-School Stroll", priority: 6}
+  - {name: "Levelheaded", priority: 6}
+  # Decent general skills (5)
+  - {name: "Corner Adept", priority: 5}
+  - {name: "Long Straightaways", priority: 5}
+  - {name: "Inner Lane", priority: 5}
+  - {name: "Intense Gaze", priority: 5}
+  # Low priority (4)
+  - {name: "Glittering Star", priority: 4}
 
 # Whether to allow double-circling (upgrading) skills at all.
 # Set to false for parent/factor runs where breadth > depth.

@@ -51,6 +51,7 @@ class SkillPriority:
     """A skill the bot should actively try to acquire."""
     name: str
     max_circle: int = 1   # 1 = single-circle only, 2 = allow double-circle
+    priority: int = 5     # 0 = never buy, 1-4 low, 5-7 mid, 8-9 high, 10 must-buy
 
 
 @dataclass
@@ -66,10 +67,16 @@ class StrategyOverrides:
     raw: dict = field(default_factory=dict)   # Raw YAML for the dashboard
 
     def is_priority_skill(self, name: str) -> SkillPriority | None:
-        """Check if a skill is on the priority list (case-insensitive)."""
-        name_lower = name.lower()
+        """Check if a skill is on the priority list (case-insensitive, fuzzy)."""
+        name_lower = name.lower().strip()
+        # Exact match first
         for sp in self.skill_priority_list:
             if sp.name.lower() == name_lower:
+                return sp
+        # Partial match — OCR may produce slight variations
+        for sp in self.skill_priority_list:
+            key = sp.name.lower()
+            if key in name_lower or name_lower in key:
                 return sp
         return None
 
@@ -299,6 +306,7 @@ class OverridesLoader:
                     SkillPriority(
                         name=str(item.get("name", "")),
                         max_circle=int(item.get("max_circle", 1)),
+                        priority=int(item.get("priority", 5)),
                     )
                 )
 
