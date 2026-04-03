@@ -103,7 +103,7 @@
   },
   "item_effect_indicators": {
     "_note": "Icons on left side showing active item effects. Tap to open Active Item Effects popup.",
-    "tap": {"x": 50, "y": 650, "note": "Tap the effect icon to open popup. Icon is below RANKING/Races text."},
+    "tap": {"x": 87, "y": 568, "note": "Tap the effect icon to open popup. Icon on left side below Result Pts."},
     "popup_close": {"x": 460, "y": 1361, "note": "Close button on Active Item Effects popup"}
   },
   "skill_screen": {
@@ -116,8 +116,15 @@
     "back": {"x": 40, "y": 1830},
     "plus_x": 980
   },
+  "ts_climax_race": {
+    "training_items": {"x": 827, "y": 1260, "note": "Training Items button on TS Climax race day screen (lower than career_home)"},
+    "race": {"x": 620, "y": 1680, "note": "TS Climax Race button"}
+  },
   "complete_career": {
     "skills": {"x": 270, "y": 1630, "note": "Bottom-left button showing 'Skills / Skill Pts N'"},
     "complete": {"x": 810, "y": 1630, "note": "Bottom-right pink 'Complete Career' button"}
+  },
+  "race_live": {
+    "skip": {"x": 778, "y": 1862, "note": ">>| skip button, left of Photo, left of hamburger menu"}
   }
 }

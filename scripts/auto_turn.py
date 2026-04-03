@@ -97,6 +97,7 @@ BTN_HOME_SKILLS = (918, 1535)
 BTN_HOME_RACES = (920, 1750)
 BTN_SHOP = (620, 1640)
 BTN_TRAINING_ITEMS = (827, 1130)
+BTN_TRAINING_ITEMS_RACE = (827, 1260)  # Training Items on race screens (ts_climax_race, required_race)
 BTN_ITEMS_CONFIRM = (779, 1772)  # "Confirm Use" / "Use Training Items" right button
 BTN_ITEMS_CLOSE = (303, 1772)    # "Close" left button
 
@@ -475,7 +476,7 @@ def is_green(r, g, b):
     return g > 150 and g > r and g > b and (g - r) > 30
 
 
-def swipe(x1, y1, x2, y2, duration_ms=300):
+def swipe(x1, y1, x2, y2, duration_ms=300, settle=3.0):
     """Raw swipe from (x1,y1) to (x2,y2), then wait for momentum to settle."""
     import random
     jx = random.randint(-10, 10)
@@ -485,23 +486,23 @@ def swipe(x1, y1, x2, y2, duration_ms=300):
          str(x1 + jx), str(y1 + jy), str(x2 + jx), str(y2 + jy), str(duration_ms)],
         capture_output=True, timeout=10,
     )
-    time.sleep(3.0)
+    time.sleep(settle)
 
 
-def scroll_down(distance="normal"):
+def scroll_down(distance="normal", settle=3.0):
     """Scroll down (drag finger upward). Conservative distance with jitter."""
     if distance == "short":
-        swipe(540, 1000, 540, 750)
+        swipe(540, 1050, 540, 750, settle=settle)
     else:
-        swipe(540, 1350, 540, 750)
+        swipe(540, 1350, 540, 750, settle=settle)
 
 
-def scroll_up(distance="normal"):
+def scroll_up(distance="normal", settle=3.0):
     """Scroll up (drag finger downward). Conservative distance with jitter."""
     if distance == "short":
-        swipe(540, 750, 540, 1000)
+        swipe(540, 750, 540, 1050, settle=settle)
     else:
-        swipe(540, 750, 540, 1350)
+        swipe(540, 750, 540, 1350, settle=settle)
 
 
 def press_back():
@@ -582,11 +583,15 @@ def detect_screen(img):
     if has_back_bottom and has_close_bottom:
         return "tutorial_slide"
 
-    # Victory concert — "Photo" at bottom, no game UI
+    # Live race animation — "Photo" at bottom + "Commentary" visible
     has_photo_bottom = False
     for text, conf, y_pos in results:
         if conf >= 0.5 and text.strip() == "Photo" and y_pos > 1800:
             has_photo_bottom = True
+    if has_photo_bottom and has("Commentary"):
+        return "race_live"
+
+    # Victory concert — "Photo" at bottom, no game UI
     if has_photo_bottom and not has("Training") and not has("Energy") and not has("Back"):
         return "concert"
 
@@ -772,7 +777,7 @@ def count_portraits(img):
     (low channel spread) to avoid false positives from hair/clothing.
     """
     bar_ys = []
-    for y in range(350, 750):
+    for y in range(350, 980):
         gray_count = 0
         for x in range(940, 1060, 10):
             r, g, b = img.getpixel((x, y))[:3]
@@ -958,8 +963,8 @@ def _detect_active_effects():
     from scripts.ocr_util import ocr_image as ocr_full
     import tempfile, os
 
-    # Tap the effect indicator icon
-    tap(50, 650, delay=2.0)
+    # Tap the effect indicator icon (left side, below Result Pts)
+    tap(87, 568, delay=2.0)
 
     popup_img = screenshot(f"active_effects_{int(time.time())}")
     tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
@@ -1135,19 +1140,30 @@ def handle_race_list(img):
 
 
 def _ocr_event_name(img):
-    """OCR the event title from the banner area."""
+    """OCR the event title from the banner area, with fallback to wider scan."""
+    _skip = {
+        "Main Scenario Event", "Trackblazer",
+        "Support Card Event", "Random Event",
+        "Trainee Event",
+        "T GREAT", "Energy",
+    }
     try:
         texts = ocr_region(img, 0, 280, 1080, 420,
                            save_path="/tmp/event_banner.png")
         for text, conf in texts:
-            if conf > 0.4 and text not in (
-                "Main Scenario Event", "Trackblazer",
-                "Support Card Event", "Random Event",
-                "T GREAT", "Energy",
-            ):
+            if conf > 0.4 and text not in _skip:
                 return text
     except Exception as e:
         log(f"OCR error: {e}")
+    # Fallback: scan wider area (y=280-550) for the actual event title
+    try:
+        texts = ocr_region(img, 0, 280, 1080, 550,
+                           save_path="/tmp/event_banner_wide.png")
+        for text, conf in texts:
+            if conf > 0.4 and text not in _skip:
+                return text
+    except Exception as e:
+        log(f"OCR error (wide): {e}")
     return "unknown"
 
 
@@ -1315,7 +1331,13 @@ def _ocr_skill_list(img):
             continue
 
         if "Hint" in t:
-            hint_ys.add(int(y_pos))
+            # Parse hint level from "Hint Lvl N" text
+            hlvl = 1
+            for word in t.split():
+                if word.isdigit():
+                    hlvl = int(word)
+                    break
+            hint_ys.add((int(y_pos), hlvl))
             continue
 
         # Cost: standalone number 50-500
@@ -1389,21 +1411,23 @@ def _ocr_skill_list(img):
             if 0 < cy - y < 120:
                 cost = cv
                 break
-        for hy in hint_ys:
+        hlvl = 0
+        for hy, hl in hint_ys:
             if abs(hy - y) < 40:
-                is_hint = True
+                hlvl = hl
                 break
 
         if cost > 0:
             base_prio = _get_skill_priority(t)
-            hint_bonus = 3 if is_hint else 0
+            # Hint multiplier: lvl 1→1.1x, 2→1.2x, 3→1.3x, 4→1.3x, 5→1.4x
+            hint_mult = {0: 1.0, 1: 1.1, 2: 1.2, 3: 1.3, 4: 1.35, 5: 1.4}.get(hlvl, 1.0)
             skill = SkillOption(
                 name=t,
                 cost=cost,
-                is_hint_skill=is_hint,
-                hint_level=1 if is_hint else 0,
+                is_hint_skill=hlvl > 0,
+                hint_level=hlvl,
                 tap_coords=(960, y + 70),  # + button is to the right, slightly below name
-                priority=base_prio + hint_bonus,
+                priority=base_prio * hint_mult,
             )
             skills.append(skill)
 
@@ -1436,16 +1460,16 @@ def _scan_all_skills():
 
     Returns (all_skills, sp) where all_skills is deduplicated by name.
     """
-    # Scroll to top first
+    # Scroll to top first (short swipes, fast settle)
     log("Skill shop — scrolling to top")
-    for _ in range(5):
-        scroll_up()
+    for _ in range(8):
+        scroll_up(settle=1.0)
     time.sleep(1)
 
     all_skills = {}  # name → SkillOption (dedup by name)
     sp = 0
 
-    for page in range(10):  # up to 10 pages
+    for page in range(15):  # more pages since we use shorter swipes
         img = screenshot(f"skill_scan_{page}_{int(time.time())}")
         skills = _ocr_skill_list(img)
         page_sp = _read_skill_pts(img)
@@ -1465,7 +1489,7 @@ def _scan_all_skills():
         if new_count == 0 and page > 0:
             break  # All duplicates — reached end
 
-        scroll_down()
+        scroll_down("short", settle=1.0)
 
     return list(all_skills.values()), sp
 
@@ -1494,17 +1518,45 @@ def handle_skill_shop(img):
     strategy = _overrides.get_strategy()
     sp_reserve = 0 if is_end_game else strategy.raw.get("skill_pts_reserve", 800)
 
+    # Build prereq map and skill lookup from strategy
+    prereqs = strategy.raw.get("skill_prereqs", {})
+    skill_by_name = {}
+    for s in all_skills:
+        skill_by_name[s.name] = s
+        # Also index by lowercase for fuzzy prereq matching
+        skill_by_name[s.name.lower()] = s
+
     # Decide which skills to buy
     to_buy = []
+    to_buy_names = set()
     remaining = sp
     for skill in all_skills:
         if skill.cost <= 0:
             continue
         if skill.priority <= 0:
             continue
-        if remaining - skill.cost < sp_reserve:
+        if skill.name in to_buy_names:
             continue
+        # Check if this skill has a prereq we also need to buy
+        prereq_skill = None
+        for target_name, prereq_name in prereqs.items():
+            if target_name.lower() in skill.name.lower() or skill.name.lower() in target_name.lower():
+                # Find the prereq in available skills
+                for s in all_skills:
+                    if prereq_name.lower() in s.name.lower() or s.name.lower() in prereq_name.lower():
+                        if s.name not in to_buy_names and s.cost > 0:
+                            prereq_skill = s
+                            break
+                break
+        total_cost = skill.cost + (prereq_skill.cost if prereq_skill else 0)
+        if remaining - total_cost < sp_reserve:
+            continue
+        if prereq_skill and prereq_skill.name not in to_buy_names:
+            to_buy.append(prereq_skill)
+            to_buy_names.add(prereq_skill.name)
+            remaining -= prereq_skill.cost
         to_buy.append(skill)
+        to_buy_names.add(skill.name)
         remaining -= skill.cost
 
     if not to_buy:
@@ -1519,15 +1571,15 @@ def handle_skill_shop(img):
     for s in to_buy:
         log(f"  → {s.name} (cost={s.cost}, prio={s.priority}, hint={s.is_hint_skill})")
 
-    # Phase 3: Scroll to top, then scroll through and tap skills to buy
-    for _ in range(5):
-        scroll_up()
+    # Phase 3: Scroll to top, then scroll through with short swipes to tap skills
+    for _ in range(8):
+        scroll_up(settle=1.0)
     time.sleep(1)
 
     buy_names = {s.name for s in to_buy}
     bought = set()
 
-    for page in range(10):
+    for page in range(20):
         img = screenshot(f"skill_buy_{page}_{int(time.time())}")
         visible = _ocr_skill_list(img)
 
@@ -1541,7 +1593,7 @@ def handle_skill_shop(img):
         if bought == buy_names:
             break  # All found
 
-        scroll_down()
+        scroll_down("short")
 
     if not bought:
         log("Skill shop — failed to tap any skills, exiting")
@@ -1560,6 +1612,27 @@ def handle_skill_shop(img):
     else:
         log("  Confirm button not found — tapping default coords")
         tap(270, 1600)
+
+    # Phase 5: Handle "Learn the above skills?" confirmation dialog
+    time.sleep(1.5)
+    learn_img = screenshot(f"skill_learn_{int(time.time())}")
+    learn_screen = detect_screen(learn_img)
+    if learn_screen == "skill_confirm_dialog":
+        log("  Tapping Learn on confirmation dialog")
+        tap(810, 1830, delay=2.0)
+        # Wait for "Skills Learned" popup and close it
+        for _ in range(5):
+            time.sleep(1.5)
+            sl_img = screenshot(f"skill_learned_{int(time.time())}")
+            sl_screen = detect_screen(sl_img)
+            if sl_screen == "skills_learned":
+                log("  Skills Learned popup — tapping Close")
+                tap(540, 1200)
+                break
+            elif sl_screen == "skill_confirm_dialog":
+                tap(810, 1830)
+            else:
+                tap(540, 960)
 
     return "skill_shop"
 
@@ -1592,10 +1665,17 @@ def read_inventory_from_training_items():
     results = ocr_full("/tmp/training_items.png")
     texts = [text for text, conf, bbox in results if conf > 0.3]
     if "Training Items" not in " ".join(texts):
-        log("Not on Training Items screen — aborting inventory read")
-        _inventory_checked = True  # Don't retry every turn
-        press_back()
-        return
+        log("Not on Training Items screen — trying race-screen position")
+        tap(*BTN_TRAINING_ITEMS_RACE, delay=2.5)
+        img = screenshot(f"training_items_retry_{int(time.time())}")
+        img.save("/tmp/training_items.png")
+        results = ocr_full("/tmp/training_items.png")
+        texts = [text for text, conf, bbox in results if conf > 0.3]
+        if "Training Items" not in " ".join(texts):
+            log("Not on Training Items screen — aborting inventory read")
+            _inventory_checked = True  # Don't retry every turn
+            press_back()
+            return
 
     # Build name matcher — include stat-prefixed variants
     _STAT_PREFIXES = ("Speed", "Stamina", "Power", "Guts", "Wit")
@@ -1617,6 +1697,34 @@ def read_inventory_from_training_items():
 
     all_found_keys = set()
 
+    # Effect text → item key fallback (for items whose name scrolled off-screen)
+    effect_to_key = {
+        "shuffles character appearances": "reset_whistle",
+        "rearrange support cards": "reset_whistle",
+        "training stat gain +40%": "motivating_mega",
+        "training stat gain +60%": "empowering_mega",
+        "training stat gain +20%": "coaching_mega",
+        "sets training failure rate to 0%": "good_luck_charm",
+        "race stat gain +20%": "artisan_hammer",
+        "race stat gain +35%": "master_hammer",
+        "energy +100": "royal_kale",
+        "energy +20": "vita_20",
+        "energy +40": "vita_40",
+        "energy +65": "vita_65",
+        "max energy +4": "energy_drink_max",
+        "max energy +8": "energy_drink_max_ex",
+        "mood +1": "plain_cupcake",
+        "mood +2": "berry_cupcake",
+        "cures night owl": "fluffy_pillow",
+        "cures skin outbreak": "rich_hand_cream",
+        "cures slow metabolism": "smart_scale",
+        "cures all bad conditions": "miracle_cure",
+        "cures migraine": "aroma_diffuser",
+        "cures practice poor": "practice_dvd",
+        "cures slacker": "pocket_planner",
+        "all bond +5": "grilled_carrots",
+    }
+
     def _scan_page(ocr_results):
         """Extract items from one page of OCR results. Skips already-found items."""
         import re
@@ -1632,6 +1740,7 @@ def read_inventory_from_training_items():
 
         # First pass: find item names and their y positions
         matched_items = []  # (pixel_y, item_key, item)
+        matched_y_ranges = set()  # track which y-ranges have a name match
         for text, conf, pixel_y in entries:
             if conf < 0.8:
                 continue
@@ -1648,22 +1757,49 @@ def read_inventory_from_training_items():
                 if item_key in all_found_keys and not item.use_immediately:
                     continue
                 matched_items.append((pixel_y, item_key, item))
+                matched_y_ranges.add(int(pixel_y // 200))
+
+        # Fallback: match items by effect text (for names scrolled off-screen)
+        # This catches items whose name is above the visible area after scrolling
+        for text, conf, pixel_y in entries:
+            if conf < 0.8:
+                continue
+            lower = text.strip().lower()
+            for effect_phrase, item_key in effect_to_key.items():
+                if effect_phrase in lower:
+                    item = ITEM_CATALOGUE[item_key]
+                    if item_key in all_found_keys and not item.use_immediately:
+                        break
+                    # Only suppress if a name-matched item is ABOVE this effect
+                    # (i.e. the effect belongs to an already-matched item)
+                    already_covered = any(my <= pixel_y and abs(pixel_y - my) < 120
+                                          for my, _, _ in matched_items)
+                    if already_covered:
+                        break
+                    matched_items.append((pixel_y, item_key, item))
+                    break
 
         # Second pass: for each matched item, find nearby held count
         for name_y, item_key, item in matched_items:
             held_count = 1  # default
             for text, conf, py in entries:
-                # Look for "N > N" or "• N" or just digits near the item name (within 80px)
+                # Look for count near the item name/effect (within 80px)
                 if abs(py - name_y) > 80:
                     continue
+                # "N > N" (full held count)
                 m = re.search(r'(\d+)\s*[>»]\s*(\d+)', text)
                 if m:
                     held_count = int(m.group(1))
                     break
-                # Also try "• N" pattern
-                m2 = re.match(r'[•·]\s*(\d+)', text.strip())
-                if m2:
+                # "N >" (OCR split the second number into a separate entry)
+                m2 = re.search(r'^(\d+)\s*[>»]', text.strip())
+                if m2 and int(m2.group(1)) > 0:
                     held_count = int(m2.group(1))
+                    break
+                # "• N" pattern
+                m3 = re.match(r'[•·]\s*(\d+)', text.strip())
+                if m3:
+                    held_count = int(m3.group(1))
                     break
 
             page_keys.add(item_key)
@@ -1678,8 +1814,9 @@ def read_inventory_from_training_items():
     all_found_keys |= page_keys
 
     # Scroll down and scan additional pages until no new items found
-    for page in range(3):
-        scroll_down()
+    # Use short scrolls so item names don't scroll off the top of the viewport
+    for page in range(6):
+        scroll_down("short")
         img = screenshot(f"training_items_p{page+2}_{int(time.time())}")
         img.save("/tmp/training_items.png")
         page_results = ocr_full("/tmp/training_items.png")
@@ -1954,8 +2091,8 @@ def _use_training_items(item_keys):
     verify_results = ocr_full("/tmp/use_items_verify.png")
     verify_texts = " ".join(t for t, c, b in verify_results if c > 0.5)
     if "Training Items" not in verify_texts:
-        log("Training Items screen did not open — retrying tap")
-        tap(*BTN_TRAINING_ITEMS, delay=3.0)
+        log("Training Items screen did not open — trying race-screen position")
+        tap(*BTN_TRAINING_ITEMS_RACE, delay=3.0)
         verify_img = screenshot(f"use_items_verify2_{int(time.time())}")
         verify_img.save("/tmp/use_items_verify.png")
         verify_results = ocr_full("/tmp/use_items_verify.png")
@@ -2230,15 +2367,17 @@ def handle_training():
     for st_tile, st_score in scored_tiles:
         log(f"  {st_tile.stat_type.value:8s}: score={st_score:5.1f}  cards={len(st_tile.support_cards)}  gains={dict(st_tile.stat_gains) if st_tile.stat_gains else {}}")
 
-    # Summer camp: use reset whistle if best score is underwhelming
+    # Summer camp / TS Climax: use reset whistle if best score is underwhelming
     global _summer_whistle_used
-    SUMMER_WHISTLE_THRESHOLD = 30
+    WHISTLE_THRESHOLD = 30
     summer_turns = set(range(37, 41)) | set(range(61, 65))
-    if (_current_turn in summer_turns
-            and best_score < SUMMER_WHISTLE_THRESHOLD
+    is_whistle_turn = _current_turn in summer_turns or _current_turn >= 72
+    if (is_whistle_turn
+            and best_score < WHISTLE_THRESHOLD
             and not _summer_whistle_used
             and _shop_manager.inventory.get("reset_whistle", 0) > 0):
-        log(f"SUMMER CAMP — Best score {best_score:.1f} < {SUMMER_WHISTLE_THRESHOLD}, backing out to use Reset Whistle")
+        phase = "TS CLIMAX" if _current_turn >= 72 else "SUMMER CAMP"
+        log(f"{phase} — Best score {best_score:.1f} < {WHISTLE_THRESHOLD}, backing out to use Reset Whistle")
         _summer_whistle_used = True
         tap(80, 1855)  # Back to career home
         time.sleep(2)
@@ -2248,10 +2387,10 @@ def handle_training():
                 if _shop_manager._inventory["reset_whistle"] <= 0:
                     del _shop_manager._inventory["reset_whistle"]
             _shop_manager.save_inventory()
-            log("SUMMER CAMP — Whistle used, re-entering training")
+            log(f"{phase} — Whistle used, re-entering training")
         else:
-            log("SUMMER CAMP — Failed to use Reset Whistle")
-        return "training_back_to_rest"  # Re-enters training via summer handler
+            log(f"{phase} — Failed to use Reset Whistle")
+        return "training_back_to_rest"  # Re-enters training via summer/TS handler
 
     if action.action_type == ActionType.REST:
         log("Scorer says rest — tapping Back to return to career home")
@@ -2515,6 +2654,7 @@ _INTERMEDIATE_RESULTS = {
     "ts_climax_standings", "ts_standings_next", "post_career_next",
     "post_career_confirm", "career_finishing", "warning_ok",
     "recreation_cancel", "rest_confirm", "race_back", "training_back_to_rest",
+    "race_live_skip",
 }
 
 def run_one_turn(stop_before=None):
@@ -2539,7 +2679,7 @@ def run_one_turn(stop_before=None):
 
 def _run_one_turn_inner(stop_before=None):
     """Internal: execute one game action."""
-    global _last_result, _needs_shop_visit, _last_shop_turn, _inventory_checked, _skill_shop_done
+    global _last_result, _needs_shop_visit, _last_shop_turn, _inventory_checked, _skill_shop_done, _summer_whistle_used
 
     img = screenshot(f"auto_{int(time.time())}")
     screen = detect_screen(img)
@@ -2697,6 +2837,7 @@ def _run_one_turn_inner(stop_before=None):
     if screen == "ts_climax_home":
         # TS Climax with Training/Rest buttons visible = training turn
         # Race turns force you into race selection directly
+        _summer_whistle_used = False
 
         # Read inventory on first encounter
         if not _inventory_checked:
@@ -2933,6 +3074,11 @@ def _run_one_turn_inner(stop_before=None):
         log("Inspiration screen — tapping GO!")
         tap(540, 1530)
         return "inspiration"
+
+    elif screen == "race_live":
+        log("Live race — tapping Skip to fast-forward")
+        tap(778, 1862, delay=3.0)
+        return "race_live_skip"
 
     elif screen == "concert_confirm":
         log("Concert playback prompt — pressing Back to dismiss")

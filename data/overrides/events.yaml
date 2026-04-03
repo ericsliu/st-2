@@ -78,11 +78,6 @@
   choice: 0
   note: "Post-race defeat event — option 1 is safe"
 
-# Trainee-specific post-race (fallback for non-matched post-race events)
-- text_contains: "trainee event"
-  choice: 0
-  note: "Trainee post-race event — default to option 1"
-
 # King Halo Power card — "A Captivating Invitation" gives Uma Stan (bottom choice)
 - text_contains: "captivating invitation"
   choice: 1
@@ -118,3 +113,10 @@
 - text_contains: "try again"
   choice: 1
   note: "Never restart — this is a parent run"
+
+# === Fallback catch-alls (MUST be last — these match broad category labels) ===
+
+# Trainee-specific post-race (fallback for non-matched post-race events)
+- text_contains: "trainee event"
+  choice: 0
+  note: "Trainee post-race event — default to option 1"

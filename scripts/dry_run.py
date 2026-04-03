@@ -27,6 +27,11 @@ def gather_and_decide():
     energy = at.get_energy_level(img)
     at.build_game_state(img, screen, energy=energy)
 
+    # TS Climax is always late-game; override turn if parsing failed
+    if screen == "ts_climax_home" and at._current_turn < 72:
+        at._current_turn = 72
+        print(f"(Forced turn=72 for TS Climax)")
+
     is_pre_debut = at._current_turn < 12
 
     # Active effects
@@ -58,7 +63,7 @@ def gather_and_decide():
           f"Pow={at._current_stats.power} Gut={at._current_stats.guts} Wit={at._current_stats.wit}")
     print(f"SP: {at._skill_pts}")
     print(f"Energy: ~{energy}%")
-    print(f"Consecutive races: {at._consecutive_races}")
+    print(f"Consecutive races: {at._scenario._consecutive_races}")
 
     if at._cached_aptitudes:
         print(f"Aptitudes: {at._cached_aptitudes}")
@@ -139,7 +144,7 @@ def gather_and_decide():
             print("-> Would visit shop")
 
         # Consecutive race break
-        if at._consecutive_races >= 3:
+        if at._scenario._consecutive_races >= 3:
             if energy < 30:
                 print(f"-> 3+ consecutive races, energy {energy}% — would REST")
             else:
