@@ -54,6 +54,22 @@
   choice: 1
   note: "Post-race victory event — option 2 for wins"
 
+- text_contains: "did i do well"
+  choice: 1
+  note: "Post-race win — option 2 for better rewards"
+
+- text_contains: "you sure did"
+  choice: 1
+  note: "Post-race win — option 2 for better rewards"
+
+- text_contains: "gave it your all"
+  choice: 0
+  note: "Post-race non-win — option 1 is safe"
+
+- text_contains: "you can do even better"
+  choice: 0
+  note: "Post-race non-win — option 1 is safe"
+
 - text_contains: "solid showing"
   choice: 0
   note: "Non-1st place — option 1 is safe"

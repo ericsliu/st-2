@@ -49,7 +49,12 @@ _last_race_placement = 99
 _overrides = OverridesLoader("data/overrides")
 _scorer_config = ScorerConfig()
 _scorer = TrainingScorer(_scorer_config, overrides=_overrides)
-_skill_buyer = SkillBuyer(kb=None, scorer=_scorer)
+
+# Knowledge base (auto-creates SQLite DB, accumulates event/skill data over runs)
+from uma_trainer.knowledge.database import KnowledgeBase
+_kb = KnowledgeBase("data/uma_trainer.db")
+
+_skill_buyer = SkillBuyer(kb=_kb, scorer=_scorer)
 _shop_manager = ShopManager(overrides=_overrides)
 
 # Load scenario and runspec so the scorer knows about summer camp, stat targets, etc.
@@ -60,8 +65,8 @@ _runspec = load_runspec("parent_balanced_v1")
 _scorer.scenario = _scenario
 _scorer.runspec = _runspec
 # Inventory is read from Training Items screen on first career_home — no yaml loading
-_race_selector = RaceSelector(kb=None, overrides=_overrides, scenario=_scenario)
-_event_handler = EventHandler(kb=None, local_llm=None, claude_client=None, overrides=_overrides)
+_race_selector = RaceSelector(kb=_kb, overrides=_overrides, scenario=_scenario)
+_event_handler = EventHandler(kb=_kb, local_llm=None, claude_client=None, overrides=_overrides)
 
 # Persistent state across turns (updated as we learn more)
 _current_turn = 0
@@ -1245,17 +1250,7 @@ def handle_event(img):
     state.event_text = full_text
     state.event_choices = choices
 
-    # Post-race events: choice 2 for wins (1st place), choice 1 for losses
-    if _is_victory_event(img):
-        if _last_race_placement == 1:
-            log("Post-race event (1st place) — picking choice 2")
-            tap(540, 1250)
-        else:
-            log(f"Post-race event (placed {_last_race_placement}) — picking choice 1")
-            tap(540, 1100)
-        return "event"
-
-    # Use EventHandler (Tier 0 overrides → fallback to choice 1)
+    # Use EventHandler (Tier 0 overrides → KB → fallback to choice 1)
     action = _event_handler.decide(state)
     log(f"EventHandler: {action.reason} → choice {action.target}")
 
