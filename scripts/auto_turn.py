@@ -92,6 +92,7 @@ CONDITION_CURES = {
 # Career home button coordinates (1080x1920 portrait, never move)
 BTN_REST = (185, 1525)
 BTN_TRAINING = (540, 1550)
+BTN_INFIRMARY = (162, 1750)
 # These two move depending on screen layout — only valid on career_home
 BTN_HOME_SKILLS = (918, 1535)
 BTN_HOME_RACES = (920, 1750)
@@ -290,12 +291,17 @@ def cure_conditions_from_inventory():
         return
 
     _use_training_items(cure_keys)
-    # Remove used items from inventory
+    # Remove used items from inventory and clear cured conditions
     for key in cure_keys:
         if _shop_manager._inventory.get(key, 0) > 0:
             _shop_manager._inventory[key] -= 1
             if _shop_manager._inventory[key] <= 0:
                 del _shop_manager._inventory[key]
+    # Mark conditions as cured so Phase 3 doesn't re-act on them
+    cured = {c for c in _active_conditions
+             if CONDITION_CURES.get(c) in cure_keys or "miracle_cure" in cure_keys}
+    for c in cured:
+        _active_conditions.remove(c)
     _shop_manager.save_inventory()
 
 
@@ -612,10 +618,17 @@ def detect_screen(img):
     if has("Skills Learned") and has("Close"):
         return "skills_learned"
 
+    # Race confirm popup: has Cancel + Race + "Enter race?"
+    # Must be checked BEFORE Cancel+OK block — background OCR can bleed "OK" through overlay
+    if has("Cancel") and has("Race") and has("Enter race"):
+        return "race_confirm"
+
     # Popup screens (checked first — they overlay other screens)
     if has("Cancel") and has("OK"):
         if has("Rest") and has("recover energy"):
             return "rest_confirm"
+        if has("Infirmary") or has("infirmary"):
+            return "infirmary_confirm"
         if has("enter this race"):
             return "race_confirm"
         if has("Playback") or has("Songs") or has("Landscape") or has("Portrait"):
@@ -623,10 +636,6 @@ def detect_screen(img):
         if has("Recreation") or has("fun outing"):
             return "recreation_confirm"
         return "warning_popup"
-
-    # Race confirm popup: has Cancel + Race + "Enter race?"
-    if has("Cancel") and has("Race") and has("Enter race"):
-        return "race_confirm"
 
     # Insufficient Result Pts warning — has Cancel + Race buttons
     if has("Insufficient") and has("Result Pts") and has("Race"):
@@ -2369,7 +2378,7 @@ def handle_training():
 
     # Summer camp / TS Climax: use reset whistle if best score is underwhelming
     global _summer_whistle_used
-    WHISTLE_THRESHOLD = 30
+    WHISTLE_THRESHOLD = 40
     summer_turns = set(range(37, 41)) | set(range(61, 65))
     is_whistle_turn = _current_turn in summer_turns or _current_turn >= 72
     if (is_whistle_turn
@@ -2607,6 +2616,12 @@ def _handle_career_home(img):
     # =====================================================================
     # PHASE 3: Decide action (rest / race / train)
     # =====================================================================
+
+    # Slacker is debilitating — go to Infirmary immediately if still active
+    if "slacker" in _active_conditions:
+        log("SLACKER detected — going to Infirmary immediately")
+        tap(*BTN_INFIRMARY)
+        return "rest"  # Infirmary confirm handled same as rest confirm
 
     # If we just came back from race_list with no good races, train or rest
     if _last_result == "race_back":
@@ -2944,6 +2959,15 @@ def _run_one_turn_inner(stop_before=None):
         log("Recreation confirm detected — tapping Cancel (never waste turns on Recreation)")
         tap(270, 1260)
         return "recreation_cancel"
+
+    elif screen == "infirmary_confirm":
+        log("Infirmary confirm — tapping OK")
+        ok = find_green_button(img, (1150, 1350))
+        if ok:
+            tap(ok[0], ok[1])
+        else:
+            tap(730, 1250)
+        return "rest_confirm"
 
     elif screen == "rest_confirm":
         if _last_result == "rest":

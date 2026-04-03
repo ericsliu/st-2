@@ -87,7 +87,7 @@ ITEM_CATALOGUE: dict[str, ShopItem] = {
     "vita_40":              ShopItem("Vita 40", 55, ItemTier.A, max_stock=2, effect="Energy +40"),
     "vita_65":              ShopItem("Vita 65", 75, ItemTier.A, max_stock=1, effect="Energy +65"),
     "royal_kale":           ShopItem("Royal Kale Juice", 70, ItemTier.B, max_stock=1, effect="Energy +100, Mood -1"),
-    "energy_drink_max":     ShopItem("Energy Drink MAX", 30, ItemTier.A, max_stock=2, effect="Max Energy +4"),
+    "energy_drink_max":     ShopItem("Energy Drink MAX", 30, ItemTier.NEVER, max_stock=2, effect="Max Energy +4"),
     "energy_drink_max_ex":  ShopItem("Energy Drink MAX EX", 50, ItemTier.NEVER, max_stock=1, effect="Max Energy +8"),
     "plain_cupcake":        ShopItem("Plain Cupcake", 30, ItemTier.A, max_stock=1, effect="Mood +1"),
     "berry_cupcake":        ShopItem("Berry Sweet Cupcake", 55, ItemTier.A, max_stock=1, effect="Mood +2"),
