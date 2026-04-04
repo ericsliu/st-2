@@ -1154,7 +1154,17 @@ def handle_race_list(img):
     if action.action_type == ActionType.RACE and action.tap_coords != (0, 0):
         is_g1 = "(G1," in action.reason or "G1" in action.reason
         if is_g1:
-            _use_cleat_for_race(is_ts_climax=False)
+            # Back out to career home to use cleat hammer, then re-enter races
+            inventory = _shop_manager.inventory
+            has_cleat = inventory.get("artisan_hammer", 0) > 0 or inventory.get("master_hammer", 0) > 3
+            if has_cleat:
+                press_back()
+                time.sleep(1)
+                _use_cleat_for_race(is_ts_climax=False)
+                tap(*BTN_HOME_RACES)
+                time.sleep(2)
+                # Re-screenshot and re-select the race
+                img = screenshot(f"race_reenter_{int(time.time())}")
         log(f"Selecting race at {action.tap_coords}")
         tap(action.tap_coords[0], action.tap_coords[1], delay=1.5)
         # Tap the green "Race" button to confirm entry
