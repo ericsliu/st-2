@@ -762,6 +762,27 @@ def detect_screen(img):
     if has("Skip") and has("Quick") and not has("Rest") and not has("Races"):
         return "cutscene"
 
+    # Dark overlay with choice box — event choice on dimmed background.
+    # When Skip is toggled off, events show dialogue then present choices
+    # on a dimmed screen. Detect by checking: dark top half + bright choice band.
+    top_brightness = 0
+    for x in range(200, 900, 40):
+        r, g, b = px(img, x, 400)
+        top_brightness += r + g + b
+    choice_brightness = 0
+    choice_band_y = 0
+    for y in range(900, 1500, 50):
+        band = 0
+        for x in range(100, 980, 40):
+            r, g, b = px(img, x, y)
+            band += r + g + b
+        if band > choice_brightness:
+            choice_brightness = band
+            choice_band_y = y
+    if top_brightness < 3000 and choice_brightness > 10000:
+        log(f"Dimmed event choice detected (top={top_brightness}, band={choice_brightness} at y={choice_band_y})")
+        return "event_choice_dimmed"
+
     # Dark overlay / TAP prompt — check pixel brightness as fallback
     total_brightness = 0
     for x in range(300, 800, 20):
@@ -2627,7 +2648,8 @@ def _handle_career_home(img):
     # If we just came back from race_list with no good races, train or rest
     if _last_result == "race_back":
         _scenario.on_non_race_action()
-        if energy < 50:
+        summer_camp_rb = _scenario.get_event_turns("summer_camp")
+        if energy < 50 and _current_turn not in summer_camp_rb:
             log(f"No good races, energy {energy}% — resting")
             tap(*BTN_REST)
             return "rest"
@@ -2668,7 +2690,9 @@ def _handle_career_home(img):
         tap(*BTN_REST)
         return "rest"
 
-    if energy < 50:
+    summer_camp = _scenario.get_event_turns("summer_camp")
+    in_summer = _current_turn in summer_camp
+    if energy < 50 and not in_summer:
         log(f"Energy {energy}% too low — resting")
         tap(*BTN_REST)
         return "rest"
@@ -2684,7 +2708,7 @@ _INTERMEDIATE_RESULTS = {
     "race_enter", "result_pts", "standings_next", "tap_prompt",
     "cutscene_skip", "tutorial_slide", "goal_complete", "fan_class",
     "unlock_popup", "trophy_won", "race_lineup", "post_race_next",
-    "shop_popup_enter", "unknown", "skill_confirm", "skills_learned_close",
+    "shop_popup_enter", "unknown", "event_choice", "skill_confirm", "skills_learned_close",
     "recovering", "placement_next", "ts_climax_racing", "race_day_racing",
     "ts_climax_standings", "ts_standings_next", "post_career_next",
     "post_career_confirm", "career_finishing", "warning_ok",
@@ -3159,6 +3183,11 @@ def _run_one_turn_inner(stop_before=None):
 
     elif screen == "event":
         return handle_event(img)
+
+    elif screen == "event_choice_dimmed":
+        log("Dimmed event choice — tapping choice box")
+        tap(540, 1200)
+        return "event_choice"
 
     elif screen == "training":
         result = handle_training()
