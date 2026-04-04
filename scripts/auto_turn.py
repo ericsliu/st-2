@@ -41,9 +41,9 @@ DEVICE = "127.0.0.1:5555"
 
 # State tracking to avoid loops
 _last_result = None
-# Consecutive race counter — negative effects possible after 3
 # Last race placement (1=win, 99=unknown)
 _last_race_placement = 99
+_last_race_was_g1 = False
 
 # --- uma_trainer component initialization ---
 _overrides = OverridesLoader("data/overrides")
@@ -2688,10 +2688,11 @@ def _handle_career_home(img):
             _scenario.on_non_race_action()
         else:
             # Consecutive race gate: at 3+, require mood item + condition cure.
-            # Exception: fall G1 triple (3 consecutive G1s in Oct-Nov) — always race.
+            # Exception: G1 streak (e.g. fall triple) — all races in chain are G1s.
             consec = _scenario._consecutive_races
             is_g1 = "G1 available" in race_action.reason
-            if consec >= 3 and not is_g1:
+            in_g1_streak = is_g1 and _scenario._consecutive_g1s >= consec
+            if consec >= 3 and not in_g1_streak:
                 inv = _shop_manager.inventory
                 has_mood = inv.get("plain_cupcake", 0) > 0 or inv.get("berry_cupcake", 0) > 0
                 has_cure = (inv.get("rich_hand_cream", 0) > 0
@@ -2700,6 +2701,8 @@ def _handle_career_home(img):
                 if has_mood and has_cure:
                     log(f"Racing (consecutive {consec}): prepared with mood+cure items")
                     log(f"Racing: {race_action.reason}")
+                    global _last_race_was_g1
+                    _last_race_was_g1 = is_g1
                     tap(*BTN_HOME_RACES)
                     return "going_to_races"
                 else:
@@ -2712,6 +2715,7 @@ def _handle_career_home(img):
                     _scenario.on_non_race_action()
             else:
                 log(f"Racing: {race_action.reason}")
+                _last_race_was_g1 = is_g1
                 tap(*BTN_HOME_RACES)
                 return "going_to_races"
     else:
@@ -3011,7 +3015,7 @@ def _run_one_turn_inner(stop_before=None):
     elif screen == "warning_popup":
         # If we just came from race flow, this is a race energy warning
         if _last_result in ("going_to_races", "race_enter"):
-            _scenario.on_race_completed()
+            _scenario.on_race_completed(is_g1=_last_race_was_g1)
             log(f"Race warning popup — tapping OK (consecutive: {_scenario._consecutive_races})")
         else:
             log("Warning popup — tapping OK")

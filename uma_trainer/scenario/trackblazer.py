@@ -27,6 +27,7 @@ class TrackblazerHandler(ScenarioHandler):
     def __init__(self, config: "ScenarioConfig") -> None:
         super().__init__(config)
         self._consecutive_races: int = 0
+        self._consecutive_g1s: int = 0
         self._just_raced: bool = False
 
     # ------------------------------------------------------------------
@@ -113,12 +114,17 @@ class TrackblazerHandler(ScenarioHandler):
 
         return None
 
-    def on_race_completed(self) -> None:
+    def on_race_completed(self, is_g1: bool = False) -> None:
         self._consecutive_races += 1
+        if is_g1:
+            self._consecutive_g1s += 1
+        else:
+            self._consecutive_g1s = 0
         self._just_raced = True
 
     def on_non_race_action(self) -> None:
         self._consecutive_races = 0
+        self._consecutive_g1s = 0
 
     def _result_pts_deficit(self, state: "GameState") -> int:
         """How many Result Pts behind the current year's target.

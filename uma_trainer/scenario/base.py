@@ -272,7 +272,7 @@ class ScenarioHandler:
         """
         return None
 
-    def on_race_completed(self) -> None:
+    def on_race_completed(self, is_g1: bool = False) -> None:
         """Called when a race finishes. Override for side effects."""
         pass
 
