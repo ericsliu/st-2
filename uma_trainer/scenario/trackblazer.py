@@ -50,17 +50,10 @@ class TrackblazerHandler(ScenarioHandler):
         energy = state.energy
         race_cfg = self.config.race
 
-        # 0. Pre-summer energy management — must save energy for Summer Camp.
-        #    Early Jun (1 turn before camp): rest if energy < 50
-        #    Late Jun (camp starts next turn): rest if energy < 80
+        # 0. Pre-milestone energy conservation — handled by lookahead in auto_turn.py.
+        #    The caller checks should_conserve_energy() before we get here,
+        #    so we no longer need hard-coded pre-summer thresholds.
         summer_camp = self.get_event_turns("summer_camp")
-        turns_to_camp = self.turns_until_event("summer_camp", turn)
-        if turns_to_camp == 2 and energy < 50:
-            logger.info("Pre-summer (2 turns out), energy %d%% < 50 — no racing", energy)
-            return None
-        if turns_to_camp == 1 and energy < 80:
-            logger.info("Pre-summer (1 turn out), energy %d%% < 80 — no racing", energy)
-            return None
 
         # 1. Fatigue management: break after safe_race_chain consecutive races
         #    Exception: year-end turns (fatigue can't trigger after Late Dec)

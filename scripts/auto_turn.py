@@ -60,6 +60,7 @@ _shop_manager = ShopManager(overrides=_overrides)
 # Load scenario and runspec so the scorer knows about summer camp, stat targets, etc.
 from uma_trainer.scenario import load_scenario
 from uma_trainer.decision.runspec import load_runspec
+from uma_trainer.decision.lookahead import should_conserve_energy
 _scenario = load_scenario("trackblazer")
 _runspec = load_runspec("parent_balanced_v1")
 _scorer.scenario = _scenario
@@ -2634,20 +2635,39 @@ def _handle_career_home(img):
         tap(*BTN_TRAINING)
         return "going_to_training"
 
-    # Ask the race selector (handles: hard cap, pre-summer energy, G1/goal,
+    # Energy budget lookahead — check if we need to conserve for an upcoming milestone
+    mood = detect_mood(img)
+    conserve, conserve_reason = should_conserve_energy(
+        _current_turn, energy, _shop_manager.inventory, mood,
+    )
+
+    # Ask the race selector (handles: hard cap, G1/goal,
     # scenario fatigue chain, early game skip, race rhythm, low energy racing)
     _game_state.energy = energy
     race_action = _race_selector.should_race_this_turn(_game_state)
 
     if race_action:
-        log(f"Racing: {race_action.reason}")
-        tap(*BTN_HOME_RACES)
-        return "going_to_races"
+        # Conservation overrides non-mandatory races (rhythm, low-energy races)
+        # but NOT goal races or G1s — those are too important to skip
+        is_mandatory = "Goal race" in race_action.reason or "G1 available" in race_action.reason
+        if conserve and not is_mandatory:
+            log(f"Lookahead: conserving energy — {conserve_reason}")
+            log(f"  (would have raced: {race_action.reason})")
+            _scenario.on_non_race_action()
+        else:
+            log(f"Racing: {race_action.reason}")
+            tap(*BTN_HOME_RACES)
+            return "going_to_races"
+    else:
+        # Not racing — notify scenario to reset consecutive race counter
+        _scenario.on_non_race_action()
 
-    # Not racing — notify scenario to reset consecutive race counter
-    _scenario.on_non_race_action()
+    # Rest vs train — use lookahead budget instead of fixed threshold
+    if conserve:
+        log(f"Energy {energy}%, conserving for milestone — resting")
+        tap(*BTN_REST)
+        return "rest"
 
-    # Rest vs train based on energy
     if energy < 50:
         log(f"Energy {energy}% too low — resting")
         tap(*BTN_REST)
