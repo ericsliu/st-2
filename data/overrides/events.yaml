@@ -100,6 +100,11 @@
   choice: 2
   note: "Skill Pts +35 is usually best value"
 
+# Plain Ol' Charm — support card event, choice 2
+- text_contains: "plain ol' charm"
+  choice: 1
+  note: "Support card event — option 2 per user preference"
+
 # Training failure — always take the safe option
 - text_contains: "get well soon"
   choice: 0
