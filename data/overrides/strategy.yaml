@@ -1,24 +1,13 @@
 # Training strategy overrides
 # These override config/default.yaml values and scorer defaults.
 
-# Stat weight overrides by game phase
-# condition: early_game (turn < 24) | late_game (turn > 50) | always
-stat_weight_overrides:
-  - condition: early_game
-    weights:
-      speed: 1.2      # Speed is always valuable, even early
-      stamina: 0.8
-      power: 0.8
-      guts: 0.4       # Guts barely matters for parent runs
-      wit: 1.0        # Wit early = better training efficiency all run
+# Stat weights and phase overrides are now in the runspec file
+# (data/runspecs/parent_balanced_v1.yaml). See data/runspecs/README.md.
 
-  - condition: late_game
-    weights:
-      speed: 2.0      # Late game: speed is king
-      stamina: 0.5    # Stamina caps out around 600 usefulness
-      power: 0.9
-      guts: 0.3       # Guts is lowest priority
-      wit: 0.4        # Wit less useful late game
+# Skill prerequisites — must buy prereq before the skill
+skill_prereqs:
+  "Daring Strike": "Early Start"
+  "Professor of Curvature": "Corner Adept"
 
 # Skills to never buy regardless of priority
 skill_blacklist:
@@ -36,32 +25,40 @@ skill_priority_list:
   - {name: "Encroaching Shadow", priority: 10}
   - {name: "Blast Forward", priority: 10}
   - {name: "Daring Strike", priority: 10}
+  - {name: "Professor of Curvature", priority: 10}
+  - {name: "Swinging Maestro", priority: 10}
   # Top-tier acceleration (9)
-  - {name: "Sturm und Drang", priority: 9}
-  - {name: "Masterful Gambit", priority: 9}
+  - {name: "Sturm und Drang", priority: 6}
+  - {name: "Masterful Gambit", priority: 6}
   # Core End Closer + distance corners/straights (8)
   - {name: "End Closer Straightaways", priority: 8}
   - {name: "End Closer Corners", priority: 8}
   - {name: "End Closer Savvy", priority: 8}
   - {name: "Come What May", priority: 8}
   - {name: "Crusader", priority: 8}
-  - {name: "Strategist", priority: 8}
+  - {name: "Strategist", priority: 0}
   - {name: "The Coast Is Clear", priority: 8}
-  - {name: "I Can See Right Through", priority: 8}
+  - {name: "I Can See Right Through", priority: 0}
   - {name: "Mile Corners", priority: 8}
   - {name: "Mid-Distance Corners", priority: 8}
+  - {name: "Medium Corners", priority: 8}
   - {name: "Long-Distance Corners", priority: 8}
+  - {name: "Long Corners", priority: 8}
   - {name: "Short-Distance Corners", priority: 8}
+  - {name: "Sprint Corners", priority: 8}
   - {name: "Mile Straightaways", priority: 8}
   - {name: "Mid-Distance Straightaways", priority: 8}
+  - {name: "Medium Straightaways", priority: 8}
   - {name: "Long-Distance Straightaways", priority: 8}
+  - {name: "Long Straightaways", priority: 8}
   - {name: "Short-Distance Straightaways", priority: 8}
+  - {name: "Sprint Straightaways", priority: 8}
   - {name: "Straightaway Recover", priority: 8}
   - {name: "Outer Post Efficiency", priority: 8}
   # Good speed/position skills (7)
   - {name: "Lead the Charge", priority: 7}
   - {name: "Forward, March", priority: 7}
-  - {name: "Early Start", priority: 7}
+  - {name: "Early Start", priority: 10}
   - {name: "Firm Course Menace", priority: 7}
   - {name: "Radiant Star", priority: 7}
   # Recovery skills (6)
@@ -70,9 +67,13 @@ skill_priority_list:
   - {name: "Go-Home Specialist", priority: 6}
   - {name: "After-School Stroll", priority: 6}
   - {name: "Levelheaded", priority: 6}
+  # Corner recovery (9)
+  - {name: "Corner Recovery", priority: 9}
+  # Ground condition skills (6)
+  - {name: "Firm Conditions", priority: 6}
+  - {name: "Wet Conditions", priority: 6}
   # Decent general skills (5)
   - {name: "Corner Adept", priority: 5}
-  - {name: "Long Straightaways", priority: 5}
   - {name: "Inner Lane", priority: 5}
   - {name: "Intense Gaze", priority: 5}
   # Low priority (4)

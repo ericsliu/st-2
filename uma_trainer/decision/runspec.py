@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import yaml
 
@@ -30,11 +30,19 @@ RUNSPECS_DIR = "data/runspecs"
 # ── Data classes ────────────────────────────────────────────────────────────
 
 @dataclass
+class PhaseWeight:
+    """Flat weight override for a game phase."""
+    condition: str  # matches a phase alias from the scenario config
+    weights: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
 class StatTarget:
     """Piecewise utility tiers for a single stat."""
     minimum: int = 300
     target: int = 600
     excellent: int = 800
+    cap: int | None = None  # hard cap — weight zeroed when stat reaches this
     # Value coefficients per tier (multiplied against raw gain)
     value_below_min: float = 1.0
     value_to_target: float = 0.8
@@ -102,6 +110,7 @@ class RunSpec:
     style_target: str = "leader"        # front | leader | chaser | closer
 
     stat_targets: dict[str, StatTarget] = field(default_factory=dict)
+    phase_weights: list[PhaseWeight] = field(default_factory=list)
     policy: PolicyWeights = field(default_factory=PolicyWeights)
     constraints: HardConstraints = field(default_factory=HardConstraints)
 
@@ -110,6 +119,46 @@ class RunSpec:
         for stat in StatType:
             if stat.value not in self.stat_targets:
                 self.stat_targets[stat.value] = StatTarget()
+
+    def get_stat_caps(self) -> dict[str, int]:
+        """Return {stat_name: cap} for all stats that have a hard cap defined."""
+        return {
+            name: t.cap
+            for name, t in self.stat_targets.items()
+            if t.cap is not None
+        }
+
+    def get_phase_weights(
+        self,
+        base_weights: dict[str, float],
+        phase_checker: "Callable[[str], bool] | None" = None,
+        turn: int = 0,
+        max_turns: int = 72,
+    ) -> dict[str, float]:
+        """Apply phase-based weight overrides to base weights.
+
+        Args:
+            base_weights: Starting flat weights.
+            phase_checker: Scenario callback that checks phase membership.
+            turn: Current turn (fallback when no phase_checker).
+            max_turns: Total turns (fallback when no phase_checker).
+        """
+        weights = dict(base_weights)
+        for pw in self.phase_weights:
+            applies = False
+            if pw.condition == "always":
+                applies = True
+            elif phase_checker:
+                applies = phase_checker(pw.condition)
+            else:
+                frac = turn / max(max_turns, 1)
+                if pw.condition == "early_game":
+                    applies = frac < 0.333
+                elif pw.condition == "late_game":
+                    applies = frac > 0.694
+            if applies:
+                weights.update(pw.weights)
+        return weights
 
     def stat_utility(self, stat: str, current: int, gain: int) -> float:
         """Compute marginal utility for a stat gain."""
@@ -175,10 +224,12 @@ class RunSpec:
 
 def _parse_stat_target(raw: dict) -> StatTarget:
     values = raw.get("values", [1.0, 0.8, 0.25, 0.05])
+    cap_raw = raw.get("cap")
     return StatTarget(
         minimum=raw.get("minimum", 300),
         target=raw.get("target", 600),
         excellent=raw.get("excellent", 800),
+        cap=int(cap_raw) if cap_raw is not None else None,
         value_below_min=values[0] if len(values) > 0 else 1.0,
         value_to_target=values[1] if len(values) > 1 else 0.8,
         value_to_excellent=values[2] if len(values) > 2 else 0.25,
@@ -200,6 +251,13 @@ def load_runspec(name: str, runspecs_dir: str = RUNSPECS_DIR) -> RunSpec:
     for stat_name, stat_raw in raw.get("stat_targets", {}).items():
         stat_targets[stat_name] = _parse_stat_target(stat_raw)
 
+    phase_weights = []
+    for pw_raw in raw.get("phase_weights", []):
+        phase_weights.append(PhaseWeight(
+            condition=str(pw_raw.get("condition", "always")),
+            weights={k: float(v) for k, v in pw_raw.get("weights", {}).items()},
+        ))
+
     policy_raw = raw.get("policy", {})
     constraints_raw = raw.get("constraints", {})
 
@@ -211,6 +269,7 @@ def load_runspec(name: str, runspecs_dir: str = RUNSPECS_DIR) -> RunSpec:
         distance_target=raw.get("distance_target", "medium"),
         style_target=raw.get("style_target", "leader"),
         stat_targets=stat_targets,
+        phase_weights=phase_weights,
         policy=PolicyWeights(**{k: v for k, v in policy_raw.items() if hasattr(PolicyWeights, k)}),
         constraints=HardConstraints(**{k: v for k, v in constraints_raw.items() if hasattr(HardConstraints, k)}),
     )

@@ -24,12 +24,7 @@ llm:
   cache_ttl_hours: 168       # 1 week
 
 scorer:
-  stat_weights:
-    speed: 1.2
-    stamina: 1.0
-    power: 0.9
-    guts: 0.8
-    wit: 0.7
+  # stat_weights removed — now in runspec (data/runspecs/parent_balanced_v1.yaml)
   rainbow_bonus: 2.0
   gold_bonus: 1.5
   hint_bonus: 1.2

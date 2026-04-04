@@ -222,20 +222,37 @@ class TrainingScorer:
         return False
 
     def _get_effective_weights(self, state: GameState) -> dict[str, float]:
-        """Return stat weights merged with any active override weights."""
-        if self.overrides is None:
-            weights = dict(self.config.stat_weights)
-        else:
-            phase_checker = None
-            if self.scenario:
-                phase_checker = lambda phase: self.scenario.is_phase(state.current_turn, phase)
+        """Return stat weights merged with any active phase weight overrides.
+
+        Resolution order:
+        1. Start with base weights from RunSpec phase_weights (if runspec loaded),
+           falling back to strategy.yaml overrides, then config defaults.
+        2. Zero out any stat that has reached its hard cap (from RunSpec stat_targets).
+        """
+        phase_checker = None
+        if self.scenario:
+            phase_checker = lambda phase: self.scenario.is_phase(state.current_turn, phase)
+
+        base = dict(self.config.stat_weights)
+
+        if self.runspec and self.runspec.phase_weights:
+            weights = self.runspec.get_phase_weights(
+                base, phase_checker=phase_checker,
+                turn=state.current_turn, max_turns=state.max_turns,
+            )
+        elif self.overrides is not None:
             weights = self.overrides.get_stat_weights(
-                self.config.stat_weights, state.current_turn, state.max_turns,
+                base, state.current_turn, state.max_turns,
                 phase_checker=phase_checker,
             )
+        else:
+            weights = base
 
-        # Zero out stats that have reached their hard cap
-        stat_caps = {"stamina": 600, "power": 600}
+        # Zero out stats that have reached their hard cap (from runspec)
+        if self.runspec:
+            stat_caps = self.runspec.get_stat_caps()
+        else:
+            stat_caps = {}
         current = {
             "speed": state.stats.speed, "stamina": state.stats.stamina,
             "power": state.stats.power, "guts": state.stats.guts,

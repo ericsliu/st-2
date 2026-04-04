@@ -18,11 +18,13 @@ stat_targets:
     minimum: 350
     target: 600
     excellent: 800
+    cap: 600
     values: [0.9, 0.6, 0.3, 0.1]
   power:
     minimum: 350
     target: 600
     excellent: 800
+    cap: 600
     values: [0.9, 0.5, 0.3, 0.1]
   guts:
     minimum: 200
@@ -34,6 +36,25 @@ stat_targets:
     target: 500
     excellent: 800
     values: [1.0, 0.8, 0.6, 0.3]
+
+# Phase-based flat weight overrides. Applied when the scorer falls back to
+# flat weights (no OCR stat gains available). Each entry has a condition
+# matching a phase alias from the scenario config (e.g. early_game, late_game).
+phase_weights:
+  - condition: early_game
+    weights:
+      speed: 1.2
+      stamina: 0.8
+      power: 0.8
+      guts: 0.4
+      wit: 1.0
+  - condition: late_game
+    weights:
+      speed: 2.0
+      stamina: 0.5
+      power: 0.9
+      guts: 0.3
+      wit: 0.4
 
 policy:
   bond_future_value: 0.9
