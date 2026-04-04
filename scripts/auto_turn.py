@@ -2687,9 +2687,31 @@ def _handle_career_home(img):
             log(f"  (would have raced: {race_action.reason})")
             _scenario.on_non_race_action()
         else:
-            log(f"Racing: {race_action.reason}")
-            tap(*BTN_HOME_RACES)
-            return "going_to_races"
+            # Consecutive race gate: at 3+, require mood item + condition cure
+            consec = _scenario._consecutive_races
+            if consec >= 3:
+                inv = _shop_manager.inventory
+                has_mood = inv.get("plain_cupcake", 0) > 0 or inv.get("berry_cupcake", 0) > 0
+                has_cure = (inv.get("rich_hand_cream", 0) > 0
+                            or inv.get("miracle_cure", 0) > 0
+                            or inv.get("smart_scale", 0) > 0)
+                if has_mood and has_cure:
+                    log(f"Racing (consecutive {consec}): prepared with mood+cure items")
+                    log(f"Racing: {race_action.reason}")
+                    tap(*BTN_HOME_RACES)
+                    return "going_to_races"
+                else:
+                    missing = []
+                    if not has_mood:
+                        missing.append("mood item")
+                    if not has_cure:
+                        missing.append("condition cure")
+                    log(f"Consecutive {consec} races — blocking, missing: {', '.join(missing)}")
+                    _scenario.on_non_race_action()
+            else:
+                log(f"Racing: {race_action.reason}")
+                tap(*BTN_HOME_RACES)
+                return "going_to_races"
     else:
         # Not racing — notify scenario to reset consecutive race counter
         _scenario.on_non_race_action()
@@ -2794,11 +2816,13 @@ def _run_one_turn_inner(stop_before=None):
         if energy < 50:
             # Try energy recovery items
             energy_item = None
-            for key in ("vita_65", "vita_40", "vita_20", "royal_kale"):
+            energy_keys = ("vita_65", "vita_40", "vita_20", "royal_kale")
+            for key in energy_keys:
                 if inventory.get(key, 0) > 0:
                     energy_item = key
                     break
             has_charm = inventory.get("good_luck_charm", 0) > 0
+            log(f"SUMMER CAMP — Recovery check: energy_items={[(k, inventory.get(k, 0)) for k in energy_keys]}, charm={has_charm}")
 
             if energy_item:
                 log(f"SUMMER CAMP — Low energy, using {energy_item}")

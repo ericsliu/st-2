@@ -227,8 +227,8 @@ class RaceSelector:
     # Turn action screen: should we race this turn?
     # ------------------------------------------------------------------
 
-    # Hard cap: never exceed this many consecutive races regardless of scenario
-    MAX_CONSECUTIVE_RACES = 3
+    # Absolute hard cap — auto_turn.py handles the soft cap (3+) with item checks
+    MAX_CONSECUTIVE_RACES = 5
 
     def should_race_this_turn(self, state: GameState) -> BotAction | None:
         """Called from the turn action screen to decide if the bot should
