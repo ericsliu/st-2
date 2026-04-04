@@ -62,7 +62,7 @@ from uma_trainer.scenario import load_scenario
 from uma_trainer.decision.runspec import load_runspec
 from uma_trainer.decision.lookahead import should_conserve_energy
 _scenario = load_scenario("trackblazer")
-_runspec = load_runspec("parent_balanced_v1")
+_runspec = load_runspec("end_guts_v1")
 _scorer.scenario = _scenario
 _scorer.runspec = _runspec
 # Inventory is read from Training Items screen on first career_home — no yaml loading
