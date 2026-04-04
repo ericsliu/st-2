@@ -2343,11 +2343,14 @@ def _ocr_failure_rate(img):
     for text, _conf in results:
         t = text.strip().replace(" ", "")
         if "%" in t:
-            digits = t.replace("%", "").strip()
-            try:
-                return int(digits)
-            except ValueError:
-                pass
+            # Extract just the digits immediately before the % sign
+            import re
+            match = re.search(r'(\d{1,3})%', t)
+            if match:
+                val = int(match.group(1))
+                if val > 100:
+                    val = val % 100  # e.g. 190% → 90%, likely OCR gluing "1" from nearby text
+                return val
     return None
 
 
@@ -2484,12 +2487,29 @@ def handle_training():
         # Fallback: pick highest total gain
         best = max(tiles, key=lambda t: t.total_stat_gain)
         tx, ty = best.tap_coords
-    tap(tx, ty, delay=1)
+
+    # Check if the chosen tile is already the pre-raised one.
+    # If so, tapping it would CONFIRM training immediately — skip the selection tap.
+    chosen_tile_name = None
+    for t in tiles:
+        if t.tap_coords == (tx, ty):
+            chosen_tile_name = t.stat_type.value.capitalize()
+            break
+    already_raised = (chosen_tile_name and chosen_tile_name == pre_raised_tile)
+    if already_raised:
+        log(f"  Chosen tile {chosen_tile_name} is already raised — reading failure rate without tapping")
+    else:
+        tap(tx, ty, delay=1)
 
     # Read failure rate from the SELECTED tile before confirming
     sel_img = screenshot(f"train_selected_{int(time.time())}")
     failure_rate = _ocr_failure_rate(sel_img)
     if failure_rate is None:
+        # Verify we're still on the training screen — if not, training already executed
+        sel_screen = detect_screen(sel_img)
+        if sel_screen != "training":
+            log(f"Training already confirmed (screen: {sel_screen}) — skipping failure check")
+            return sel_screen
         debug_path = f"/tmp/failure_ocr_fail_{int(time.time())}.png"
         sel_img.save(debug_path)
         log(f"ERROR: Could not read failure rate — screenshot saved to {debug_path}")
