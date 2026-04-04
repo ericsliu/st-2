@@ -2314,6 +2314,25 @@ def _ocr_training_gains(img):
 
 
 
+def _ocr_failure_rate(img):
+    """Read the failure rate percentage from the training screen.
+
+    The 'Failure N%' bubble floats above the active training tile.
+    Returns the integer percentage (0-100), or None if OCR fails to
+    find the failure text at all.
+    """
+    results = ocr_region(img, 50, 1330, 1030, 1480)
+    for text, _conf in results:
+        t = text.strip().replace(" ", "")
+        if "%" in t:
+            digits = t.replace("%", "").strip()
+            try:
+                return int(digits)
+            except ValueError:
+                pass
+    return None
+
+
 def handle_training():
     """Preview all 5 training tiles and pick the best using uma_trainer scorer."""
     log("Training — previewing all tiles")
@@ -2448,6 +2467,27 @@ def handle_training():
         best = max(tiles, key=lambda t: t.total_stat_gain)
         tx, ty = best.tap_coords
     tap(tx, ty, delay=1)
+
+    # Read failure rate from the SELECTED tile before confirming
+    sel_img = screenshot(f"train_selected_{int(time.time())}")
+    failure_rate = _ocr_failure_rate(sel_img)
+    if failure_rate is None:
+        debug_path = f"/tmp/failure_ocr_fail_{int(time.time())}.png"
+        sel_img.save(debug_path)
+        log(f"ERROR: Could not read failure rate — screenshot saved to {debug_path}")
+        raise RuntimeError(f"Failed to OCR failure rate from training screen (saved {debug_path})")
+
+    if failure_rate > 0:
+        log(f"Failure rate: {failure_rate}%")
+
+    summer_camp = _scenario.get_event_turns("summer_camp")
+    in_summer = _current_turn in summer_camp
+    max_failure = 5 if in_summer else 15
+    if failure_rate > max_failure:
+        log(f"Failure rate {failure_rate}% > {max_failure}% — backing out to rest")
+        tap(80, 1855)
+        return "training_back_to_rest"
+
     tap(tx, ty)
     return "training"
 
@@ -2728,9 +2768,12 @@ def _handle_career_home(img):
         tap(*BTN_REST)
         return "rest"
 
+    # Low energy floor — don't waste time entering training just to back out.
+    # The failure rate check on the training screen is the precise gate;
+    # this is a fast pre-filter to avoid the 15s tile scan at very low energy.
     summer_camp = _scenario.get_event_turns("summer_camp")
     in_summer = _current_turn in summer_camp
-    if energy < 50 and not in_summer:
+    if energy < 30 and not in_summer:
         log(f"Energy {energy}% too low — resting")
         tap(*BTN_REST)
         return "rest"

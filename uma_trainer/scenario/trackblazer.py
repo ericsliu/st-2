@@ -65,7 +65,6 @@ class TrackblazerHandler(ScenarioHandler):
             logger.debug(
                 "Race chain at %d — taking a break", self._consecutive_races,
             )
-            self._consecutive_races = 0
             return None
 
         # 2. First few turns: build base stats and bonds
