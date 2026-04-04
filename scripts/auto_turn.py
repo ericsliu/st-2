@@ -758,8 +758,9 @@ def detect_screen(img):
     if has("GO!"):
         return "inspiration"
 
-    # Cutscene / animation result: has Skip/Quick but no main nav
-    if has("Skip") and has("Quick") and not has("Rest") and not has("Races"):
+    # Cutscene / animation result: has Skip/Quick but no main nav.
+    # Event screens also have "Skip Off" + "Quick" + "Log" — exclude via Log.
+    if has("Skip") and has("Quick") and not has("Rest") and not has("Races") and not has("Log"):
         return "cutscene"
 
     # Dark overlay with choice box — event choice on dimmed background.
