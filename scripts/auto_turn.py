@@ -2687,9 +2687,11 @@ def _handle_career_home(img):
             log(f"  (would have raced: {race_action.reason})")
             _scenario.on_non_race_action()
         else:
-            # Consecutive race gate: at 3+, require mood item + condition cure
+            # Consecutive race gate: at 3+, require mood item + condition cure.
+            # Exception: fall G1 triple (3 consecutive G1s in Oct-Nov) — always race.
             consec = _scenario._consecutive_races
-            if consec >= 3:
+            is_g1 = "G1 available" in race_action.reason
+            if consec >= 3 and not is_g1:
                 inv = _shop_manager.inventory
                 has_mood = inv.get("plain_cupcake", 0) > 0 or inv.get("berry_cupcake", 0) > 0
                 has_cure = (inv.get("rich_hand_cream", 0) > 0
