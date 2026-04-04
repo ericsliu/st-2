@@ -1284,6 +1284,14 @@ def handle_event(img):
     except Exception:
         full_text = event_name
 
+    # If Skip is toggled off, event shows dialogue instead of choices.
+    # Re-enable skip so events auto-advance to the choice screen.
+    if "skip off" in full_text.lower():
+        log("Skip is OFF — tapping Skip Off to re-enable skip mode")
+        tap(380, 1876)
+        time.sleep(1)
+        return "event"
+
     # Build event choices (typically 2 choices on screen)
     # Choice 1 at y~1120, Choice 2 at y~1250, Choice 3 at y~1380
     choices = [
@@ -2485,8 +2493,10 @@ def handle_training():
     max_failure = 5 if in_summer else 15
     if failure_rate > max_failure:
         log(f"Failure rate {failure_rate}% > {max_failure}% — backing out to rest")
-        tap(80, 1855)
-        return "training_back_to_rest"
+        tap(80, 1855)  # Back to career home
+        time.sleep(1)
+        tap(*BTN_REST)
+        return "rest"
 
     tap(tx, ty)
     return "training"
