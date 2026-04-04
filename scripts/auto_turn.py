@@ -69,6 +69,9 @@ _scorer.runspec = _runspec
 _race_selector = RaceSelector(kb=_kb, overrides=_overrides, scenario=_scenario)
 _event_handler = EventHandler(kb=_kb, local_llm=None, claude_client=None, overrides=_overrides)
 
+from uma_trainer.perception.card_tracker import CardTracker
+_card_tracker = CardTracker()
+
 # Persistent state across turns (updated as we learn more)
 _current_turn = 0
 _current_stats = TraineeStats()
@@ -2360,7 +2363,6 @@ def handle_training():
 
         # Count support card portraits and read bond levels
         n_cards = count_portraits(img)
-        card_ids = [f"card_{i}" for i in range(n_cards)]
 
         # Read bond gauge fill levels for each card on this tile
         import numpy as np
@@ -2372,6 +2374,9 @@ def handle_training():
         if len(bond_levels) < n_cards:
             bond_levels.extend([80] * (n_cards - len(bond_levels)))
         bond_levels = bond_levels[:n_cards]
+
+        # Identify cards via portrait matching and update bond tracker
+        card_ids = _card_tracker.identify_cards(frame_bgr, n_cards, bond_levels)
 
         stat_type = StatType(tile_name.lower())
         tile = TrainingTile(
@@ -2391,6 +2396,10 @@ def handle_training():
     energy = get_energy_level(img)
     state = build_game_state(img, "training", energy=energy)
     state.training_tiles = tiles
+    state.all_bonds_maxed = _card_tracker.all_bonds_maxed()
+
+    if _card_tracker.card_count > 0:
+        log(f"Bond tracker: {_card_tracker.summary()}")
 
     action = _scorer.best_action(state)
     scored_tiles = _scorer.score_tiles(state) if state.training_tiles else []

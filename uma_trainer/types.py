@@ -220,6 +220,7 @@ class GameState:
     ts_climax_pts: int = 0          # ranking points
     is_race_day: bool = False       # True when career home shows "Race Day" (no training/rest)
     result_pts: int = 0                 # Trackblazer Result Pts (e.g. 300)
+    all_bonds_maxed: bool = False       # True when all support cards have bond >= 80
     result_pts_target: int = 0           # Target Result Pts for current year (e.g. 300)
     confidence: float = 1.0  # Assembler confidence in this reading
     raw_detections: list[Any] = field(default_factory=list)

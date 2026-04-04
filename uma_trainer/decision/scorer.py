@@ -314,10 +314,9 @@ class TrainingScorer:
                     stat_weight = weights.get(stat_name, 1.0)
                     score += stat_weight * int(gain * boost_mult) * 0.7
 
-        # 2. Support card stacking bonus (reduced during summer — bonds already maxed)
-        if self._is_summer_camp(state):
-            score += len(tile.support_cards) * self.config.card_stack_per_card * 1.0
-        else:
+        # 2. Support card stacking bonus — only valuable while bonds are building.
+        #    Once all cards hit friendship (>=80), stacking adds no bond value.
+        if not state.all_bonds_maxed:
             score += len(tile.support_cards) * self.config.card_stack_per_card * 5.0
 
         # 3. Rainbow/gold indicators — the stat gains already reflect the

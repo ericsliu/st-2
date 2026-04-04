@@ -97,3 +97,47 @@ class TestTrainingScorer:
         # Above threshold — should train
         state2 = GameState(energy=scorer_config.rest_energy_threshold + 1)
         assert scorer.should_rest(state2) is False
+
+    def test_stacking_bonus_zero_when_all_bonds_maxed(self, scorer_config):
+        """Card stacking bonus should be zero when all bonds are maxed."""
+        scorer = TrainingScorer(scorer_config)
+
+        tile_3cards = TrainingTile(
+            stat_type=StatType.SPEED,
+            support_cards=["c1", "c2", "c3"],
+            bond_levels=[100, 100, 100],
+            tap_coords=(100, 500),
+        )
+        tile_0cards = TrainingTile(
+            stat_type=StatType.SPEED,
+            tap_coords=(100, 500),
+        )
+
+        # When bonds NOT maxed: 3 cards should outscore 0 cards
+        state_building = GameState(
+            energy=80, training_tiles=[tile_3cards], current_turn=40,
+            all_bonds_maxed=False,
+        )
+        state_building_empty = GameState(
+            energy=80, training_tiles=[tile_0cards], current_turn=40,
+            all_bonds_maxed=False,
+        )
+        score_with_cards = scorer._score_tile(tile_3cards, state_building)
+        score_no_cards = scorer._score_tile(tile_0cards, state_building_empty)
+        stacking_diff = score_with_cards - score_no_cards
+        assert stacking_diff > 0, "Stacking bonus should exist when bonds not maxed"
+
+        # When ALL bonds maxed: 3 cards should score same as 0 cards
+        # (no stacking bonus, bond-building bonus also gone since all >=80)
+        state_maxed = GameState(
+            energy=80, training_tiles=[tile_3cards], current_turn=40,
+            all_bonds_maxed=True,
+        )
+        state_maxed_empty = GameState(
+            energy=80, training_tiles=[tile_0cards], current_turn=40,
+            all_bonds_maxed=True,
+        )
+        score_maxed_cards = scorer._score_tile(tile_3cards, state_maxed)
+        score_maxed_none = scorer._score_tile(tile_0cards, state_maxed_empty)
+        maxed_diff = score_maxed_cards - score_maxed_none
+        assert maxed_diff < stacking_diff, "Stacking bonus should be eliminated when all bonds maxed"
