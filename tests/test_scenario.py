@@ -260,6 +260,28 @@ class TestTrackblazerHandler:
         action = trackblazer.should_race_this_turn(state, (500, 500))
         assert action is not None
 
+    def test_fatigue_block_persists_until_rest(self, trackblazer):
+        """Blocking at fatigue limit must keep counter elevated.
+
+        Previously the counter reset on block, so the next turn would
+        race again — causing an infinite race loop at 0% energy.
+        """
+        trackblazer._consecutive_races = 3
+        state = GameState(
+            current_turn=10, energy=50, scenario="trackblazer",
+        )
+        # First call: should block
+        action = trackblazer.should_race_this_turn(state, (500, 500))
+        assert action is None
+        # Counter must still be >= safe_race_chain so next call also blocks
+        assert trackblazer._consecutive_races >= 3
+        # Second call (simulating next turn): should STILL block
+        action2 = trackblazer.should_race_this_turn(state, (500, 500))
+        assert action2 is None
+        # Only on_non_race_action resets
+        trackblazer.on_non_race_action()
+        assert trackblazer._consecutive_races == 0
+
     def test_on_non_race_resets_counter(self, trackblazer):
         trackblazer._consecutive_races = 2
         trackblazer.on_non_race_action()
