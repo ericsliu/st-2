@@ -136,7 +136,7 @@ class TestPurchasePriorities:
 class TestActiveEffects:
     def test_activate_item_registers_effect(self):
         sm = ShopManager()
-        sm.activate_item("ankle_weights")
+        sm.activate_item("power_ankle_weights")
         assert len(sm._active_effects) == 1
         assert sm._active_effects[0].multiplier == 1.5
         assert sm._active_effects[0].turns_remaining == 1
@@ -148,7 +148,7 @@ class TestActiveEffects:
 
     def test_tick_decrements_and_expires(self):
         sm = ShopManager()
-        sm.activate_item("ankle_weights")  # 1 turn
+        sm.activate_item("power_ankle_weights")  # 1 turn
         sm.tick_effects(current_turn=1)
         assert len(sm._active_effects) == 0  # Expired
 
@@ -185,7 +185,7 @@ class TestActiveEffects:
     def test_get_training_boost_active_effects(self):
         sm = ShopManager()
         sm.activate_item("empowering_mega")  # 1.6x
-        sm.activate_item("ankle_weights")    # 1.5x
+        sm.activate_item("power_ankle_weights")    # 1.5x
         state = GameState()
         boost = sm.get_training_boost(state)
         assert abs(boost.multiplier - 2.4) < 0.01  # 1.6 * 1.5

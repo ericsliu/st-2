@@ -1762,7 +1762,7 @@ def read_inventory_from_training_items():
 
     # Build name matcher — include stat-prefixed variants
     _STAT_PREFIXES = ("Speed", "Stamina", "Power", "Guts", "Wit")
-    _STAT_VARIANT_KEYS = {"notepad", "manual", "scroll", "ankle_weights"}
+    _STAT_VARIANT_KEYS = {"notepad", "manual", "scroll"}
     name_to_key = {}
     for key, item in ITEM_CATALOGUE.items():
         name_to_key[item.name] = key
@@ -1992,7 +1992,7 @@ def handle_shop(img):
     # Build name matcher — include stat-prefixed variants for items like
     # "Stamina Scroll", "Speed Manual", "Guts Ankle Weights" etc.
     _STAT_PREFIXES = ("Speed", "Stamina", "Power", "Guts", "Wit")
-    _STAT_VARIANT_KEYS = {"notepad", "manual", "scroll", "ankle_weights"}
+    _STAT_VARIANT_KEYS = {"notepad", "manual", "scroll"}
     name_to_key = {}
     for key, item in ITEM_CATALOGUE.items():
         name_to_key[item.name] = key
@@ -2155,7 +2155,11 @@ def _use_training_items(item_keys):
         "vita 40": "vita_40",
         "vita 65": "vita_65",
         "energy drink max": "energy_drink_max",
-        "ankle weights": "ankle_weights",
+        "speed ankle weights": "speed_ankle_weights",
+        "stamina ankle weights": "stamina_ankle_weights",
+        "power ankle weights": "power_ankle_weights",
+        "guts ankle weights": "guts_ankle_weights",
+        "wit ankle weights": "wit_ankle_weights",
         "artisan": "artisan_hammer",
         "master": "master_hammer",
         "good-luck": "good_luck_charm",
@@ -2506,6 +2510,30 @@ def handle_training():
         else:
             log(f"{phase} — Failed to use Reset Whistle")
         return "training_back_to_rest"  # Re-enters training via summer/TS handler
+
+    # Summer camp: use stat-matched ankle weights before training
+    # Follows reset whistle pattern: back out → use item → re-enter training
+    if is_whistle_turn and action.action_type != ActionType.REST:
+        from uma_trainer.decision.shop_manager import ANKLE_WEIGHT_MAP
+        stat_name = action.target.lower() if action.target else ""
+        ankle_key = ANKLE_WEIGHT_MAP.get(stat_name)
+        active_weights = [e for e in _shop_manager._active_effects if "ankle" in e.item_key]
+        if ankle_key and not active_weights and _shop_manager.inventory.get(ankle_key, 0) > 0:
+            phase = "TS CLIMAX" if _current_turn >= 72 else "SUMMER CAMP"
+            log(f"{phase} — Using {ankle_key} for {stat_name} training (+50% gain)")
+            tap(80, 1855)  # Back to career home
+            time.sleep(2)
+            if _use_training_items([ankle_key]):
+                if _shop_manager._inventory.get(ankle_key, 0) > 0:
+                    _shop_manager._inventory[ankle_key] -= 1
+                    if _shop_manager._inventory[ankle_key] <= 0:
+                        del _shop_manager._inventory[ankle_key]
+                _shop_manager.save_inventory()
+                _shop_manager.activate_item(ankle_key)
+                log(f"{phase} — {ankle_key} active, re-entering training")
+            else:
+                log(f"{phase} — Failed to use {ankle_key}")
+            return "training_back_to_rest"  # Re-enters training via summer/TS handler
 
     if action.action_type == ActionType.REST:
         log("Scorer says rest — tapping Back to return to career home")
@@ -3026,6 +3054,9 @@ def _run_one_turn_inner(stop_before=None):
             active_mega = next(e for e in _shop_manager._active_effects if "mega" in e.item_key)
             log(f"SUMMER CAMP — Megaphone active: {active_mega.item_key} ({active_mega.turns_remaining} turns left)")
 
+        # 4. Ankle weights — stat-specific, used after scorer picks stat in handle_training()
+        # (follows reset whistle pattern: back out → use item → re-enter training)
+
         log(f"SUMMER CAMP — Energy ~{energy}% OK — going to Training")
         tap(*BTN_TRAINING)
         return "going_to_training"
@@ -3422,6 +3453,25 @@ def _run_one_turn_inner(stop_before=None):
         return handle_skill_shop(img)
 
     else:
+        # Check if this is actually a pre_race screen that OCR missed
+        ocr_texts = [t.lower() for t, c, _ in ocr_full_screen(img) if c > 0.3]
+        ocr_joined = " ".join(ocr_texts)
+        if "view results" in ocr_joined or "view result" in ocr_joined:
+            log("Unknown screen — detected 'View Results', treating as pre_race")
+            vr_r, vr_g, vr_b = px(img, 300, 1790)
+            view_results_locked = (vr_r < 170 and vr_g < 170 and vr_b < 170)
+            if view_results_locked:
+                log("  View Results LOCKED, tapping Race")
+                race_btn = find_green_button(img, (1750, 1850), (500, 900))
+                if race_btn:
+                    tap(race_btn[0], race_btn[1])
+                else:
+                    tap(690, 1790)
+            else:
+                log("  Tapping View Results")
+                tap(300, 1790)
+            return "pre_race"
+
         # Try to find a green button (Next, OK, etc.) before blindly tapping
         green_btn = find_green_button(img, (1600, 1900))
         if green_btn:

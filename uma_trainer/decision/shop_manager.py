@@ -29,11 +29,24 @@ logger = logging.getLogger(__name__)
 # zero_failure: if True, failure rate is treated as 0%
 # duration: how many turns the effect lasts after activation
 ITEM_TRAINING_EFFECTS: dict[str, dict] = {
-    "ankle_weights":    {"multiplier": 1.5, "duration": 1},
+    "speed_ankle_weights":   {"multiplier": 1.5, "duration": 1},
+    "stamina_ankle_weights": {"multiplier": 1.5, "duration": 1},
+    "power_ankle_weights":   {"multiplier": 1.5, "duration": 1},
+    "guts_ankle_weights":    {"multiplier": 1.5, "duration": 1},
+    "wit_ankle_weights":     {"multiplier": 1.5, "duration": 1},
     "coaching_mega":    {"multiplier": 1.2, "duration": 4},
     "motivating_mega":  {"multiplier": 1.4, "duration": 3},
     "empowering_mega":  {"multiplier": 1.6, "duration": 2},
     "good_luck_charm":  {"multiplier": 1.0, "duration": 1, "zero_failure": True},
+}
+
+# Map stat name → ankle weight key for stat-matched usage
+ANKLE_WEIGHT_MAP: dict[str, str] = {
+    "speed": "speed_ankle_weights",
+    "stamina": "stamina_ankle_weights",
+    "power": "power_ankle_weights",
+    "guts": "guts_ankle_weights",
+    "wit": "wit_ankle_weights",
 }
 
 
@@ -98,8 +111,12 @@ ITEM_CATALOGUE: dict[str, ShopItem] = {
     # Motivating (3-turn) useful for good random training days
     "motivating_mega":      ShopItem("Motivating Megaphone", 55, ItemTier.S, max_stock=2, effect="+40% training, 3 turns"),
     "coaching_mega":        ShopItem("Coaching Megaphone", 40, ItemTier.NEVER, max_stock=0, effect="+20% training, 4 turns"),
-    # Ankle weights: only useful for stats with support cards
-    "ankle_weights":        ShopItem("Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% stat / +20% energy, 1 turn", save_for="summer_camp"),
+    # Ankle weights: stat-specific, +50% gain for matching stat only
+    "speed_ankle_weights":   ShopItem("Speed Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% speed / +20% energy, 1 turn", save_for="summer_camp"),
+    "stamina_ankle_weights": ShopItem("Stamina Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% stamina / +20% energy, 1 turn", save_for="summer_camp"),
+    "power_ankle_weights":   ShopItem("Power Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% power / +20% energy, 1 turn", save_for="summer_camp"),
+    "guts_ankle_weights":    ShopItem("Guts Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% guts / +20% energy, 1 turn", save_for="summer_camp"),
+    "wit_ankle_weights":     ShopItem("Wit Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% wit / +20% energy, 1 turn", save_for="summer_camp"),
     "training_application": ShopItem("Training Application", 150, ItemTier.NEVER, max_stock=1, effect="Training level +1"),
     "good_luck_charm":      ShopItem("Good-Luck Charm", 40, ItemTier.S, max_stock=2, effect="0% failure, 1 turn", save_for="exceptional_training"),
     "reset_whistle":        ShopItem("Reset Whistle", 20, ItemTier.SS, max_stock=5, effect="Rearrange support cards", save_for="summer_no_rainbow"),

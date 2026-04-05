@@ -237,32 +237,9 @@ class TrackblazerHandler(ScenarioHandler):
         vita_threshold = 50 if in_summer else 30
         needs_energy = state.energy < vita_threshold
 
-        # ── Plan Ankle Weights (summer camp) ──
-        # Ankle Weights increase energy cost by 20%, so we need to ensure
-        # energy is safe. If energy is low, pair with a Vita drink.
-        want_weights = in_summer and _has("ankle_weights")
-        weights_energy_safe = state.energy >= 40  # enough to absorb +20% cost
-
-        if want_weights and not weights_energy_safe:
-            # Need a Vita to pair — check if one exists
-            vita_key = _best_vita()
-            if vita_key:
-                # Queue Vita FIRST, then Ankle Weights
-                queue.append(BotAction(
-                    action_type=ActionType.USE_ITEM,
-                    target=vita_key,
-                    reason=f"Vita before Ankle Weights (energy={state.energy})",
-                    tier_used=1,
-                ))
-                _reserve(vita_key)
-                needs_energy = False  # Vita covers our energy need
-            else:
-                # No Vita available — skip Ankle Weights entirely
-                logger.info(
-                    "Skipping Ankle Weights: energy=%d, no Vita available",
-                    state.energy,
-                )
-                want_weights = False
+        # ── Ankle Weights are now stat-specific and used after scorer picks ──
+        # (handled in handle_training via reset whistle pattern)
+        want_weights = False  # Managed by handle_training, not item queue
 
         # ── Queue Vita for energy recovery (if still needed) ──
         if needs_energy:
@@ -289,16 +266,6 @@ class TrackblazerHandler(ScenarioHandler):
                     ))
                     _reserve(mega_key)
                     break
-
-        # ── Queue Ankle Weights (validated above) ──
-        if want_weights:
-            queue.append(BotAction(
-                action_type=ActionType.USE_ITEM,
-                target="ankle_weights",
-                reason="Ankle Weights stacked at Summer Camp",
-                tier_used=1,
-            ))
-            _reserve("ankle_weights")
 
         # ── Good-Luck Charm — during summer camp or before exceptional training ──
         if _has("good_luck_charm"):
