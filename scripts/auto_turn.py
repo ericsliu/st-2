@@ -1302,16 +1302,46 @@ def handle_event(img):
         time.sleep(1)
         return "event"
 
-    # Build event choices (typically 2 choices on screen)
-    # Choice 1 at y~1120, Choice 2 at y~1250, Choice 3 at y~1380
-    choices = [
-        EventChoice(index=0, text="choice 1", tap_coords=(540, 1120)),
-        EventChoice(index=1, text="choice 2", tap_coords=(540, 1250)),
-    ]
+    # Build event choices by finding choice text positions from OCR.
+    # Choice bubbles are typically at y=700-1300, with text length > 10 chars.
+    # Exclude short UI labels (Skip, Quick, Log, Effects, Details, etc.)
+    _SKIP_WORDS = {"skip", "quick", "log", "effects", "details", "career",
+                   "energy", "result", "goal", "turns", "pts", "close"}
+    choice_candidates = []
+    if 'all_text' in dir():
+        for t, c, y in all_text:
+            text = t.strip()
+            if c < 0.3 or len(text) < 10:
+                continue
+            if 700 < y < 1350 and text.lower() not in _SKIP_WORDS:
+                choice_candidates.append((text, y))
+    # Sort by y position and take up to 3 as choices
+    choice_candidates.sort(key=lambda x: x[1])
+    # Deduplicate candidates that are very close in y (within 50px)
+    deduped = []
+    for text, y in choice_candidates:
+        if not deduped or abs(y - deduped[-1][1]) > 50:
+            deduped.append((text, y))
+    choice_candidates = deduped[:3]
 
-    # Check if there's a 3rd choice visible (some events have 3)
-    for t, c, y in all_text if 'all_text' in dir() else []:
-        pass  # choices are position-based, no need to detect count
+    if len(choice_candidates) >= 2:
+        choices = [
+            EventChoice(index=i, text=text, tap_coords=(540, int(y)))
+            for i, (text, y) in enumerate(choice_candidates)
+        ]
+        log(f"  Event choices detected at y={[int(y) for _, y in choice_candidates]}")
+    elif len(choice_candidates) == 0:
+        # No choices found — this is likely an event result page (showing stat gain).
+        # Tap center to dismiss it.
+        log("  No event choices found — tapping to dismiss event result")
+        tap(540, 960)
+        return "event"
+    else:
+        # Fallback to hardcoded positions
+        choices = [
+            EventChoice(index=0, text="choice 1", tap_coords=(540, 1120)),
+            EventChoice(index=1, text="choice 2", tap_coords=(540, 1250)),
+        ]
 
     # Build GameState for EventHandler
     energy = get_energy_level(img)
@@ -1839,13 +1869,13 @@ def read_inventory_from_training_items():
                 # Look for count near the item name/effect (within 80px)
                 if abs(py - name_y) > 80:
                     continue
-                # "N > N" (full held count)
-                m = re.search(r'(\d+)\s*[>»]\s*(\d+)', text)
+                # "N > N" — OCR misreads ">" as \, $, •, etc.
+                m = re.search(r'(\d+)\s*[>»\\$•·|/~:×x]\s*(\d+)', text)
                 if m:
                     held_count = int(m.group(1))
                     break
                 # "N >" (OCR split the second number into a separate entry)
-                m2 = re.search(r'^(\d+)\s*[>»]', text.strip())
+                m2 = re.search(r'^(\d+)\s*[>»\\$•·|/~:×x]', text.strip())
                 if m2 and int(m2.group(1)) > 0:
                     held_count = int(m2.group(1))
                     break
@@ -1855,6 +1885,8 @@ def read_inventory_from_training_items():
                     held_count = int(m3.group(1))
                     break
 
+            if held_count > 1:
+                log(f"  Held count for {item_key}: {held_count}")
             page_keys.add(item_key)
             if item.use_immediately:
                 use_now[item_key] = use_now.get(item_key, 0) + held_count
@@ -2384,6 +2416,7 @@ def handle_training():
 
     # Build TrainingTile objects from OCR data
     tiles = []
+    last_previewed_tile = None
     for tile_name, (tx, ty) in TRAINING_TILES.items():
         if tile_name == pre_raised_tile:
             # Already raised — use the initial screenshot, don't tap
@@ -2391,6 +2424,7 @@ def handle_training():
             gains = pre_gains
         else:
             tap(tx, ty, delay=1)
+            last_previewed_tile = tile_name
             img = screenshot(f"train_preview_{tile_name.lower()}_{int(time.time())}")
 
             # Check if an event fired during preview (events overlay training)
@@ -2488,14 +2522,16 @@ def handle_training():
         best = max(tiles, key=lambda t: t.total_stat_gain)
         tx, ty = best.tap_coords
 
-    # Check if the chosen tile is already the pre-raised one.
-    # If so, tapping it would CONFIRM training immediately — skip the selection tap.
+    # Check if the chosen tile is currently raised (i.e., it was the last tile
+    # tapped during preview). If so, tapping it would CONFIRM training — skip the
+    # selection tap.  Note: the ORIGINAL pre-raised tile is no longer raised after
+    # previewing other tiles, so we check against last_previewed_tile, not pre_raised_tile.
     chosen_tile_name = None
     for t in tiles:
         if t.tap_coords == (tx, ty):
             chosen_tile_name = t.stat_type.value.capitalize()
             break
-    already_raised = (chosen_tile_name and chosen_tile_name == pre_raised_tile)
+    already_raised = (chosen_tile_name and chosen_tile_name == last_previewed_tile)
     if already_raised:
         log(f"  Chosen tile {chosen_tile_name} is already raised — reading failure rate without tapping")
     else:
@@ -2829,7 +2865,7 @@ _INTERMEDIATE_RESULTS = {
     "race_enter", "result_pts", "standings_next", "tap_prompt",
     "cutscene_skip", "tutorial_slide", "goal_complete", "fan_class",
     "unlock_popup", "trophy_won", "race_lineup", "post_race_next",
-    "shop_popup_enter", "unknown", "event_choice", "skill_confirm", "skills_learned_close",
+    "shop_popup_enter", "unknown", "event", "event_choice", "skill_confirm", "skills_learned_close",
     "recovering", "placement_next", "ts_climax_racing", "race_day_racing",
     "ts_climax_standings", "ts_standings_next", "post_career_next",
     "post_career_confirm", "career_finishing", "warning_ok",
@@ -2961,11 +2997,9 @@ def _run_one_turn_inner(stop_before=None):
             return "rest"
 
         # 3. Ensure a megaphone buff is active
-        _shop_manager.tick_effects(_current_turn)
-        has_mega = any(
-            e.item_key in ("empowering_mega", "motivating_mega", "coaching_mega")
-            for e in _shop_manager._active_effects
-        )
+        # Use active_megas computed before energy checks (line ~2926) to avoid
+        # tick_effects expiring the effect due to OCR turn variance in handle_training.
+        has_mega = len(active_megas) > 0
         if not has_mega:
             # Use best available: Empowering (+60%, 2 turns) > Motivating (+40%, 3 turns)
             mega_key = None
