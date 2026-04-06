@@ -67,8 +67,9 @@ skill_priority_list:
   - {name: "Go-Home Specialist", priority: 6}
   - {name: "After-School Stroll", priority: 6}
   - {name: "Levelheaded", priority: 6}
-  # Corner recovery (9)
+  # Corner recovery / positioning (9)
   - {name: "Corner Recovery", priority: 9}
+  - {name: "Tail Held High", priority: 9}
   # Ground condition skills (6)
   - {name: "Firm Conditions", priority: 6}
   - {name: "Wet Conditions", priority: 6}

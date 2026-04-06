@@ -1331,8 +1331,15 @@ def handle_event(img):
         ]
         log(f"  Event choices detected at y={[int(y) for _, y in choice_candidates]}")
     elif len(choice_candidates) == 0:
-        # No choices found — this is likely an event result page (showing stat gain).
-        # Tap center to dismiss it.
+        # No choices found — could be an event result page or a dialogue cutscene.
+        # If Skip/Quick/Log are visible, this is a dialogue — tap dialogue area to advance.
+        has_skip = 'all_text' in dir() and any(
+            "skip" in t.lower() and "off" not in t.lower()
+            for t, c, _ in all_text if c > 0.3)
+        if has_skip:
+            log("  No event choices — dialogue event, tapping dialogue area to advance")
+            tap(540, 1500)
+            return "event"
         log("  No event choices found — tapping to dismiss event result")
         tap(540, 960)
         return "event"
@@ -2195,20 +2202,30 @@ def _use_training_items(item_keys):
     first_page_results = verify_results
 
     used_any = False
+    prev_page_items = None
     for scroll_page in range(4):
         if not use_counts:
             break
         if scroll_page > 0:
-            scroll_down()
-            time.sleep(1.5)
+            # Training Items list needs a big swipe to scroll past rows.
+            # Each item row is ~200px. Use a longer swipe than normal scroll_down.
+            swipe(540, 1400, 540, 500, settle=2.0)
+            time.sleep(1.0)
 
         if scroll_page == 0:
             img = first_page_img
             results = first_page_results
+            prev_page_items = " ".join(sorted(t.strip() for t, c, _ in results if c > 0.5 and len(t.strip()) > 5))
         else:
             img = screenshot(f"use_items_{int(time.time())}")
             img.save("/tmp/use_items.png")
             results = ocr_full("/tmp/use_items.png")
+            # Detect stuck scroll: if OCR text matches previous page, stop
+            page_text = " ".join(sorted(t.strip() for t, c, _ in results if c > 0.5 and len(t.strip()) > 5))
+            if page_text == prev_page_items:
+                log(f"  Page {scroll_page}: same as previous page — scroll not working, stopping")
+                break
+            prev_page_items = page_text
 
         # Find green "+" button positions by scanning for green pixels
         h = img.size[1]
@@ -2232,44 +2249,84 @@ def _use_training_items(item_keys):
 
         log(f"  Page {scroll_page}: {len(plus_positions)} green + buttons at y={plus_positions}")
 
-        # Build ordered list of matching item names on screen
-        items_on_screen = []
+        # Match item names to green + buttons by row order.
+        # OCR bbox y-positions are unreliable after scrolling, but the ORDER
+        # of items in OCR results matches the visual order on screen. Since
+        # green + buttons are also in visual order, the Nth recognized item
+        # name corresponds to the Nth green + button.
+        #
+        # Strategy:
+        # 1. Find ALL item names in OCR (not just wanted ones), sorted by y
+        # 2. Each item with a green + button maps to buttons in order
+        # 3. Items with dimmed buttons (Held = max) have no green button
+        #    and must be skipped in the button index
+        all_item_names = []
         for text, conf, bbox in results:
             if conf < 0.8:
                 continue
             lower = text.strip().lower()
             for keyword, key in keyword_to_key.items():
-                if keyword in lower and key in use_counts:
+                if keyword in lower:
                     bx, by, bw, bh = bbox
                     name_y = (1.0 - by - bh) * h
-                    items_on_screen.append((name_y, key, text.strip()))
+                    all_item_names.append((name_y, key, text.strip()))
                     break
-        items_on_screen.sort(key=lambda x: x[0])
+        all_item_names.sort(key=lambda x: x[0])
+        # Deduplicate items close in y (within 80px)
+        deduped = []
+        for item in all_item_names:
+            if not deduped or abs(item[0] - deduped[-1][0]) > 80:
+                deduped.append(item)
+        all_item_names = deduped
+
+        # Now assign buttons to items. Both lists are in top-to-bottom order.
+        # Each button corresponds to an item that has an active (green) + button.
+        # We walk through items in order and assign the next available button
+        # to items that likely have a green button (i.e., are usable).
+        #
+        # Heuristic: if #items == #buttons, 1:1 mapping. If #items > #buttons,
+        # some items have dimmed buttons — we can't know which without more info,
+        # so we match wanted items to the nearest button by position.
+        items_on_screen = []
+        if len(all_item_names) == len(plus_positions):
+            # Perfect 1:1 mapping
+            for (name_y, key, name), btn_y in zip(all_item_names, plus_positions):
+                if key in use_counts:
+                    items_on_screen.append((btn_y, key, name))
+        else:
+            # Imperfect match — use nearest-button for wanted items only
+            used_btns = set()
+            for name_y, key, name in all_item_names:
+                if key not in use_counts:
+                    continue
+                best_btn = None
+                best_dist = 999
+                for py in plus_positions:
+                    if py in used_btns:
+                        continue
+                    dist = abs(py - name_y)
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_btn = py
+                if best_btn is not None:
+                    used_btns.add(best_btn)
+                    items_on_screen.append((best_btn, key, name))
+
         if items_on_screen:
             log(f"  Page {scroll_page}: matched items: {[(n, k, int(y)) for y, k, n in items_on_screen]}")
         else:
-            # Log all OCR text to help debug
             all_texts = [(t.strip(), round(c, 2)) for t, c, b in results if c > 0.5 and len(t.strip()) > 2]
             log(f"  Page {scroll_page}: no matching items. OCR saw: {all_texts[:15]}")
 
-        # Match each item to the "+" button in its row (below name, within 120px)
-        for name_y, item_key, display_name in items_on_screen:
+        # Each item in items_on_screen has (button_y, key, name).
+        for best_btn, item_key, display_name in items_on_screen:
             if item_key not in use_counts:
-                continue
-            best_btn = None
-            best_dist = 999
-            for py in plus_positions:
-                dist = py - name_y  # + button should be below name
-                if 0 <= dist <= 120 and dist < best_dist:
-                    best_dist = dist
-                    best_btn = py
-            if best_btn is None:
                 continue
             # Tap "+" for this row — once for most items, multiple for stacked items.
             # For items sharing a key across rows (e.g. 4 manuals), tap once per row.
             # For items stacked in one row (e.g. 2x Grilled Carrots), tap all remaining.
             remaining = use_counts[item_key]
-            idx = items_on_screen.index((name_y, item_key, display_name))
+            idx = items_on_screen.index((best_btn, item_key, display_name))
             future_rows = sum(1 for _, k, _ in items_on_screen[idx+1:] if k == item_key)
             taps = max(1, remaining - future_rows)
             log(f"  {display_name}: tapping + {taps}x at (975, {best_btn})")
@@ -2508,7 +2565,12 @@ def handle_training():
             _shop_manager.save_inventory()
             log(f"{phase} — Whistle used, re-entering training")
         else:
-            log(f"{phase} — Failed to use Reset Whistle")
+            log(f"{phase} — Failed to use Reset Whistle, removing from tracked inventory")
+            if _shop_manager._inventory.get("reset_whistle", 0) > 0:
+                _shop_manager._inventory["reset_whistle"] -= 1
+                if _shop_manager._inventory["reset_whistle"] <= 0:
+                    del _shop_manager._inventory["reset_whistle"]
+            _shop_manager.save_inventory()
         return "training_back_to_rest"  # Re-enters training via summer/TS handler
 
     # Summer camp: use stat-matched ankle weights before training
@@ -2532,7 +2594,12 @@ def handle_training():
                 _shop_manager.activate_item(ankle_key)
                 log(f"{phase} — {ankle_key} active, re-entering training")
             else:
-                log(f"{phase} — Failed to use {ankle_key}")
+                log(f"{phase} — Failed to use {ankle_key}, removing from tracked inventory")
+                if _shop_manager._inventory.get(ankle_key, 0) > 0:
+                    _shop_manager._inventory[ankle_key] -= 1
+                    if _shop_manager._inventory[ankle_key] <= 0:
+                        del _shop_manager._inventory[ankle_key]
+                _shop_manager.save_inventory()
             return "training_back_to_rest"  # Re-enters training via summer/TS handler
 
     if action.action_type == ActionType.REST:
@@ -2910,12 +2977,23 @@ def run_one_turn(stop_before=None):
                      end-of-career without opening skill shop).
     """
     global _last_result
+    prev_result = None
+    repeat_count = 0
     for _ in range(50):
         result = _run_one_turn_inner(stop_before=stop_before)
         _last_result = result
         log(f"Result: {result}")
         if result not in _INTERMEDIATE_RESULTS:
             return result
+        # Stuck detection: if same result 15 times in a row, bail out
+        if result == prev_result:
+            repeat_count += 1
+            if repeat_count >= 15:
+                log(f"Stuck loop detected: '{result}' repeated {repeat_count} times — breaking out")
+                return f"stuck_{result}"
+        else:
+            prev_result = result
+            repeat_count = 1
         time.sleep(2.5)
     log("run_one_turn: hit 50 action limit")
     return result
@@ -3045,7 +3123,12 @@ def _run_one_turn_inner(stop_before=None):
                     _shop_manager.save_inventory()
                     _shop_manager.activate_item(mega_key)
                 else:
-                    log(f"SUMMER CAMP — Failed to use {mega_key}")
+                    log(f"SUMMER CAMP — Failed to use {mega_key}, removing from tracked inventory")
+                    if _shop_manager._inventory.get(mega_key, 0) > 0:
+                        _shop_manager._inventory[mega_key] -= 1
+                        if _shop_manager._inventory[mega_key] <= 0:
+                            del _shop_manager._inventory[mega_key]
+                    _shop_manager.save_inventory()
                 time.sleep(1)
                 img = screenshot(f"summer_post_mega_{int(time.time())}")
                 if detect_screen(img) != "career_home_summer":
@@ -3084,7 +3167,8 @@ def _run_one_turn_inner(stop_before=None):
     if screen == "ts_climax_home":
         # TS Climax with Training/Rest buttons visible = training turn
         # Race turns force you into race selection directly
-        _summer_whistle_used = False
+        # Note: _summer_whistle_used is NOT reset here — it resets per career_home turn.
+        # Resetting here caused infinite whistle-retry loops when _use_training_items failed.
 
         # Read inventory on first encounter
         if not _inventory_checked:
@@ -3473,7 +3557,8 @@ def _run_one_turn_inner(stop_before=None):
             return "pre_race"
 
         # Try to find a green button (Next, OK, etc.) before blindly tapping
-        green_btn = find_green_button(img, (1600, 1900))
+        # x starts at 460 to skip the Skip/Quick buttons at x≈300-450
+        green_btn = find_green_button(img, (1600, 1900), x_range=(460, 950))
         if green_btn:
             log(f"Unknown screen — found green button at {green_btn}, tapping")
             tap(green_btn[0], green_btn[1])
