@@ -1996,7 +1996,6 @@ def handle_shop(img):
             else:
                 share = max(1, round(ANKLE_BUDGET * n_cards / total_ankle_cards))
                 ankle_stock_overrides[ankle_key] = share
-        ankle_stock_overrides["wit_ankle_weights"] = 0
         log(f"Deck: {deck} → ankle stock: {ankle_stock_overrides}")
 
     buyable = []
@@ -2190,7 +2189,6 @@ def _use_training_items(item_keys):
         "stamina ankle weights": "stamina_ankle_weights",
         "power ankle weights": "power_ankle_weights",
         "guts ankle weights": "guts_ankle_weights",
-        "wit ankle weights": "wit_ankle_weights",
         "artisan": "artisan_hammer",
         "master": "master_hammer",
         "good-luck": "good_luck_charm",
