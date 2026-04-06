@@ -113,6 +113,7 @@ class RunSpec:
     phase_weights: list[PhaseWeight] = field(default_factory=list)
     policy: PolicyWeights = field(default_factory=PolicyWeights)
     constraints: HardConstraints = field(default_factory=HardConstraints)
+    deck: dict[str, int] = field(default_factory=dict)  # e.g. {"guts": 3, "speed": 1, "wit": 2}
 
     def __post_init__(self) -> None:
         # Ensure all 5 stats have targets
@@ -260,6 +261,7 @@ def load_runspec(name: str, runspecs_dir: str = RUNSPECS_DIR) -> RunSpec:
 
     policy_raw = raw.get("policy", {})
     constraints_raw = raw.get("constraints", {})
+    deck_raw = raw.get("deck", {})
 
     return RunSpec(
         id=raw.get("id", name),
@@ -272,6 +274,7 @@ def load_runspec(name: str, runspecs_dir: str = RUNSPECS_DIR) -> RunSpec:
         phase_weights=phase_weights,
         policy=PolicyWeights(**{k: v for k, v in policy_raw.items() if hasattr(PolicyWeights, k)}),
         constraints=HardConstraints(**{k: v for k, v in constraints_raw.items() if hasattr(HardConstraints, k)}),
+        deck={k: int(v) for k, v in deck_raw.items()},
     )
 
 

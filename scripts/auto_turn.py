@@ -1977,13 +1977,32 @@ def handle_shop(img):
     else:
         tier_overrides["grilled_carrots"] = ItemTier.NEVER
 
+    # Dynamic ankle weight max_stock based on deck composition from runspec.
+    # Stats with more cards get more ankle weight slots for summer camp.
+    # Total budget = 4 (one summer camp's worth of turns).
+    ANKLE_BUDGET = 4
+    ankle_stock_overrides = {}
+    deck = _runspec.deck if _runspec else {}
+    if deck:
+        total_cards = sum(deck.values())
+        for stat in ("speed", "stamina", "power", "guts", "wit"):
+            ankle_key = f"{stat}_ankle_weights"
+            n_cards = deck.get(stat, 0)
+            if n_cards == 0:
+                ankle_stock_overrides[ankle_key] = 0
+            else:
+                share = max(1, round(ANKLE_BUDGET * n_cards / total_cards))
+                ankle_stock_overrides[ankle_key] = share
+        log(f"Deck: {deck} → ankle stock: {ankle_stock_overrides}")
+
     buyable = []
     for key, item in ITEM_CATALOGUE.items():
         tier = tier_overrides.get(key, item.tier)
         if tier == ItemTier.NEVER:
             continue
+        max_stock = ankle_stock_overrides.get(key, item.max_stock)
         owned = inventory.get(key, 0)
-        if owned >= item.max_stock:
+        if owned >= max_stock:
             continue
         buyable.append((tier_order.get(tier, 9), item.cost, key))
     buyable.sort()
@@ -2063,11 +2082,12 @@ def handle_shop(img):
                 y += 150
                 continue
 
-            # Check stock limit
+            # Check stock limit (use dynamic ankle weight limits if available)
             item = ITEM_CATALOGUE[item_key]
+            max_stock = ankle_stock_overrides.get(item_key, item.max_stock)
             owned = inventory.get(item_key, 0)
             already_selected = sum(1 for k in selected_keys if k == item_key)
-            if owned + already_selected >= item.max_stock:
+            if owned + already_selected >= max_stock:
                 y += 150
                 continue
 
