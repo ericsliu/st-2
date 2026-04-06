@@ -1984,15 +1984,19 @@ def handle_shop(img):
     ankle_stock_overrides = {}
     deck = _runspec.deck if _runspec else {}
     if deck:
-        total_cards = sum(deck.values())
-        for stat in ("speed", "stamina", "power", "guts", "wit"):
+        # Wit has no ankle weights in-game; only count stats that have them
+        ANKLE_STATS = ("speed", "stamina", "power", "guts")
+        ankle_cards = {s: deck.get(s, 0) for s in ANKLE_STATS}
+        total_ankle_cards = sum(ankle_cards.values())
+        for stat in ANKLE_STATS:
             ankle_key = f"{stat}_ankle_weights"
-            n_cards = deck.get(stat, 0)
+            n_cards = ankle_cards[stat]
             if n_cards == 0:
                 ankle_stock_overrides[ankle_key] = 0
             else:
-                share = max(1, round(ANKLE_BUDGET * n_cards / total_cards))
+                share = max(1, round(ANKLE_BUDGET * n_cards / total_ankle_cards))
                 ankle_stock_overrides[ankle_key] = share
+        ankle_stock_overrides["wit_ankle_weights"] = 0
         log(f"Deck: {deck} → ankle stock: {ankle_stock_overrides}")
 
     buyable = []

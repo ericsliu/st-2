@@ -116,7 +116,7 @@ ITEM_CATALOGUE: dict[str, ShopItem] = {
     "stamina_ankle_weights": ShopItem("Stamina Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% stamina / +20% energy, 1 turn", save_for="summer_camp"),
     "power_ankle_weights":   ShopItem("Power Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% power / +20% energy, 1 turn", save_for="summer_camp"),
     "guts_ankle_weights":    ShopItem("Guts Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% guts / +20% energy, 1 turn", save_for="summer_camp"),
-    "wit_ankle_weights":     ShopItem("Wit Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% wit / +20% energy, 1 turn", save_for="summer_camp"),
+    "wit_ankle_weights":     ShopItem("Wit Ankle Weights", 50, ItemTier.NEVER, max_stock=0, effect="+50% wit / +20% energy, 1 turn"),
     "training_application": ShopItem("Training Application", 150, ItemTier.NEVER, max_stock=1, effect="Training level +1"),
     "good_luck_charm":      ShopItem("Good-Luck Charm", 40, ItemTier.S, max_stock=2, effect="0% failure, 1 turn", save_for="exceptional_training"),
     "reset_whistle":        ShopItem("Reset Whistle", 20, ItemTier.SS, max_stock=5, effect="Rearrange support cards", save_for="summer_no_rainbow"),
