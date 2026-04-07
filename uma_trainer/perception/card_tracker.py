@@ -10,6 +10,7 @@ Uses cv2.matchTemplate (TM_CCOEFF_NORMED) with threshold 0.70.
 """
 
 import logging
+from pathlib import Path
 
 import numpy as np
 
@@ -18,12 +19,49 @@ logger = logging.getLogger(__name__)
 # Portrait crop regions (1080x1920 training preview screen).
 # Bar y-centers match read_bond_levels in pixel_analysis.py.
 BAR_Y_CENTERS = [424, 604, 784, 964, 1144, 1324]
-PORTRAIT_X1 = 940
-PORTRAIT_X2 = 1060
-PORTRAIT_Y_OFFSET = 130
-PORTRAIT_Y_BOTTOM = 10
+# Portrait circle is centered ~x=965, ~65px above the bond bar.
+# Crop a 130x130 square centered on the circle.
+PORTRAIT_X1 = 900
+PORTRAIT_X2 = 1030
+PORTRAIT_Y_OFFSET = 132
+PORTRAIT_Y_BOTTOM = 4
 
 MATCH_THRESHOLD = 0.70
+NAMED_MATCH_THRESHOLD = 0.90  # High threshold to avoid cross-card false positives
+
+# Named card templates directory (parallel to data/npc_templates/).
+_CARD_TEMPLATE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "card_templates"
+
+
+def _load_named_templates() -> list[tuple[str, np.ndarray, np.ndarray | None]]:
+    """Load named support card portrait templates from data/card_templates/.
+
+    Templates may be RGBA (with alpha channel for background transparency).
+    Returns list of (name, bgr_array, mask_or_None) tuples. Cached after first call.
+    """
+    if hasattr(_load_named_templates, "_cache"):
+        return _load_named_templates._cache
+
+    import cv2
+    templates = []
+    if _CARD_TEMPLATE_DIR.is_dir():
+        for png in sorted(_CARD_TEMPLATE_DIR.glob("*.png")):
+            tmpl = cv2.imread(str(png), cv2.IMREAD_UNCHANGED)
+            if tmpl is None:
+                continue
+            if tmpl.shape[2] == 4:
+                # RGBA — extract alpha as mask, convert to BGR
+                mask = tmpl[:, :, 3]
+                bgr = tmpl[:, :, :3]
+                logger.info("Loaded card template: %s (%s, with alpha mask)", png.stem, bgr.shape[:2])
+            else:
+                bgr = tmpl
+                mask = None
+                logger.info("Loaded card template: %s (%s)", png.stem, bgr.shape[:2])
+            templates.append((png.stem, bgr, mask))
+
+    _load_named_templates._cache = templates
+    return templates
 
 
 class CardTracker:
@@ -81,7 +119,12 @@ class CardTracker:
                 continue
 
             portrait = frame_bgr[y1:y2, x1:x2].copy()
-            card_id = self._match(portrait, cv2)
+
+            # Check named templates first (e.g., team_sirius, riko)
+            card_id = self._match_named(portrait, cv2)
+            if card_id is None:
+                # Fall back to runtime-registered templates
+                card_id = self._match(portrait, cv2)
 
             if card_id is None:
                 card_id = f"card_{self._next_id}"
@@ -98,6 +141,52 @@ class CardTracker:
             card_ids.append(card_id)
 
         return card_ids
+
+    def _match_named(self, portrait: np.ndarray, cv2) -> str | None:
+        """Match a portrait against pre-saved named card templates.
+
+        Templates may have an alpha mask (from RGBA PNGs) that marks which
+        pixels are meaningful. Background pixels (alpha=0) are excluded from
+        matching so that varying background colors don't affect the score.
+        """
+        named = _load_named_templates()
+        if not named:
+            return None
+
+        best_score = 0.0
+        best_name = None
+        ph, pw = portrait.shape[:2]
+
+        for name, tmpl, tmpl_mask in named:
+            th, tw = tmpl.shape[:2]
+            if th != ph or tw != pw:
+                tmpl_resized = cv2.resize(tmpl, (pw, ph))
+                mask_resized = cv2.resize(tmpl_mask, (pw, ph)) if tmpl_mask is not None else None
+            else:
+                tmpl_resized = tmpl
+                mask_resized = tmpl_mask
+
+            if mask_resized is not None:
+                # Apply mask to both: zero out background pixels
+                mask_3ch = cv2.merge([mask_resized, mask_resized, mask_resized])
+                tmpl_fg = cv2.bitwise_and(tmpl_resized, mask_3ch)
+                portrait_fg = cv2.bitwise_and(portrait, mask_3ch)
+                result = cv2.matchTemplate(portrait_fg, tmpl_fg, cv2.TM_CCOEFF_NORMED)
+            else:
+                result = cv2.matchTemplate(portrait, tmpl_resized, cv2.TM_CCOEFF_NORMED)
+
+            score = float(result.max())
+            logger.debug("Named card match '%s': score=%.3f", name, score)
+
+            if score > best_score:
+                best_score = score
+                best_name = name
+
+        if best_score >= NAMED_MATCH_THRESHOLD:
+            logger.info("Matched named card '%s' (score=%.3f)", best_name, best_score)
+            return best_name
+
+        return None
 
     def _match(self, portrait: np.ndarray, cv2) -> str | None:
         """Match a portrait crop against known card templates."""
@@ -142,6 +231,14 @@ class CardTracker:
     def card_count(self) -> int:
         """Number of unique cards registered so far."""
         return len(self._templates)
+
+    def has_friendship(self, card_name: str) -> bool:
+        """True if a named card has reached friendship level (bond >= 80)."""
+        return self._bonds.get(card_name, 0) >= 80
+
+    def is_tracked(self, card_name: str) -> bool:
+        """True if a card with this name has been seen at least once."""
+        return card_name in self._bonds
 
     def summary(self) -> str:
         """Human-readable bond tracking summary."""

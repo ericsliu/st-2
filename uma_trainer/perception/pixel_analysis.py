@@ -402,9 +402,9 @@ def read_bond_levels(frame: np.ndarray) -> list[int]:
     # Bar y-centers for up to 6 support card slots, spaced ~180px apart.
     BAR_Y_CENTERS = [424, 604, 784, 964, 1144, 1324]
 
-    # Portrait region: ~140px above bar center, x=940..1060
-    PORTRAIT_X = (940, 1060)
-    PORTRAIT_Y_OFFSET = 130  # portrait top is this far above bar_y
+    # Portrait region: circle centered ~x=965, ~65px above bar center
+    PORTRAIT_X = (900, 1030)
+    PORTRAIT_Y_OFFSET = 132  # portrait top is this far above bar_y
 
     # Dividers at x=926, 949, 972, 995, 1021 create 5 segments:
     #   Seg1: 915-925, Seg2: 928-948, Seg3: 951-971, Seg4: 974-994, Seg5: 998-1020
@@ -435,7 +435,7 @@ def read_bond_levels(frame: np.ndarray) -> list[int]:
 
         # Check if this portrait is an NPC (Director/Reporter) — skip if so
         portrait_top = bar_y - PORTRAIT_Y_OFFSET
-        portrait_bot = bar_y - 10
+        portrait_bot = bar_y - 4
         portrait_region = (PORTRAIT_X[0], max(0, portrait_top), PORTRAIT_X[1], portrait_bot)
         npc_name = _is_npc_portrait(frame, portrait_region)
         if npc_name:

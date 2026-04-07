@@ -141,3 +141,89 @@ class TestTrainingScorer:
         score_maxed_none = scorer._score_tile(tile_0cards, state_maxed_empty)
         maxed_diff = score_maxed_cards - score_maxed_none
         assert maxed_diff < stacking_diff, "Stacking bonus should be eliminated when all bonds maxed"
+
+
+class TestFriendshipPriorities:
+    """Priority card scoring from playbook friendship policy."""
+
+    def test_priority_card_boosts_tile(self, scorer_config):
+        """Tile with a priority card (low bond) scores higher than one without."""
+        from uma_trainer.types import SupportCard
+
+        scorer = TrainingScorer(scorer_config)
+        scorer.set_friendship_priorities(["team_sirius", "riko"])
+
+        tile_with = TrainingTile(
+            stat_type=StatType.SPEED, support_cards=["team_sirius", "card_1"],
+            position=0, tap_coords=(100, 500),
+        )
+        tile_without = TrainingTile(
+            stat_type=StatType.SPEED, support_cards=["card_2", "card_1"],
+            position=1, tap_coords=(300, 500),
+        )
+
+        state = GameState(
+            energy=80, training_tiles=[tile_with, tile_without],
+            current_turn=10,
+            support_cards=[
+                SupportCard(card_id="team_sirius", bond_level=40),
+                SupportCard(card_id="card_1", bond_level=40),
+                SupportCard(card_id="card_2", bond_level=40),
+            ],
+        )
+        score_with = scorer._score_tile(tile_with, state)
+        score_without = scorer._score_tile(tile_without, state)
+        assert score_with > score_without
+
+    def test_priority_card_no_boost_when_bonded(self, scorer_config):
+        """No extra boost when the priority card is already at friendship."""
+        from uma_trainer.types import SupportCard
+
+        scorer = TrainingScorer(scorer_config)
+        scorer.set_friendship_priorities(["team_sirius"])
+
+        tile = TrainingTile(
+            stat_type=StatType.SPEED, support_cards=["team_sirius"],
+            position=0, tap_coords=(100, 500),
+        )
+
+        state = GameState(
+            energy=80, training_tiles=[tile], current_turn=10,
+            support_cards=[
+                SupportCard(card_id="team_sirius", bond_level=80),
+            ],
+        )
+        score_bonded = scorer._score_tile(tile, state)
+
+        # Same tile but without priorities set
+        scorer2 = TrainingScorer(scorer_config)
+        score_no_prio = scorer2._score_tile(tile, state)
+        assert score_bonded == score_no_prio
+
+    def test_first_priority_gets_bigger_boost(self, scorer_config):
+        """First card in priority list gets a bigger boost than the second."""
+        from uma_trainer.types import SupportCard
+
+        scorer = TrainingScorer(scorer_config)
+        scorer.set_friendship_priorities(["team_sirius", "riko"])
+
+        tile_sirius = TrainingTile(
+            stat_type=StatType.SPEED, support_cards=["team_sirius"],
+            position=0, tap_coords=(100, 500),
+        )
+        tile_riko = TrainingTile(
+            stat_type=StatType.SPEED, support_cards=["riko"],
+            position=1, tap_coords=(300, 500),
+        )
+
+        state = GameState(
+            energy=80, training_tiles=[tile_sirius, tile_riko],
+            current_turn=10,
+            support_cards=[
+                SupportCard(card_id="team_sirius", bond_level=40),
+                SupportCard(card_id="riko", bond_level=40),
+            ],
+        )
+        score_sirius = scorer._score_tile(tile_sirius, state)
+        score_riko = scorer._score_tile(tile_riko, state)
+        assert score_sirius > score_riko

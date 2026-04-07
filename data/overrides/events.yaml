@@ -12,6 +12,11 @@
   choice: 1
   note: "Kitasan Black event chain — choice 2 for better rewards"
 
+# Team Sirius — "A Second Serving of Training" — pick speed (choice 2) unless speed >1000
+- text_contains: "second serving of training"
+  choice: 1
+  note: "Speed run option — best for Sirius speed build"
+
 # === Generic overrides ===
 
 # Tutorial events — always decline the explanation
@@ -19,10 +24,15 @@
   choice: 1
   note: "Tutorial — 'No, thank you.' to dismiss"
 
-- text_contains: "extra workout"
+- text_contains: "extra training"
   choice: 0
-  note: "Always accept if energy is sufficient"
-  energy_min: 40
+  note: "At max energy, pick choice 1 (no energy recovery needed)"
+  energy_min: 95
+
+- text_contains: "extra training"
+  choice: 1
+  note: "Choice 2 — energy recovery option"
+  energy_max: 94
 
 - text_contains: "feeling fired up"
   choice: 0

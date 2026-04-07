@@ -32,6 +32,7 @@ from uma_trainer.types import (
     ScreenState,
     SkillOption,
     StatType,
+    SupportCard,
     TraineeStats,
     TrainingTile,
 )
@@ -76,8 +77,7 @@ _card_tracker = CardTracker()
 # Playbook (optional — None means legacy behavior, no turn schedule)
 from uma_trainer.decision.playbook import load_playbook, PlaybookEngine
 _playbook_engine: PlaybookEngine | None = None
-# To activate, uncomment the next line:
-# _playbook_engine = load_playbook("sirius_riko_v1")
+_playbook_engine = load_playbook("sirius_riko_v1")
 if _playbook_engine:
     _playbook_engine.scorer = _scorer
     _playbook_engine.race_selector = _race_selector
@@ -86,6 +86,8 @@ if _playbook_engine:
         _shop_manager.set_item_priorities(_playbook_engine.playbook.item_priorities)
     if _playbook_engine.playbook.race:
         _race_selector.set_race_policy(_playbook_engine.playbook.race)
+    if _playbook_engine.playbook.friendship and _playbook_engine.playbook.friendship.priority_order:
+        _scorer.set_friendship_priorities(_playbook_engine.playbook.friendship.priority_order)
 
 BTN_RECREATION = (378, 1750)
 
@@ -482,6 +484,12 @@ def build_game_state(img, screen_type: str, energy: int = -1) -> GameState:
         strategy = _overrides.get_strategy()
         aptitudes = strategy.raw.get("trainee_aptitudes", {})
 
+    # Build support card list from card tracker bonds
+    tracked_cards = [
+        SupportCard(card_id=cid, bond_level=_card_tracker.get_bond(cid))
+        for cid in _card_tracker._bonds
+    ]
+
     state = GameState(
         screen=screen_map.get(screen_type, ScreenState.UNKNOWN),
         stats=_current_stats,
@@ -490,6 +498,7 @@ def build_game_state(img, screen_type: str, energy: int = -1) -> GameState:
         skill_pts=_skill_pts,
         scenario="trackblazer",
         trainee_aptitudes=aptitudes,
+        support_cards=tracked_cards,
     )
 
     # Summer camp flag
@@ -823,6 +832,43 @@ def detect_screen(img):
         return "result_pts_popup"
 
     return "unknown"
+
+
+def _detect_tile_hints(frame_bgr) -> dict:
+    """Detect pink ! hint badges on training tile buttons.
+
+    Checks each tile button in TRAINING_TILES for the pink/magenta ! badge
+    that appears at the bottom-right of the tile circle. Returns a dict
+    mapping tile name to bool (has hint).
+
+    Badge color: HSV H=165-178, S>150, V>200 (deep pink, distinct from red
+    stat grade letters). Badge offset: ~(+42, -20) from button center.
+    """
+    import cv2
+    import numpy as np
+    BADGE_DX = 42
+    BADGE_DY = -20
+    BADGE_R = 25
+    LOWER = np.array([165, 150, 200])
+    UPPER = np.array([178, 255, 255])
+    THRESHOLD = 100
+
+    hints = {}
+    for name, (tx, ty) in TRAINING_TILES.items():
+        cx = tx + BADGE_DX
+        cy = ty + BADGE_DY
+        x1 = max(0, cx - BADGE_R)
+        x2 = min(frame_bgr.shape[1], cx + BADGE_R)
+        y1 = max(0, cy - BADGE_R)
+        y2 = min(frame_bgr.shape[0], cy + BADGE_R)
+        roi = frame_bgr[y1:y2, x1:x2]
+        if roi.size == 0:
+            hints[name] = False
+            continue
+        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, LOWER, UPPER)
+        hints[name] = np.count_nonzero(mask) > THRESHOLD
+    return hints
 
 
 def count_portraits(img):
@@ -2524,6 +2570,13 @@ def handle_training():
         else:
             log(f"  Gains visible but can't identify pre-raised tile")
 
+    # Detect hint badges from tile buttons on the initial screenshot
+    import numpy as np
+    from uma_trainer.perception.pixel_analysis import read_bond_levels
+    initial_rgb = np.array(img_initial.convert("RGB"))
+    initial_bgr = initial_rgb[:, :, ::-1].copy()
+    tile_hints = _detect_tile_hints(initial_bgr)
+
     # Build TrainingTile objects from OCR data
     tiles = []
     last_previewed_tile = None
@@ -2549,8 +2602,6 @@ def handle_training():
         n_cards = count_portraits(img)
 
         # Read bond gauge fill levels for each card on this tile
-        import numpy as np
-        from uma_trainer.perception.pixel_analysis import read_bond_levels
         frame_rgb = np.array(img.convert("RGB"))
         frame_bgr = frame_rgb[:, :, ::-1].copy()
         bond_levels = read_bond_levels(frame_bgr)
@@ -2562,6 +2613,9 @@ def handle_training():
         # Identify cards via portrait matching and update bond tracker
         card_ids = _card_tracker.identify_cards(frame_bgr, n_cards, bond_levels)
 
+        # Use pre-detected hint from tile buttons
+        has_hint = tile_hints.get(tile_name, False)
+
         stat_type = StatType(tile_name.lower())
         tile = TrainingTile(
             stat_type=stat_type,
@@ -2569,12 +2623,14 @@ def handle_training():
             stat_gains={k.lower(): v for k, v in gains.items()},
             support_cards=card_ids,
             bond_levels=bond_levels,
+            has_hint=has_hint,
         )
         tiles.append(tile)
 
+        hint_str = " HINT" if has_hint else ""
         bond_str = f" bonds={bond_levels}" if bond_levels else ""
         gains_str = ", ".join(f"{k}+{v}" for k, v in sorted(gains.items()))
-        log(f"  {tile_name}: total={tile.total_stat_gain}, cards={n_cards}{bond_str} ({gains_str})")
+        log(f"  {tile_name}: total={tile.total_stat_gain}, cards={n_cards}{bond_str}{hint_str} ({gains_str})")
 
     # Build GameState and let the scorer decide
     energy = get_energy_level(img)

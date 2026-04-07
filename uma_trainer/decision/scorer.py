@@ -57,6 +57,16 @@ class TrainingScorer:
         self.scenario = scenario
         self.runspec = runspec
         self.shop_manager = shop_manager
+        self._friendship_priorities: list[str] = []
+
+    def set_friendship_priorities(self, card_names: list[str]) -> None:
+        """Set priority card names for bond building (from playbook friendship policy).
+
+        Tiles containing these cards get a scoring boost when their bond is below
+        friendship level. Earlier in the list = higher priority.
+        """
+        self._friendship_priorities = list(card_names)
+        logger.info("Friendship priorities set: %s", card_names)
 
     # ------------------------------------------------------------------
     # Main decision entry points
@@ -372,6 +382,36 @@ class TrainingScorer:
                 bond_score *= 1.5
 
             score += bond_score
+
+        # 6b. Priority card bonus — playbook can specify cards whose friendship
+        #     matters most (e.g., Team Sirius before Riko). In Junior year,
+        #     the #1 priority card is THE deciding factor — stat gains are
+        #     meaningless compared to getting that bond to friendship level.
+        #     Only 3+ support cards on another tile should override this.
+        #     Pre-deadline: +80 for first priority (beats 1 extra generic card's +50).
+        #     Post-deadline: reduced to +15 (bond still matters, but less dominant).
+        if self._friendship_priorities and not self._is_summer_camp(state):
+            turn = state.current_turn
+            for i, pcard in enumerate(self._friendship_priorities):
+                if pcard in tile.support_cards:
+                    bond = self._get_card_bond(pcard, state)
+                    if bond < 80:
+                        if turn < bond_deadline:
+                            # Pre-deadline: #1 priority card is THE deciding factor.
+                            # Below green bond (<60): 150 boost — nothing else matters.
+                            # Green bond (60-79): 80 boost — still dominant.
+                            # #2 priority: half of #1's boost.
+                            if i == 0 and bond < 60:
+                                priority_boost = 150.0
+                            elif i == 0:
+                                priority_boost = 80.0
+                            else:
+                                priority_boost = 40.0 if bond < 60 else 20.0
+                        else:
+                            priority_boost = 15.0 - (i * 5.0)
+                        score += max(priority_boost, 5.0)
+                        if tile.has_hint:
+                            score += 15.0
 
         # 7. Summer camp wit energy recovery bonus.
         #    During summer camp, wit training recovers ~5 energy per use.

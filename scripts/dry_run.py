@@ -84,6 +84,21 @@ def gather_and_decide():
 
     print(f"\n--- Decision trace ---")
 
+    # Playbook check
+    if at._playbook_engine:
+        at._game_state.energy = energy
+        pb_action = at._playbook_engine.decide_turn(at._game_state)
+        sched = at._playbook_engine._get_scheduled_action(at._current_turn)
+        print(f"Playbook schedule: {sched}")
+        print(f"Playbook decision: {pb_action.action_type.value} — {pb_action.reason}")
+        deadline = at._playbook_engine.check_friendship_deadline(at._current_turn)
+        if deadline:
+            print(f"Friendship deadline: {deadline}")
+        rec = at._playbook_engine.rec_tracker
+        if rec and rec.uses_remaining:
+            for name, remaining in rec.uses_remaining.items():
+                print(f"  Recreation '{name}': {remaining} uses left")
+
     # Race selector
     race_action = None
     at._game_state.energy = energy
@@ -179,6 +194,111 @@ def gather_and_decide():
             print(f"-> Bond phase, low energy {energy}% — would REST")
         else:
             print(f"-> Would TRAIN")
+
+    # ── Phase 4: Tile scan (tap Training, preview all tiles, score, then back out) ──
+
+    # Auto-scan when we'd train (or playbook says flex/train)
+    would_train = (
+        (at._playbook_engine and pb_action.action_type.value in ("wait", "train"))
+        or (not at._playbook_engine and energy >= 30)
+    )
+    if not would_train:
+        return
+
+    print("\n--- Scanning training tiles ---")
+    ch.tap(*at.BTN_TRAINING, delay=2.0)
+    img = ch.screenshot("dry_train_entry")
+    train_screen = at.detect_screen(img)
+    if train_screen != "training":
+        print(f"Not on training screen ({train_screen}), aborting scan")
+        return
+
+    import numpy as np
+    from uma_trainer.perception.pixel_analysis import read_bond_levels
+    from uma_trainer.types import StatType, TrainingTile
+
+    tiles = []
+    pre_gains = at._ocr_training_gains(img)
+    pre_raised_tile = None
+    if pre_gains:
+        banner_text = at.ocr_region(img, 0, 280, 540, 350, save_path="/tmp/train_banner.png")
+        for t, c in banner_text:
+            tl = t.strip().lower()
+            for tn in at.TRAINING_TILES:
+                if tn.lower() in tl:
+                    pre_raised_tile = tn
+                    break
+            if pre_raised_tile:
+                break
+        if pre_raised_tile:
+            print(f"  Pre-raised tile: {pre_raised_tile}")
+
+    # Detect hint badges from tile buttons on the initial screenshot
+    initial_rgb = np.array(img.convert("RGB"))
+    initial_bgr = initial_rgb[:, :, ::-1].copy()
+    tile_hints = at._detect_tile_hints(initial_bgr)
+
+    for tile_name, (tx, ty) in at.TRAINING_TILES.items():
+        if tile_name == pre_raised_tile:
+            tile_img = img
+            gains = pre_gains
+        else:
+            ch.tap(tx, ty, delay=1)
+            tile_img = ch.screenshot(f"dry_preview_{tile_name.lower()}")
+            screen_check = at.detect_screen(tile_img)
+            if screen_check != "training":
+                print(f"  {tile_name}: interrupted by {screen_check}")
+                return
+            gains = at._ocr_training_gains(tile_img)
+
+        n_cards = at.count_portraits(tile_img)
+        frame_rgb = np.array(tile_img.convert("RGB"))
+        frame_bgr = frame_rgb[:, :, ::-1].copy()
+        bond_levels = read_bond_levels(frame_bgr)
+        if len(bond_levels) < n_cards:
+            bond_levels.extend([80] * (n_cards - len(bond_levels)))
+        bond_levels = bond_levels[:n_cards]
+
+        card_ids = at._card_tracker.identify_cards(frame_bgr, n_cards, bond_levels)
+        has_hint = tile_hints.get(tile_name, False)
+
+        stat_type = StatType(tile_name.lower())
+        tile = TrainingTile(
+            stat_type=stat_type,
+            tap_coords=(tx, ty),
+            stat_gains={k.lower(): v for k, v in gains.items()},
+            support_cards=card_ids,
+            bond_levels=bond_levels,
+            has_hint=has_hint,
+        )
+        tiles.append(tile)
+
+        hint_str = " HINT" if has_hint else ""
+        gains_str = ", ".join(f"{k}+{v}" for k, v in sorted(gains.items()))
+        cards_str = ", ".join(card_ids) if card_ids else "none"
+        bonds_str = f" bonds={bond_levels}" if bond_levels else ""
+        print(f"  {tile_name}: {gains_str} | cards=[{cards_str}]{bonds_str}{hint_str}")
+
+    # Score tiles
+    state = at.build_game_state(tile_img, "training", energy=energy)
+    state.training_tiles = tiles
+    state.all_bonds_maxed = at._card_tracker.all_bonds_maxed()
+
+    if at._card_tracker.card_count > 0:
+        print(f"\nBond tracker: {at._card_tracker.summary()}")
+
+    scored = at._scorer.score_tiles(state)
+    print(f"\n--- Tile scores (best first) ---")
+    for tile, score in scored:
+        cards_str = ", ".join(tile.support_cards) if tile.support_cards else "none"
+        print(f"  {tile.stat_type.value:8s}: {score:6.1f}  cards=[{cards_str}]  gains={dict(tile.stat_gains)}")
+
+    action = at._scorer.best_action(state)
+    print(f"\n-> Would {action.action_type.value}: {action.reason}")
+
+    # Back out to career home
+    ch.tap(80, 1855, delay=1.5)
+    print("(Backed out to career home)")
 
 
 gather_and_decide()
