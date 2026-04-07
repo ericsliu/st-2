@@ -73,6 +73,13 @@ _event_handler = EventHandler(kb=_kb, local_llm=None, claude_client=None, overri
 from uma_trainer.perception.card_tracker import CardTracker
 _card_tracker = CardTracker()
 
+# Playbook (optional — None means legacy behavior, no turn schedule)
+from uma_trainer.decision.playbook import load_playbook, PlaybookEngine
+_playbook_engine: PlaybookEngine | None = None
+# To activate: _playbook_engine = load_playbook("sirius_riko_v1")
+
+BTN_RECREATION = (378, 1750)
+
 # Persistent state across turns (updated as we learn more)
 _current_turn = 0
 _current_stats = TraineeStats()
@@ -2861,8 +2868,11 @@ def _handle_career_home(img):
                 return "recovering"
 
     # Skill shop — visit if SP exceeds threshold (configurable via strategy.yaml)
+    # Playbook can defer skill buying (e.g., Sirius strategy waits until ~2500 SP)
     sp_threshold = _overrides.get_strategy().raw.get("skill_shop_sp_threshold", 1200)
-    if _skill_pts > sp_threshold and not _skill_shop_done:
+    if _playbook_engine and _playbook_engine.should_defer_skills(_skill_pts, _current_turn):
+        log(f"Playbook: deferring skill shop (SP={_skill_pts}, turn={_current_turn})")
+    elif _skill_pts > sp_threshold and not _skill_shop_done:
         log(f"SP {_skill_pts} > {sp_threshold} — visiting skill shop")
         tap(*BTN_HOME_SKILLS)
         time.sleep(2)
@@ -2898,6 +2908,31 @@ def _handle_career_home(img):
         log("SLACKER detected — going to Infirmary immediately")
         tap(*BTN_INFIRMARY)
         return "rest"  # Infirmary confirm handled same as rest confirm
+
+    # Playbook-driven decision (if active) — consult turn schedule before dynamic logic
+    if _playbook_engine and _last_result != "race_back":
+        pb_action = _playbook_engine.decide_turn(_game_state)
+        if pb_action.action_type == ActionType.GO_OUT:
+            log(f"Playbook: Recreation — {pb_action.reason}")
+            _scenario.on_non_race_action()
+            tap(*BTN_RECREATION)
+            return "recreation"
+        elif pb_action.action_type == ActionType.RACE:
+            log(f"Playbook: Racing — {pb_action.reason}")
+            tap(*BTN_HOME_RACES)
+            return "going_to_races"
+        elif pb_action.action_type == ActionType.REST:
+            log(f"Playbook: Resting — {pb_action.reason}")
+            _scenario.on_non_race_action()
+            tap(*BTN_REST)
+            return "rest"
+        elif pb_action.action_type == ActionType.TRAIN:
+            log(f"Playbook: Training — {pb_action.reason}")
+            _scenario.on_non_race_action()
+            _use_megaphone_if_needed()
+            tap(*BTN_TRAINING)
+            return "going_to_training"
+        # WAIT = fall through to existing dynamic logic
 
     # If we just came back from race_list with no good races, train or rest
     if _last_result == "race_back":
@@ -3406,7 +3441,16 @@ def _run_one_turn_inner(stop_before=None):
         return "race_confirm"
 
     elif screen == "recreation_confirm":
-        log("Recreation confirm detected — tapping Cancel (never waste turns on Recreation)")
+        if _playbook_engine and _playbook_engine.wants_recreation(_current_turn):
+            log("Recreation confirm — confirming (playbook scheduled)")
+            ok = find_green_button(img, (1150, 1350))
+            if ok:
+                tap(ok[0], ok[1])
+            else:
+                tap(730, 1260)
+            _playbook_engine.on_recreation_completed()
+            return "recreation"
+        log("Recreation confirm detected — tapping Cancel (no playbook recreation)")
         tap(270, 1260)
         return "recreation_cancel"
 
