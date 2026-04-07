@@ -35,9 +35,9 @@ schedule:
 
   # --- CLASSIC YEAR (turns 25-48) ---
   25: { action: recreation, note: "Sirius recreation 3 (Early Jan, +32 recovery)" }
-  26: { action: race, note: "Kisaragi Sho" }
-  27: { action: recreation, note: "Riko recreation (Early Feb)" }
-  28: { action: recreation, note: "Recreation (Late Feb)" }
+  26: { action: recreation, note: "Riko recreation (Late Jan)" }
+  27: { action: race, note: "Kisaragi Sho" }
+  28: { action: recreation, note: "Recreation (Late Feb, +0/+20)" }
   29: { action: race, note: "Yayoi Sho" }
   30: { action: race, note: "Spring Stakes" }
   31: { action: race, note: "Satsuki Sho" }
@@ -66,13 +66,13 @@ schedule:
   # Flex pairs: either race + Riko recreation, or train + train
   50: { action: flex, note: "Kyoto Kinen (flex pair with 51)" }
   51: { action: flex, note: "Riko recreation (flex pair with 50)" }
-  52: { action: flex, note: "Flex (flex pair with 53)" }
-  53: { action: flex, note: "Riko recreation (flex pair with 52)" }
-  54: { action: flex, note: "Flex (flex pair with 55-area)" }
-  55: { action: race, note: "Osaka Hai" }
+  52: { action: flex, note: "Riko recreation (flex pair with 53)" }
+  53: { action: flex, note: "Kinko Sho (flex pair with 52)" }
+  54: { action: race, note: "Osaka Hai" }
+  55: { action: race, note: "Tenno Sho Spring" }
   56: { action: recreation, note: "Riko recreation (Late Apr)" }
   57: { action: race, note: "Victoria Mile" }
-  58: { action: flex, note: "Flex (flex pair with 59-area)" }
+  58: { action: flex, note: "SPARE" }
   59: { action: race, note: "Yasuda Kinen" }
   60: { action: race, note: "Takarazuka Kinen" }
   # Senior Summer camp (turns 61-64)
@@ -83,11 +83,12 @@ schedule:
   # Senior post-summer
   65: { action: race, note: "Niigata Kinen" }
   66: { action: recreation, note: "Riko recreation (Late Sep)" }
+  # Flex pair: either All Comers + Riko, or train + train
   67: { action: flex, note: "All Comers (flex pair with 68-area)" }
   68: { action: race, note: "Tenno Sho Autumn" }
   69: { action: race, note: "Queen Elizabeth II Cup" }
   70: { action: race, note: "Japan Cup" }
-  71: { action: flex, note: "Flex (flex pair with 72-area)" }
+  71: { action: flex, note: "SPARE (+30 training)" }
   72: { action: race, note: "Arima Kinen" }
 
 # No schedule_blocks needed — full schedule is explicit above.
