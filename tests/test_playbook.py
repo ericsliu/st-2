@@ -459,3 +459,117 @@ class TestLoadPlaybook:
     def test_load_nonexistent_raises(self):
         with pytest.raises(FileNotFoundError):
             load_playbook("nonexistent_strategy")
+
+
+# ---------------------------------------------------------------------------
+# Recreation source tracking (Phase 4)
+# ---------------------------------------------------------------------------
+
+class TestRecreationSourceTracking:
+    """Smart source selection based on priority and availability gates."""
+
+    def test_best_source_respects_priority(self):
+        policy = RecreationPolicy(
+            enabled=True,
+            sources={
+                "team_sirius": RecreationSource(total=7),
+                "riko": RecreationSource(total=13),
+            },
+        )
+        tracker = RecreationTracker.from_policy(policy)
+        # Priority order is insertion order: team_sirius first
+        assert tracker.best_source(current_turn=10) == "team_sirius"
+
+    def test_best_source_skips_exhausted(self):
+        policy = RecreationPolicy(
+            enabled=True,
+            sources={
+                "team_sirius": RecreationSource(total=7),
+                "riko": RecreationSource(total=13),
+            },
+        )
+        tracker = RecreationTracker.from_policy(policy)
+        tracker.uses_remaining["team_sirius"] = 0
+        assert tracker.best_source(current_turn=10) == "riko"
+
+    def test_best_source_none_when_all_exhausted(self):
+        policy = RecreationPolicy(
+            enabled=True,
+            sources={
+                "team_sirius": RecreationSource(total=7),
+                "riko": RecreationSource(total=13),
+            },
+        )
+        tracker = RecreationTracker.from_policy(policy)
+        tracker.uses_remaining["team_sirius"] = 0
+        tracker.uses_remaining["riko"] = 0
+        assert tracker.best_source(current_turn=50) is None
+
+    def test_is_special_use_on_last_remaining(self):
+        policy = RecreationPolicy(
+            enabled=True,
+            sources={"team_sirius": RecreationSource(total=7, special_index=7)},
+        )
+        tracker = RecreationTracker.from_policy(policy)
+        # Use 6 recreations, leaving 1
+        for _ in range(6):
+            tracker.on_recreation_used("team_sirius")
+        assert tracker.remaining_for("team_sirius") == 1
+        assert tracker.is_special_use("team_sirius") is True
+
+    def test_is_special_use_not_yet(self):
+        policy = RecreationPolicy(
+            enabled=True,
+            sources={"team_sirius": RecreationSource(total=7, special_index=7)},
+        )
+        tracker = RecreationTracker.from_policy(policy)
+        # Still have 5 remaining — not special yet
+        tracker.on_recreation_used("team_sirius")
+        tracker.on_recreation_used("team_sirius")
+        assert tracker.remaining_for("team_sirius") == 5
+        assert tracker.is_special_use("team_sirius") is False
+
+    def test_auto_source_uses_priority_order(self):
+        policy = RecreationPolicy(
+            enabled=True,
+            sources={
+                "team_sirius": RecreationSource(total=3),
+                "riko": RecreationSource(total=5),
+            },
+        )
+        tracker = RecreationTracker.from_policy(policy)
+        # Auto-select should prefer team_sirius
+        tracker.on_recreation_used()
+        assert tracker.remaining_for("team_sirius") == 2
+        assert tracker.remaining_for("riko") == 5
+
+
+class TestPlaybookEngineRecreation:
+    """Engine-level recreation completion tracking."""
+
+    def test_on_recreation_completed_decrements(self):
+        config = PlaybookConfig(
+            recreation=RecreationPolicy(
+                enabled=True,
+                sources={"team_sirius": RecreationSource(total=7)},
+            ),
+        )
+        engine = PlaybookEngine(config)
+        engine.on_recreation_completed(turn=18)
+        assert engine.rec_tracker.remaining_for("team_sirius") == 6
+        assert engine.rec_tracker.total_used == 1
+
+    def test_on_recreation_completed_explicit_source(self):
+        config = PlaybookConfig(
+            recreation=RecreationPolicy(
+                enabled=True,
+                sources={
+                    "team_sirius": RecreationSource(total=7),
+                    "riko": RecreationSource(total=13),
+                },
+            ),
+        )
+        engine = PlaybookEngine(config)
+        engine.on_recreation_completed(source="riko", turn=40)
+        assert engine.rec_tracker.remaining_for("team_sirius") == 7
+        assert engine.rec_tracker.remaining_for("riko") == 12

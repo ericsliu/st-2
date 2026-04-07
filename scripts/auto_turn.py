@@ -81,6 +81,7 @@ _playbook_engine: PlaybookEngine | None = None
 if _playbook_engine:
     _playbook_engine.scorer = _scorer
     _playbook_engine.race_selector = _race_selector
+    _playbook_engine._scenario = _scenario
     if _playbook_engine.playbook.item_priorities:
         _shop_manager.set_item_priorities(_playbook_engine.playbook.item_priorities)
     if _playbook_engine.playbook.race:
@@ -2787,6 +2788,16 @@ def _handle_career_home(img):
         f"Pow={_current_stats.power} Gut={_current_stats.guts} Wit={_current_stats.wit} "
         f"SP={_skill_pts}")
 
+    # Playbook: check friendship deadlines
+    if _playbook_engine:
+        deadline_result = _playbook_engine.check_friendship_deadline(_current_turn)
+        if deadline_result == "restart":
+            log(f"PLAYBOOK: Friendship deadline missed at turn {_current_turn} — restart recommended")
+        elif deadline_result == "warn":
+            log(f"PLAYBOOK WARNING: Friendship deadline missed at turn {_current_turn}")
+        rec_remaining = _playbook_engine.rec_tracker.uses_remaining
+        log(f"Playbook: Recreation remaining={rec_remaining}, total_used={_playbook_engine.rec_tracker.total_used}")
+
     # =====================================================================
     # PHASE 2: Housekeeping (cure, shop, consumables, mood)
     # =====================================================================
@@ -3456,7 +3467,7 @@ def _run_one_turn_inner(stop_before=None):
                 tap(ok[0], ok[1])
             else:
                 tap(730, 1260)
-            _playbook_engine.on_recreation_completed()
+            _playbook_engine.on_recreation_completed(turn=_current_turn)
             return "recreation"
         log("Recreation confirm detected — tapping Cancel (no playbook recreation)")
         tap(270, 1260)

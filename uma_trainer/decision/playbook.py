@@ -149,11 +149,40 @@ class RecreationTracker:
     """Tracks recreation usage across sources at runtime."""
     uses_remaining: dict[str, int] = field(default_factory=dict)
     total_used: int = 0
+    # Source priority order and availability gates (set from policy)
+    _priority_order: list[str] = field(default_factory=list)
+    _availability_gates: dict[str, str | None] = field(default_factory=dict)
+    _special_indices: dict[str, int | None] = field(default_factory=dict)
 
     @classmethod
     def from_policy(cls, policy: RecreationPolicy) -> RecreationTracker:
         remaining = {name: src.total for name, src in policy.sources.items()}
-        return cls(uses_remaining=remaining, total_used=0)
+        priority = list(policy.sources.keys())
+        gates = {name: src.available_after for name, src in policy.sources.items()}
+        specials = {name: src.special_index for name, src in policy.sources.items()}
+        return cls(
+            uses_remaining=remaining,
+            total_used=0,
+            _priority_order=priority,
+            _availability_gates=gates,
+            _special_indices=specials,
+        )
+
+    def best_source(self, current_turn: int, scenario=None) -> str | None:
+        """Pick the best recreation source considering priority and availability.
+
+        Returns the source name, or None if no sources have remaining uses.
+        """
+        for name in self._priority_order:
+            if self.uses_remaining.get(name, 0) <= 0:
+                continue
+            gate = self._availability_gates.get(name)
+            if gate and scenario:
+                gate_turns = scenario.get_event_turns(gate)
+                if gate_turns and current_turn < min(gate_turns):
+                    continue  # Not yet available
+            return name
+        return None
 
     def on_recreation_used(self, source: str | None = None) -> None:
         """Record a recreation use. Decrements from the specified source,
@@ -161,11 +190,34 @@ class RecreationTracker:
         if source and source in self.uses_remaining:
             self.uses_remaining[source] = max(0, self.uses_remaining[source] - 1)
         elif not source:
-            for name in self.uses_remaining:
-                if self.uses_remaining[name] > 0:
+            for name in self._priority_order or self.uses_remaining:
+                if self.uses_remaining.get(name, 0) > 0:
                     self.uses_remaining[name] -= 1
+                    source = name
                     break
         self.total_used += 1
+        logger.info(
+            "Recreation used: source=%s, total=%d, remaining=%s",
+            source or "unknown", self.total_used, self.uses_remaining,
+        )
+
+    def is_special_use(self, source: str) -> bool:
+        """Check if the next use of this source would be the special one."""
+        special_idx = self._special_indices.get(source)
+        if special_idx is None:
+            return False
+        total_for_source = 0
+        # Count how many have been used: original total - remaining
+        # We need the original total, which we can infer
+        # special_index is 1-based (7th use), total_used for this source = original - remaining
+        remaining = self.uses_remaining.get(source, 0)
+        # The next use will be use number (original - remaining + 1)
+        # We don't store original, but we can check: remaining == 1 means
+        # the next use is the last one. For special_index=7 with total=7,
+        # the 7th use happens when remaining==1.
+        if special_idx is not None and remaining == 1:
+            return True
+        return False
 
     @property
     def any_remaining(self) -> bool:
@@ -218,10 +270,12 @@ class PlaybookEngine:
         playbook: PlaybookConfig,
         scorer: TrainingScorer | None = None,
         race_selector: RaceSelector | None = None,
+        scenario=None,
     ) -> None:
         self.playbook = playbook
         self.scorer = scorer
         self.race_selector = race_selector
+        self._scenario = scenario
         self.rec_tracker = RecreationTracker.from_policy(playbook.recreation)
 
     def decide_turn(self, state: GameState) -> BotAction:
@@ -278,12 +332,17 @@ class PlaybookEngine:
             return True
         return False
 
-    def on_recreation_completed(self, source: str | None = None) -> None:
+    def on_recreation_completed(self, source: str | None = None, turn: int = 0) -> None:
         """Call after a recreation is confirmed and completed."""
+        if not source:
+            source = self.rec_tracker.best_source(turn, self._scenario)
+        is_special = source and self.rec_tracker.is_special_use(source)
         self.rec_tracker.on_recreation_used(source)
+        if is_special:
+            logger.info("SPECIAL recreation used from %s! (max energy recovery)", source)
         logger.info(
-            "Recreation used (source=%s). Remaining: %s",
-            source or "auto", self.rec_tracker.uses_remaining,
+            "Recreation completed: source=%s, total=%d, remaining=%s",
+            source or "unknown", self.rec_tracker.total_used, self.rec_tracker.uses_remaining,
         )
 
     def check_friendship_deadline(self, turn: int) -> str | None:
