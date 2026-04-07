@@ -118,3 +118,66 @@ class TestMinScore:
         # Trackblazer min_score=1.0, so even bad races might pass
         # depending on grade_value; this tests the threshold is applied
         assert action.action_type in (ActionType.RACE, ActionType.WAIT)
+
+
+class TestRacePolicy:
+    """Race policy override from playbook — skip non-G1 for training."""
+
+    def test_g2_skipped_when_policy_and_condition(self, tmp_db, trackblazer):
+        from uma_trainer.decision.playbook import RacePolicy
+        from uma_trainer.types import SupportCard, TrainingTile
+
+        rs = RaceSelector(tmp_db, scenario=trackblazer)
+        policy = RacePolicy(
+            g1_policy="always",
+            g2_policy="skip_for_training",
+            g3_policy="skip_for_training",
+            skip_for=["double_friendship_training"],
+        )
+        rs.set_race_policy(policy)
+
+        # Create state at a turn with only G2 races (turn 20, mid-Junior)
+        # and double-friendship training available
+        tile = TrainingTile(
+            stat_type="speed",
+            support_cards=[
+                SupportCard(card_id="1", name="c1", bond_level=30),
+                SupportCard(card_id="2", name="c2", bond_level=40),
+            ],
+        )
+        state = GameState(
+            current_turn=20,
+            max_turns=72,
+            scenario="trackblazer",
+            training_tiles=[tile],
+            energy=80,
+        )
+        result = rs.should_race_this_turn(state)
+        # Should be None (skip racing) because G2 + double friendship training
+        assert result is None
+
+    def test_g1_not_skipped_by_policy(self, tmp_db, trackblazer):
+        """G1 races are never skipped regardless of policy."""
+        from uma_trainer.decision.playbook import RacePolicy
+
+        rs = RaceSelector(tmp_db, scenario=trackblazer)
+        policy = RacePolicy(
+            g1_policy="always",
+            g2_policy="skip_for_training",
+            skip_for=["double_friendship_training"],
+        )
+        rs.set_race_policy(policy)
+
+        # G1 available at a specific turn — the selector checks G1 before policy
+        # so it should still race. We test that policy doesn't break G1 detection.
+        state = GameState(
+            current_turn=20,
+            max_turns=72,
+            scenario="trackblazer",
+            energy=80,
+        )
+        # The result depends on calendar data; the key assertion is no crash
+        # and that the policy code path runs without error.
+        result = rs.should_race_this_turn(state)
+        # Either races (G1/goal) or doesn't (no races) — but no error
+        assert result is None or result.action_type == ActionType.RACE

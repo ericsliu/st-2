@@ -133,6 +133,45 @@ class TestPurchasePriorities:
         assert priorities[0].name == "Grilled Carrots"
 
 
+class TestItemPriorityOverride:
+    def test_override_reorders_items(self):
+        sm = ShopManager()
+        sm.set_item_priorities(["scroll", "manual", "master_hammer"])
+        result = sm.get_purchase_priorities(GameState())
+        names = [item.name for item in result]
+        assert names[0] == "Scroll"
+        assert names[1] == "Manual"
+        assert names[2] == "Master Cleat Hammer"
+
+    def test_override_appends_unlisted_items(self):
+        sm = ShopManager()
+        sm.set_item_priorities(["scroll"])
+        result = sm.get_purchase_priorities(GameState())
+        names = [item.name for item in result]
+        assert names[0] == "Scroll"
+        assert len(names) > 1  # Other items appended
+
+    def test_override_respects_max_stock(self):
+        sm = ShopManager()
+        sm.add_item("master_hammer", 3)  # At max stock
+        sm.set_item_priorities(["master_hammer", "scroll"])
+        result = sm.get_purchase_priorities(GameState())
+        names = [item.name for item in result]
+        assert names[0] == "Scroll"  # Hammer skipped due to max stock
+
+    def test_override_skips_unknown_keys(self):
+        sm = ShopManager()
+        sm.set_item_priorities(["nonexistent_item", "scroll"])
+        result = sm.get_purchase_priorities(GameState())
+        assert result[0].name == "Scroll"
+
+    def test_no_override_uses_default(self):
+        sm = ShopManager()
+        # Without override, default tier-based ordering applies
+        result = sm.get_purchase_priorities(GameState(current_turn=30))
+        assert len(result) > 0
+
+
 class TestActiveEffects:
     def test_activate_item_registers_effect(self):
         sm = ShopManager()

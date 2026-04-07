@@ -50,7 +50,19 @@ class RaceSelector:
         self.scenario = scenario
         self._calendar = _load_race_calendar()
         self._pre_selected: RaceOption | None = None
+        # Playbook race policy override: skip non-G1 races for strong training
+        self._race_policy = None  # Set via set_race_policy()
         logger.info("Race calendar loaded: %d races", len(self._calendar))
+
+    def set_race_policy(self, policy) -> None:
+        """Set a playbook race policy override.
+
+        When set, non-G1/non-goal races may be skipped on flex turns if
+        strong training conditions are met.
+        """
+        self._race_policy = policy
+        logger.info("Race policy override set: g1=%s, g2=%s, g3=%s",
+                     policy.g1_policy, policy.g2_policy, policy.g3_policy)
 
     # ------------------------------------------------------------------
     # Calendar-driven race pre-selection
@@ -275,6 +287,21 @@ class RaceSelector:
                 tier_used=1,
             )
 
+        # Playbook race policy: skip non-G1 races when strong training is available
+        if self._race_policy:
+            from uma_trainer.decision.playbook import CONDITION_EVALUATORS
+            best_grade = self._best_available_grade(state)
+            grade_policy = getattr(self._race_policy, f"{best_grade.lower()}_policy", "default")
+            if grade_policy == "skip_for_training":
+                for cond_name in (self._race_policy.skip_for or []):
+                    evaluator = CONDITION_EVALUATORS.get(cond_name)
+                    if evaluator and evaluator(state):
+                        logger.info(
+                            "Race policy: skipping %s race (condition: %s)",
+                            best_grade, cond_name,
+                        )
+                        return None
+
         # Delegate scenario-specific logic
         if self.scenario:
             return self.scenario.should_race_this_turn(state, races_btn)
@@ -487,6 +514,17 @@ class RaceSelector:
             if not goal.completed and goal.race_name:
                 return goal.race_name
         return None
+
+    def _best_available_grade(self, state: GameState) -> str:
+        """Return the best race grade available this turn (e.g., 'G1', 'G2')."""
+        grade_rank = {"G1": 0, "G2": 1, "G3": 2, "OP": 3, "Pre-OP": 4, "Debut": 5}
+        races = self.get_races_for_turn(state.current_turn, state.max_turns)
+        best = "Pre-OP"
+        for r in races:
+            grade = r.get("grade", "Pre-OP")
+            if grade_rank.get(grade, 99) < grade_rank.get(best, 99):
+                best = grade
+        return best
 
     def _needs_fan_boost(self, state: GameState) -> bool:
         """True if fan count is too low for the next goal."""

@@ -76,7 +76,15 @@ _card_tracker = CardTracker()
 # Playbook (optional — None means legacy behavior, no turn schedule)
 from uma_trainer.decision.playbook import load_playbook, PlaybookEngine
 _playbook_engine: PlaybookEngine | None = None
-# To activate: _playbook_engine = load_playbook("sirius_riko_v1")
+# To activate, uncomment the next line:
+# _playbook_engine = load_playbook("sirius_riko_v1")
+if _playbook_engine:
+    _playbook_engine.scorer = _scorer
+    _playbook_engine.race_selector = _race_selector
+    if _playbook_engine.playbook.item_priorities:
+        _shop_manager.set_item_priorities(_playbook_engine.playbook.item_priorities)
+    if _playbook_engine.playbook.race:
+        _race_selector.set_race_policy(_playbook_engine.playbook.race)
 
 BTN_RECREATION = (378, 1750)
 

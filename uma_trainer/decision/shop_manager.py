@@ -163,6 +163,8 @@ class ShopManager:
         self._active_effects: list[ActiveEffect] = []
         # Last turn effects were ticked (prevents double-tick in same turn)
         self._last_tick_turn: int = -1
+        # Playbook item priority override (ordered list of item keys)
+        self._priority_override: list[str] | None = None
 
     # ------------------------------------------------------------------
     # Inventory persistence
@@ -263,12 +265,25 @@ class ShopManager:
     # Purchase decisions (on shop screen)
     # ------------------------------------------------------------------
 
+    def set_item_priorities(self, ordered_keys: list[str]) -> None:
+        """Override default tier-based ordering with an explicit priority list.
+
+        Items not in the list are appended at the end in their default tier order.
+        Called by PlaybookEngine during initialization.
+        """
+        self._priority_override = ordered_keys
+        logger.info("Item priority override set: %s", ordered_keys[:5])
+
     def get_purchase_priorities(self, state: GameState) -> list[ShopItem]:
         """Return items to buy, ordered by priority.
 
         Call this when on the shop screen. The bot should attempt to buy
         items in this order, stopping when coins run out.
         """
+        # If playbook provides an explicit priority list, use it
+        if self._priority_override:
+            return self._get_override_priorities()
+
         # Base priority from tier
         tier_order = {ItemTier.SS: 0, ItemTier.S: 1, ItemTier.A: 2, ItemTier.B: 3}
         buyable = [
@@ -317,6 +332,30 @@ class ShopManager:
 
         adjusted.sort(key=lambda x: x[1])
         return [item for item, _ in adjusted]
+
+    def _get_override_priorities(self) -> list[ShopItem]:
+        """Return items ordered by the playbook's explicit priority list."""
+        result = []
+        seen = set()
+        for key in self._priority_override:
+            if key in ITEM_CATALOGUE and key not in seen:
+                item = ITEM_CATALOGUE[key]
+                # Still respect max_stock
+                owned = self._inventory.get(key, 0)
+                if item.max_stock and owned >= item.max_stock:
+                    continue
+                result.append(item)
+                seen.add(key)
+        # Append remaining buyable items not in the override list
+        tier_order = {ItemTier.SS: 0, ItemTier.S: 1, ItemTier.A: 2, ItemTier.B: 3}
+        remaining = [
+            (item, tier_order[item.tier])
+            for key, item in ITEM_CATALOGUE.items()
+            if key not in seen and item.tier != ItemTier.NEVER
+        ]
+        remaining.sort(key=lambda x: x[1])
+        result.extend(item for item, _ in remaining)
+        return result
 
     # ------------------------------------------------------------------
     # Inventory tracking
