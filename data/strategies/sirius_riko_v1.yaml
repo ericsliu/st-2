@@ -1,0 +1,97 @@
+# Team Sirius + Riko — SS Rank Strategy
+# Mostly-fixed turn schedule with recreation as primary energy management.
+# ~50 of 78 turns are predetermined; remaining ~28 use dynamic scoring.
+
+id: sirius_riko_v1
+name: "Team Sirius + Riko"
+scenario: trackblazer
+runspec: sirius_speed_v1
+max_turns: 78
+
+# === TURN SCHEDULE (sparse: only fixed turns listed) ===
+# Unlisted turns default to "flex" (dynamic scoring decides).
+# Pre-debut (turns 1-11): flexible — bond building, prioritize Sirius friendship.
+schedule:
+  # Debut race
+  12:
+    action: race
+    note: "Debut race"
+  # Junior post-debut: 2 recreations between races
+  18:
+    action: recreation
+    note: "Sirius recreation 1 (Sep)"
+  20:
+    action: recreation
+    note: "Sirius recreation 2 (early Nov)"
+
+# === REPEATING PATTERN (Classic Feb onwards) ===
+# recreation -> 3 races -> recreation -> 2 races -> 2 recreations (repeat)
+schedule_blocks:
+  - start_turn: 28
+    end_turn: 35
+    pattern: [recreation, race, race, race, recreation, race, race, recreation]
+    repeat: false
+    flex_overrides:
+      race: [double_friendship_training]
+
+  # Post-summer: mostly racing with recreation breaks
+  - start_turn: 40
+    end_turn: 71
+    pattern: [race, race, race, recreation, race, race, recreation]
+    repeat: true
+    flex_overrides:
+      race: [double_friendship_training]
+
+# === RECREATION POLICY ===
+recreation:
+  enabled: true
+  sources:
+    team_sirius:
+      total: 7
+      special_index: 7
+    riko:
+      total: 13
+      available_after: summer_camp_1
+  energy_recovery: true
+  mood_recovery: true
+
+# === RACE POLICY ===
+race:
+  g1_policy: always
+  g2_policy: skip_for_training
+  g3_policy: skip_for_training
+  skip_for:
+    - double_friendship_training
+  rival_speed_target: 3000
+
+# === SKILL POLICY ===
+skills:
+  defer_until_sp: 2500
+  defer_until_turn: 70
+
+# === FRIENDSHIP POLICY ===
+friendship:
+  priority_order: [team_sirius, riko]
+  deadlines:
+    team_sirius:
+      by_turn: 18
+      on_miss: restart
+    riko:
+      by_turn: 36
+      on_miss: warn
+
+# === ITEM PRIORITIES (highest first) ===
+item_priorities:
+  - heart
+  - mirror
+  - grilled_carrots
+  - master_hammer
+  - scroll
+  - manual
+  - empowering_mega
+  - ankle_speed
+  - ankle_power
+  - vita_65
+  - vita_40
+  - motivating_mega
+  - vita_20

@@ -1,0 +1,74 @@
+# Team Sirius + Riko — Speed/Power Build
+# Speed primary (need 3000+ for rival races), power secondary.
+# Rest bonus >50% from deck means less training needed.
+
+id: sirius_speed_v1
+name: "Sirius Speed"
+run_type: parent_builder
+description: "Speed/power build for Team Sirius recreation strategy. High speed for rival races."
+distance_target: medium
+style_target: leader
+
+stat_targets:
+  speed:
+    minimum: 800
+    target: 1200
+    excellent: 1500
+    values: [1.4, 1.0, 0.8, 0.5]
+  stamina:
+    minimum: 300
+    target: 500
+    excellent: 700
+    cap: 700
+    values: [0.8, 0.5, 0.2, 0.1]
+  power:
+    minimum: 600
+    target: 1000
+    excellent: 1200
+    values: [1.2, 0.9, 0.7, 0.4]
+  guts:
+    minimum: 300
+    target: 500
+    excellent: 700
+    cap: 700
+    values: [0.8, 0.5, 0.2, 0.1]
+  wit:
+    minimum: 300
+    target: 500
+    excellent: 700
+    values: [0.9, 0.7, 0.5, 0.2]
+
+phase_weights:
+  - condition: early_game
+    weights:
+      speed: 1.4
+      stamina: 0.6
+      power: 1.0
+      guts: 0.6
+      wit: 1.0
+  - condition: late_game
+    weights:
+      speed: 2.0
+      stamina: 0.4
+      power: 1.2
+      guts: 0.4
+      wit: 0.3
+
+policy:
+  bond_future_value: 1.0
+  skill_point_value: 0.2
+  race_progress_value: 0.8
+  failure_risk_penalty: 1.4
+  energy_preservation: 0.6
+  overshoot_penalty: 0.7
+
+deck:
+  speed: 1
+  power: 4
+  wit: 1
+
+constraints:
+  must_complete_goal_races: true
+  max_failure_rate: 0.12
+  min_energy_for_training: 50
+  rest_energy_threshold: 25
