@@ -52,6 +52,7 @@ class RaceSelector:
         self._pre_selected: RaceOption | None = None
         # Playbook race policy override: skip non-G1 races for strong training
         self._race_policy = None  # Set via set_race_policy()
+        self._target_race_name: str | None = None  # Set per-turn by playbook
         logger.info("Race calendar loaded: %d races", len(self._calendar))
 
     def set_race_policy(self, policy) -> None:
@@ -194,12 +195,54 @@ class RaceSelector:
         """Pick the best race from the available race list.
 
         Called when the game is on the RACE_ENTRY screen.
+        If _target_race_name is set (by playbook), force-select that race
+        via fuzzy name matching. Otherwise fall back to scoring.
         """
         if not state.available_races:
             logger.info("Race list empty — going back")
             return BotAction(
                 action_type=ActionType.WAIT,
                 reason="No races available",
+            )
+
+        # Playbook target race: fuzzy-match by name and force-select
+        if self._target_race_name:
+            target = self._target_race_name.lower()
+            self._target_race_name = None  # Clear after use
+            best_match = None
+            best_ratio = 0.0
+            for race in state.available_races:
+                # Simple substring + token matching
+                race_lower = race.name.lower()
+                if target in race_lower or race_lower in target:
+                    best_match = race
+                    best_ratio = 1.0
+                    break
+                # Token overlap ratio
+                target_tokens = set(target.split())
+                race_tokens = set(race_lower.split())
+                overlap = len(target_tokens & race_tokens)
+                ratio = overlap / max(len(target_tokens), 1)
+                if ratio > best_ratio:
+                    best_ratio = ratio
+                    best_match = race
+            if best_match and best_ratio >= 0.4:
+                logger.info(
+                    "Race: playbook target '%s' matched '%s' (ratio=%.2f)",
+                    target, best_match.name, best_ratio,
+                )
+                if self.scenario:
+                    self.scenario.on_race_completed()
+                return BotAction(
+                    action_type=ActionType.RACE,
+                    target=best_match.name,
+                    tap_coords=best_match.tap_coords,
+                    reason=f"Playbook: {best_match.name} ({best_match.grade})",
+                    tier_used=1,
+                )
+            logger.warning(
+                "Race: playbook target '%s' not found in available races: %s",
+                target, [r.name for r in state.available_races],
             )
 
         scored = self.score_races(state)

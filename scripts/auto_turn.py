@@ -97,6 +97,7 @@ _current_stats = TraineeStats()
 _skill_pts = 0
 _cached_aptitudes = None  # Read once from Full Stats screen, then reused
 _active_conditions = []   # Negative conditions detected this session
+_positive_statuses = []   # Positive statuses (charming, practice perfect, etc.)
 _game_state = None        # Last built GameState, reused across screens
 _summer_whistle_used = False  # Reset each turn; prevents double-whistling
 _ts_climax_retries = 0        # Retry counter for TS Climax races (max 3)
@@ -251,7 +252,7 @@ def read_fullstats():
     Runs every turn to keep state in sync with the game.
     Returns dict of aptitudes or None on failure.
     """
-    global _cached_aptitudes, _active_conditions
+    global _cached_aptitudes, _active_conditions, _positive_statuses
 
     log("Reading Full Stats...")
     tap(990, 1160, delay=2.0)
@@ -278,12 +279,18 @@ def read_fullstats():
             conditions.append(condition_name)
     _active_conditions = conditions
 
+    # Detect positive statuses
+    POSITIVE_KEYWORDS = ["charming", "practice perfect", "hot topic"]
+    _positive_statuses = [s for s in POSITIVE_KEYWORDS if s in all_text]
+
     if aptitudes:
         log(f"Aptitudes: {aptitudes}")
     if conditions:
         log(f"Active conditions: {conditions}")
     else:
         log("No negative conditions")
+    if _positive_statuses:
+        log(f"Positive statuses: {_positive_statuses}")
 
     # Tap Close button (bottom center of Full Stats screen)
     tap(540, 1800, delay=1.5)
@@ -2001,7 +2008,14 @@ def read_inventory_from_training_items():
 
     _inventory_checked = True
 
-    # Use any use-immediately items (carrots, scrolls, manuals) sitting in inventory
+    # Use any use-immediately items (scrolls, manuals) sitting in inventory.
+    # Carrots: only use now if Team Sirius bond < 60 or turn >= 36.
+    if "grilled_carrots" in use_now:
+        sirius_bond = _card_tracker.get_bond("team_sirius") if _card_tracker.is_tracked("team_sirius") else -1
+        if sirius_bond >= 60 and _current_turn < 36:
+            log(f"Saving carrots for summer camp (Sirius bond={sirius_bond}%, turn={_current_turn})")
+            del use_now["grilled_carrots"]
+
     if use_now:
         log(f"Use-immediately items found: {use_now}")
         use_keys = []
@@ -2079,6 +2093,10 @@ def handle_shop(img):
         max_stock = ankle_stock_overrides.get(key, item.max_stock)
         owned = inventory.get(key, 0)
         if owned >= max_stock:
+            continue
+        # Skip mirror if Charming status is already active
+        if key == "charming" and "charming" in _positive_statuses:
+            log("Skipping Pretty Mirror — already have Charming status")
             continue
         buyable.append((tier_order.get(tier, 9), item.cost, key))
     buyable.sort()
@@ -2208,8 +2226,14 @@ def handle_shop(img):
     else:
         log("No items selected for purchase")
 
-    # Track which use-immediately items were bought
+    # Track which use-immediately items were bought (except carrots being saved)
     use_now_keys = [k for k in selected_keys if ITEM_CATALOGUE[k].use_immediately]
+    if "grilled_carrots" in use_now_keys:
+        sirius_bond = _card_tracker.get_bond("team_sirius") if _card_tracker.is_tracked("team_sirius") else -1
+        if sirius_bond >= 60 and _current_turn < 36:
+            log(f"Saving purchased carrots for summer camp")
+            use_now_keys = [k for k in use_now_keys if k != "grilled_carrots"]
+            _shop_manager.add_item("grilled_carrots")
 
     # Exit shop
     for attempt in range(3):
@@ -2901,9 +2925,24 @@ def _handle_career_home(img):
             return "recovering"
         energy = get_energy_level(img)
 
-    # Use consumables (manuals, scrolls, grilled carrots)
+    # Use consumables (manuals, scrolls, and conditionally carrots)
+    # Carrots: use immediately if Team Sirius bond < 60 or unknown.
+    # Otherwise save for Classic summer camp (turn 36+) to maximize mirror/Charming chance.
+    use_carrots = False
+    carrot_count = _shop_manager.inventory.get("grilled_carrots", 0)
+    if carrot_count > 0:
+        sirius_bond = _card_tracker.get_bond("team_sirius") if _card_tracker.is_tracked("team_sirius") else -1
+        if sirius_bond < 60:
+            use_carrots = True
+        elif _current_turn >= 36:
+            use_carrots = True
+        else:
+            log(f"Saving carrots for summer camp (Sirius bond={sirius_bond}%, turn={_current_turn})")
+
     use_now_inv = {k: v for k, v in _shop_manager.inventory.items()
-                   if k in ("manual", "scroll", "grilled_carrots") and v > 0}
+                   if k in ("manual", "scroll") and v > 0}
+    if use_carrots and carrot_count > 0:
+        use_now_inv["grilled_carrots"] = carrot_count
     if use_now_inv:
         log(f"Using consumables from inventory: {use_now_inv}")
         use_keys = []
@@ -2994,6 +3033,11 @@ def _handle_career_home(img):
             return "recreation"
         elif pb_action.action_type == ActionType.RACE:
             log(f"Playbook: Racing — {pb_action.reason}")
+            # Pass target race name to selector for forced matching
+            scheduled = _playbook_engine._get_scheduled_action(_current_turn)
+            if scheduled and scheduled.note:
+                _race_selector._target_race_name = scheduled.note
+                log(f"  Target race: {scheduled.note}")
             tap(*BTN_HOME_RACES)
             return "going_to_races"
         elif pb_action.action_type == ActionType.REST:

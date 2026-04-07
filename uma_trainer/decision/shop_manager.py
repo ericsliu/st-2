@@ -138,7 +138,7 @@ ITEM_CATALOGUE: dict[str, ShopItem] = {
     "cat_food":             ShopItem("Cat Food", 10, ItemTier.NEVER, effect="Director bond +5"),
     "practice_perfect":     ShopItem("Tips for Efficient Training", 150, ItemTier.B, max_stock=1, effect="Grants Practice Perfect"),
     "hot_topic":            ShopItem("Reporter's Binoculars", 150, ItemTier.NEVER, effect="Grants Hot Topic"),
-    "charming":             ShopItem("Pretty Mirror", 150, ItemTier.NEVER, effect="Grants Charming"),
+    "charming":             ShopItem("Pretty Mirror", 150, ItemTier.NEVER, max_stock=1, effect="Grants Charming"),
     "scholar_hat":          ShopItem("Scholar's Hat", 280, ItemTier.NEVER, effect="10% skill cost reduction"),
 }
 

@@ -69,7 +69,7 @@
   },
   {
     "race_id": "tenno_sho_spring",
-    "name": "Tenno Sho (Spring)",
+    "name": "Tenno Sho Spring",
     "grade": "G1",
     "distance": 3200,
     "surface": "turf",
@@ -137,7 +137,7 @@
   },
   {
     "race_id": "tokyo_yushun",
-    "name": "Tokyo Yushun (Derby)",
+    "name": "Tokyo Yushun (Japanese Derby)",
     "grade": "G1",
     "distance": 2400,
     "surface": "turf",
@@ -225,7 +225,7 @@
   },
   {
     "race_id": "kikka_sho",
-    "name": "Kikka Sho",
+    "name": "Kikuka Sho",
     "grade": "G1",
     "distance": 3000,
     "surface": "turf",
@@ -242,7 +242,7 @@
   },
   {
     "race_id": "tenno_sho_autumn",
-    "name": "Tenno Sho (Autumn)",
+    "name": "Tenno Sho Autumn",
     "grade": "G1",
     "distance": 2000,
     "surface": "turf",
@@ -260,7 +260,7 @@
   },
   {
     "race_id": "elizabeth_queen_cup",
-    "name": "Elizabeth Queen Cup",
+    "name": "Queen Elizabeth II Cup",
     "grade": "G1",
     "distance": 2200,
     "surface": "turf",
@@ -394,7 +394,7 @@
     "category": "mile",
     "month": 12,
     "half": "early",
-    "fan_reward": 10500,
+    "fan_reward": 7000,
     "years": [
       1
     ]
@@ -411,7 +411,7 @@
     "category": "mile",
     "month": 12,
     "half": "early",
-    "fan_reward": 10500,
+    "fan_reward": 6500,
     "years": [
       1
     ]
@@ -889,7 +889,7 @@
   },
   {
     "race_id": "daily_hai_nisai_stakes",
-    "name": "Daily Hai Nisai Stakes",
+    "name": "Daily Hai Junior Stakes",
     "grade": "G2",
     "distance": 1600,
     "surface": "turf",
@@ -906,7 +906,7 @@
   },
   {
     "race_id": "keio_hai_nisai_stakes",
-    "name": "Keio Hai Nisai Stakes",
+    "name": "Keio Hai Junior Stakes",
     "grade": "G2",
     "distance": 1400,
     "surface": "turf",
@@ -1407,7 +1407,7 @@
   },
   {
     "race_id": "sapporo_nisai_stakes",
-    "name": "Sapporo Nisai Stakes",
+    "name": "Sapporo Junior Stakes",
     "grade": "G3",
     "distance": 1800,
     "surface": "turf",
@@ -1442,7 +1442,7 @@
   },
   {
     "race_id": "niigata_nisai_stakes",
-    "name": "Niigata Nisai Stakes",
+    "name": "Niigata Junior Stakes",
     "grade": "G3",
     "distance": 1600,
     "surface": "turf",
@@ -1459,7 +1459,7 @@
   },
   {
     "race_id": "kokura_nisai_stakes",
-    "name": "Kokura Nisai Stakes",
+    "name": "Kokura Junior Stakes",
     "grade": "G3",
     "distance": 1200,
     "surface": "turf",
@@ -1528,7 +1528,7 @@
   },
   {
     "race_id": "kyoto_nisai_stakes",
-    "name": "Kyoto Nisai Stakes",
+    "name": "Kyoto Junior Futurity Stakes",
     "grade": "G3",
     "distance": 2000,
     "surface": "turf",
@@ -1905,7 +1905,7 @@
   },
   {
     "race_id": "hakodate_nisai_stakes",
-    "name": "Hakodate Nisai Stakes",
+    "name": "Hakodate Junior Stakes",
     "grade": "G3",
     "distance": 1200,
     "surface": "turf",
@@ -1922,7 +1922,7 @@
   },
   {
     "race_id": "tokyo_sports_hai_nisai_stakes",
-    "name": "Tokyo Sports Hai Nisai Stakes",
+    "name": "Tokyo Sports Hai Junior Stakes",
     "grade": "G2",
     "distance": 1800,
     "surface": "turf",

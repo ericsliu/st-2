@@ -17,6 +17,11 @@
   choice: 1
   note: "Speed run option — best for Sirius speed build"
 
+# Riko Kashimoto — "Unexpected Side" — pick choice 2
+- text_contains: "unexpected side"
+  choice: 1
+  note: "Riko event — choice 2 required"
+
 # === Generic overrides ===
 
 # Tutorial events — always decline the explanation
