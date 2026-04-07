@@ -660,6 +660,10 @@ def detect_screen(img):
     if has("Cancel") and has("Race") and has("Enter race"):
         return "race_confirm"
 
+    # Recreation selection screen: "Recreation" header + "Friendship Gauge" + Cancel, no OK
+    if has("Recreation") and has("Friendship Gauge") and has("Cancel") and not has("OK"):
+        return "recreation_select"
+
     # Popup screens (checked first — they overlay other screens)
     if has("Cancel") and has("OK"):
         if has("Rest") and has("recover energy"):
@@ -876,6 +880,52 @@ def _detect_tile_hints(frame_bgr) -> dict:
         mask = cv2.inRange(hsv, LOWER, UPPER)
         hints[name] = np.count_nonzero(mask) > THRESHOLD
     return hints
+
+
+# Map playbook source keys to OCR-matchable strings on the recreation screen
+_RECREATION_SOURCE_NAMES = {
+    "team_sirius": ["team sirius", "sirius"],
+    "riko": ["riko kashimoto", "riko"],
+}
+
+
+def _get_recreation_source() -> str:
+    """Get the playbook's desired recreation source for this turn.
+
+    Checks the schedule note for explicit source, falls back to best_source().
+    Returns the source key (e.g. 'team_sirius', 'riko').
+    """
+    if _playbook_engine:
+        scheduled = _playbook_engine._get_scheduled_action(_current_turn)
+        if scheduled and scheduled.note:
+            note_lower = scheduled.note.lower()
+            if "sirius" in note_lower:
+                return "team_sirius"
+            if "riko" in note_lower:
+                return "riko"
+        return _playbook_engine.rec_tracker.best_source(
+            _current_turn, _playbook_engine._scenario
+        ) or "team_sirius"
+    return "team_sirius"
+
+
+def _find_recreation_card(img, source_key: str) -> int | None:
+    """Find the y coordinate of a recreation card on the selection screen.
+
+    OCRs the screen and looks for the card name matching source_key.
+    Returns the y coordinate to tap, or None if not found.
+    """
+    results = ocr_full_screen(img)
+    match_names = _RECREATION_SOURCE_NAMES.get(source_key, [source_key])
+
+    for text, conf, y_pos in results:
+        if conf < 0.3:
+            continue
+        text_lower = text.strip().lower()
+        for name in match_names:
+            if name in text_lower:
+                return int(y_pos)
+    return None
 
 
 def count_portraits(img):
@@ -3235,9 +3285,9 @@ _INTERMEDIATE_RESULTS = {
     "recovering", "placement_next", "ts_climax_racing", "race_day_racing",
     "ts_climax_standings", "ts_standings_next", "post_career_next",
     "post_career_confirm", "career_finishing", "warning_ok",
-    "recreation_cancel", "rest_confirm", "race_back", "training_back_to_rest",
-    "race_live_skip", "career_home_summer", "photo_save_cancel",
-    "race_photo_skip",
+    "recreation_cancel", "recreation_select", "rest_confirm", "race_back",
+    "training_back_to_rest", "race_live_skip", "career_home_summer",
+    "photo_save_cancel", "race_photo_skip",
 }
 
 def run_one_turn(stop_before=None):
@@ -3558,6 +3608,25 @@ def _run_one_turn_inner(stop_before=None):
         else:
             tap(730, 1360)
         return "race_confirm"
+
+    elif screen == "recreation_select":
+        # Recreation card selection screen — pick the right card based on playbook
+        if _playbook_engine and _playbook_engine.wants_recreation(_current_turn):
+            source = _get_recreation_source()
+            log(f"Recreation select — looking for '{source}'")
+            tap_y = _find_recreation_card(img, source)
+            if tap_y:
+                log(f"  Found at y={tap_y}, tapping")
+                tap(540, tap_y)
+                return "recreation_select"  # Will loop back to detect recreation_confirm
+            else:
+                log(f"  WARNING: Could not find '{source}' on recreation screen — tapping first card")
+                tap(540, 820)
+                return "recreation_select"
+        else:
+            log("Recreation select — no playbook recreation, cancelling")
+            tap(540, 1450)
+            return "recreation_cancel"
 
     elif screen == "recreation_confirm":
         if _playbook_engine and _playbook_engine.wants_recreation(_current_turn):
