@@ -314,7 +314,13 @@ class RaceSelector:
         score = 0.0
         strategy = self._get_race_strategy()
 
-        # 0. After Junior Year, only enter Graded races (G1/G2/G3) or goal races
+        # 0a. Never enter dirt races — not worth it even with B aptitude
+        if race.surface == "dirt":
+            if not race.is_goal_race:
+                logger.info("Race '%s' blocked: dirt races banned", race.name)
+                return 0.0
+
+        # 0b. After Junior Year, only enter Graded races (G1/G2/G3) or goal races
         if state.current_turn > 24 and race.grade in ("OP", "Pre-OP", "Debut", ""):
             if not race.is_goal_race:
                 logger.info(

@@ -25,7 +25,24 @@
   },
   "pre_race": {
     "view_results": {"x": 380, "y": 1730, "note": "White button, x=260-500 at y=1730"},
-    "race": {"x": 690, "y": 1730, "note": "Green button, x=560-830 at y=1730"}
+    "race": {"x": 690, "y": 1730, "note": "Green button, x=560-830 at y=1730"},
+    "strategy_change": {"x": 720, "y": 1103, "note": "Green Change button in Strategy section"},
+    "strategy_circles": {
+      "_note": "Circle centers on pre-race screen. Selected circle has white interior (RGB>240). Sample at y=1005 (top of circle, avoids number text).",
+      "end": {"x": 723, "y": 1005},
+      "late": {"x": 813, "y": 1005},
+      "pace": {"x": 903, "y": 1005},
+      "front": {"x": 993, "y": 1005}
+    }
+  },
+  "strategy_popup": {
+    "_note": "Strategy selection popup. Buttons y=1142-1188 center=1165. Cancel/Confirm y=1355-1395 center=1375",
+    "end": {"x": 198, "y": 1165, "note": "x=136-260"},
+    "late": {"x": 425, "y": 1165, "note": "x=362-488"},
+    "pace": {"x": 652, "y": 1165, "note": "x=588-717"},
+    "front": {"x": 880, "y": 1165, "note": "x=814-946"},
+    "cancel": {"x": 304, "y": 1375, "note": "x=237-371"},
+    "confirm": {"x": 777, "y": 1375, "note": "x=700-854"}
   },
   "post_race": {
     "tap_overlay": {"x": 540, "y": 960, "note": "Tap anywhere"},

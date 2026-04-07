@@ -44,6 +44,7 @@ _last_result = None
 # Last race placement (1=win, 99=unknown)
 _last_race_placement = 99
 _last_race_was_g1 = False
+_last_race_distance = 0  # metres, set when race is selected
 
 # --- uma_trainer component initialization ---
 _overrides = OverridesLoader("data/overrides")
@@ -195,7 +196,7 @@ def _parse_aptitudes_from_image(img):
                 best = None
                 best_dist = 999
                 for grade, gx, gy in single_letters:
-                    if gx > lx and abs(gy - ly) < 0.1 and (gx - lx) < 0.15:
+                    if gx > lx and abs(gy - ly) < 0.04 and (gx - lx) < 0.15:
                         # Combined distance so y-proximity breaks x-ties
                         dist = (gx - lx) + abs(gy - ly)
                         if dist < best_dist:
@@ -639,6 +640,8 @@ def detect_screen(img):
             return "concert_confirm"
         if has("Recreation") or has("fun outing"):
             return "recreation_confirm"
+        if has("Photo Album") or has("Save image"):
+            return "photo_save_popup"
         return "warning_popup"
 
     # Insufficient Result Pts warning — has Cancel + Race buttons
@@ -744,6 +747,10 @@ def detect_screen(img):
     # Trophy won popup
     if has("TROPHY") and has("Close"):
         return "trophy_won"
+
+    # Race photo screen (post-race photo editor with Save/filters)
+    if has("Save") and (has("Original") or has("Monochrome") or has("Sepia") or has("Photo Album")):
+        return "race_photo"
 
     # Race lineup screen (Race! button to start race animation)
     if has("Race!") and has("Fav") and not has("Race List"):
@@ -1117,6 +1124,7 @@ def _use_megaphone_if_needed(is_ts_climax=False):
 
 def handle_race_list(img):
     """Handle race list screen using RaceSelector."""
+    global _last_race_distance
     races = _ocr_race_list(img)
     if not races:
         log("No races detected on list — pressing Back")
@@ -1130,6 +1138,7 @@ def handle_race_list(img):
     if is_race_day:
         real_races = [r for r in races if r.distance > 0]
         pick = real_races[0] if real_races else races[-1]
+        _last_race_distance = pick.distance
         log(f"Race Day — selecting '{pick.name}' at {pick.tap_coords}")
         tap(pick.tap_coords[0], pick.tap_coords[1], delay=1.5)
         img2 = screenshot(f"race_confirm_{int(time.time())}")
@@ -1152,6 +1161,8 @@ def handle_race_list(img):
     log(f"RaceSelector: {action.reason}")
 
     if action.action_type == ActionType.RACE and action.tap_coords != (0, 0):
+        selected = [r for r in races if r.name == action.target]
+        _last_race_distance = selected[0].distance if selected else 0
         is_g1 = "(G1," in action.reason or "G1" in action.reason
         if is_g1:
             # Back out to career home to use cleat hammer, then re-enter races
@@ -1992,7 +2003,7 @@ def handle_shop(img):
             ankle_key = f"{stat}_ankle_weights"
             n_cards = ankle_cards[stat]
             if n_cards == 0:
-                ankle_stock_overrides[ankle_key] = 0
+                ankle_stock_overrides[ankle_key] = 1
             else:
                 share = max(1, round(ANKLE_BUDGET * n_cards / total_ankle_cards))
                 ankle_stock_overrides[ankle_key] = share
@@ -2977,6 +2988,90 @@ def _handle_career_home(img):
     return "going_to_training"
 
 
+def _desired_strategy(turn=None, distance=None):
+    """Determine desired running strategy based on turn and race distance.
+
+    Rules:
+    - Junior Year (turns 1-24): Pace Chaser
+    - Mile races (<=1800m) at any point: Pace Chaser
+    - Medium+ races (>1800m) from Classic Year onward: End Closer
+
+    Args:
+        turn: current turn (1-72). Defaults to global _current_turn.
+        distance: race distance in metres. Defaults to global _last_race_distance.
+    """
+    turn = turn if turn is not None else (_current_turn or 0)
+    dist = distance if distance is not None else (_last_race_distance or 0)
+    is_junior = turn <= 24
+    is_mile_or_shorter = 0 < dist <= 1800
+
+    if is_junior or is_mile_or_shorter:
+        return "pace"
+    return "end"
+
+
+def _detect_current_strategy(img):
+    """Detect the currently selected strategy from the pre-race screen.
+
+    The selected strategy circle has a near-white interior (~255,255,255)
+    while unselected ones are gray (~149,155,157).  Sample pixel at the
+    center-bottom of each circle (y≈1020) and check brightness.
+
+    Returns one of "end", "late", "pace", "front", or None if detection fails.
+    """
+    import numpy as np
+    arr = np.array(img)
+    # Circle x-centers (from OCR) and sample y at top of circle (avoids number text)
+    CIRCLES = {"end": 723, "late": 813, "pace": 903, "front": 993}
+    SAMPLE_Y = 1005
+
+    for name, cx in CIRCLES.items():
+        # Sample a small 5x5 box at top of circle interior
+        region = arr[SAMPLE_Y - 2:SAMPLE_Y + 3, cx - 2:cx + 3]
+        avg = region.mean(axis=(0, 1))
+        if min(avg[0], avg[1], avg[2]) > 240:
+            return name
+    return None
+
+
+def _set_race_strategy(img):
+    """Check and change running strategy on the pre-race screen if needed."""
+    desired = _desired_strategy()
+    current = _detect_current_strategy(img)
+    log(f"Race strategy: desired={desired}, current={current}, turn={_current_turn}, dist={_last_race_distance}m")
+
+    if current == desired:
+        log(f"Strategy already {desired} — no change needed")
+        return
+
+    if current is None:
+        log("Could not detect current strategy — opening Change dialog")
+
+    # Tap Change button in Strategy section
+    tap(720, 1103, delay=1.5)
+    img2 = screenshot("strategy_popup")
+
+    # Verify popup opened (should have "Cancel" and "Confirm")
+    popup_text = " ".join(t for t, c, _ in ocr_full_screen(img2) if c > 0.3).lower()
+    if "confirm" not in popup_text and "cancel" not in popup_text:
+        log("Strategy popup did not open — skipping strategy change")
+        return
+
+    # Strategy buttons in popup: End, Late, Pace, Front (left to right)
+    # Button y range: 1142-1188, center ~1165
+    STRATEGY_X = {"end": 198, "late": 425, "pace": 652, "front": 880}
+    STRATEGY_Y = 1165
+
+    target_x = STRATEGY_X.get(desired, 652)
+    log(f"Selecting {desired} strategy at ({target_x}, {STRATEGY_Y})")
+    tap(target_x, STRATEGY_Y, delay=0.5)
+
+    # Tap Confirm (y range: 1355-1395, center ~1375)
+    tap(777, 1375)
+    time.sleep(1)
+    log(f"Strategy set to {desired}")
+
+
 _INTERMEDIATE_RESULTS = {
     "going_to_races", "going_to_training", "race_confirm", "pre_race",
     "race_enter", "result_pts", "standings_next", "tap_prompt",
@@ -2987,7 +3082,8 @@ _INTERMEDIATE_RESULTS = {
     "ts_climax_standings", "ts_standings_next", "post_career_next",
     "post_career_confirm", "career_finishing", "warning_ok",
     "recreation_cancel", "rest_confirm", "race_back", "training_back_to_rest",
-    "race_live_skip",
+    "race_live_skip", "career_home_summer", "photo_save_cancel",
+    "race_photo_skip",
 }
 
 def run_one_turn(stop_before=None):
@@ -3266,6 +3362,22 @@ def _run_one_turn_inner(stop_before=None):
             tap(760, 1250)
         return "insufficient_pts_race"
 
+    elif screen == "race_photo":
+        log("Race photo screen — pressing Back to skip")
+        press_back()
+        # Confirm "Return to previous screen?" dialog
+        ok = find_green_button(screenshot("race_photo_confirm"), (1400, 1600))
+        if ok:
+            tap(ok[0], ok[1])
+        else:
+            tap(810, 1480)
+        return "race_photo_skip"
+
+    elif screen == "photo_save_popup":
+        log("Photo save popup — tapping Cancel (storage full or unwanted)")
+        tap(270, 1480)
+        return "photo_save_cancel"
+
     elif screen == "warning_popup":
         # If we just came from race flow, this is a race energy warning
         if _last_result in ("going_to_races", "race_enter"):
@@ -3321,6 +3433,9 @@ def _run_one_turn_inner(stop_before=None):
         return "rest_confirm"
 
     elif screen == "pre_race":
+        # --- Running strategy selection ---
+        _set_race_strategy(img)
+
         # Check if View Results is locked (gray button = RGB ~150,145,153)
         # vs unlocked (white/bright button). Sample the button center.
         vr_r, vr_g, vr_b = px(img, 300, 1790)
@@ -3580,7 +3695,8 @@ def _run_one_turn_inner(stop_before=None):
 
         # Try to find a green button (Next, OK, etc.) before blindly tapping
         # x starts at 460 to skip the Skip/Quick buttons at x≈300-450
-        green_btn = find_green_button(img, (1600, 1900), x_range=(460, 950))
+        # y capped at 1800 to avoid Skip/Quick/Log buttons at y≈1870
+        green_btn = find_green_button(img, (1600, 1800))
         if green_btn:
             log(f"Unknown screen — found green button at {green_btn}, tapping")
             tap(green_btn[0], green_btn[1])
