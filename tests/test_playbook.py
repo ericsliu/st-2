@@ -428,14 +428,16 @@ class TestLoadPlaybook:
         assert pb.id == "sirius_riko_v1"
         assert pb.scenario == "trackblazer"
         assert pb.runspec == "sirius_speed_v1"
-        assert pb.max_turns == 78
+        assert pb.max_turns == 72
 
-        # Check explicit schedule
+        # Check explicit schedule — should have most turns mapped
         assert 18 in pb.schedule
         assert pb.schedule[18].action == "recreation"
-
-        # Check schedule blocks exist
-        assert len(pb.schedule_blocks) >= 2
+        assert pb.schedule[16].action == "race"
+        assert pb.schedule[37].action == "train"
+        assert pb.schedule[72].action == "race"
+        # Count: should have ~60 explicit entries (turns 13-72)
+        assert len(pb.schedule) >= 55
 
         # Check recreation policy
         assert pb.recreation.enabled is True
@@ -453,8 +455,10 @@ class TestLoadPlaybook:
         assert pb.friendship.priority_order == ["team_sirius", "riko"]
         assert pb.friendship.deadlines["team_sirius"].on_miss == "restart"
 
-        # Check item priorities
-        assert pb.item_priorities[0] == "heart"
+        # Check item priorities — Scholar's Hat is first
+        assert pb.item_priorities[0] == "scholar_hat"
+        assert "charming" in pb.item_priorities
+        assert "master_hammer" in pb.item_priorities
 
     def test_load_nonexistent_raises(self):
         with pytest.raises(FileNotFoundError):

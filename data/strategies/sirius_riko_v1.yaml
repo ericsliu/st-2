@@ -1,46 +1,96 @@
 # Team Sirius + Riko — SS Rank Strategy
-# Mostly-fixed turn schedule with recreation as primary energy management.
-# ~50 of 78 turns are predetermined; remaining ~28 use dynamic scoring.
+# Precise turn-by-turn schedule decoded from video guide.
+# Character portraits = recreation, race cards = fixed races,
+# SPARE = flex/training turn. Most turns are fixed.
 
 id: sirius_riko_v1
 name: "Team Sirius + Riko"
 scenario: trackblazer
 runspec: sirius_speed_v1
-max_turns: 78
+max_turns: 72
 
-# === TURN SCHEDULE (sparse: only fixed turns listed) ===
-# Unlisted turns default to "flex" (dynamic scoring decides).
-# Pre-debut (turns 1-11): flexible — bond building, prioritize Sirius friendship.
+# === COMPLETE TURN SCHEDULE ===
+# Turn mapping: 1=Jr Early Jan ... 24=Jr Late Dec,
+#   25=Cl Early Jan ... 48=Cl Late Dec, 49=Sr Early Jan ... 72=Sr Late Dec
+#
+# Action types: race, recreation, train, rest, flex
+# "flex" = dynamic scoring decides (bond building, training, etc.)
 schedule:
-  # Debut race
-  12:
-    action: race
-    note: "Debut race"
-  # Junior post-debut: 2 recreations between races
-  18:
-    action: recreation
-    note: "Sirius recreation 1 (Sep)"
-  20:
-    action: recreation
-    note: "Sirius recreation 2 (early Nov)"
+  # --- JUNIOR YEAR (turns 1-24) ---
+  # Pre-debut (turns 1-12): flex — bond building, prioritize Sirius friendship
+  # Summer camp (turns 13-15): training
+  13: { action: train, note: "Summer camp" }
+  14: { action: train, note: "Summer camp" }
+  15: { action: train, note: "Summer camp" }
+  # Post-summer Junior
+  16: { action: race, note: "Niigata Junior Stakes" }
+  17: { action: race, note: "Sapporo Junior Stakes" }
+  18: { action: recreation, note: "Sirius recreation 1 (Late Sep, no energy recovery)" }
+  19: { action: race, note: "Saudi Arabia Royal Cup" }
+  20: { action: race, note: "Artemis Stakes" }
+  21: { action: recreation, note: "Sirius recreation 2 (Early Nov)" }
+  22: { action: race, note: "Kyoto Junior Futurity Stakes" }
+  23: { action: race, note: "Asahi Hai Futurity Stakes" }
+  24: { action: race, note: "Hopeful Stakes" }
 
-# === REPEATING PATTERN (Classic Feb onwards) ===
-# recreation -> 3 races -> recreation -> 2 races -> 2 recreations (repeat)
-schedule_blocks:
-  - start_turn: 28
-    end_turn: 35
-    pattern: [recreation, race, race, race, recreation, race, race, recreation]
-    repeat: false
-    flex_overrides:
-      race: [double_friendship_training]
+  # --- CLASSIC YEAR (turns 25-48) ---
+  25: { action: recreation, note: "Sirius recreation 3 (Early Jan, +32 recovery)" }
+  26: { action: race, note: "Kisaragi Sho" }
+  27: { action: recreation, note: "Riko recreation (Early Feb)" }
+  28: { action: recreation, note: "Recreation (Late Feb)" }
+  29: { action: race, note: "Yayoi Sho" }
+  30: { action: race, note: "Spring Stakes" }
+  31: { action: race, note: "Satsuki Sho" }
+  32: { action: recreation, note: "Recreation (Late Apr, +13 mood up)" }
+  33: { action: race, note: "NHK Mile Cup" }
+  34: { action: race, note: "Tokyo Yashun / Japanese Derby" }
+  35: { action: flex, note: "Training if strong (+52 shown), otherwise flex" }
+  36: { action: flex, note: "Training if strong (+26 shown), otherwise flex" }
+  # Classic Summer camp (turns 37-40)
+  37: { action: train, note: "Summer camp (use megaphone + ankle)" }
+  38: { action: train, note: "Summer camp" }
+  39: { action: train, note: "Summer camp" }
+  40: { action: train, note: "Summer camp" }
+  # Classic post-summer
+  41: { action: race, note: "Niigata Kinen" }
+  42: { action: recreation, note: "Recreation (Late Sep)" }
+  43: { action: race, note: "All Comers (or alternative)" }
+  44: { action: race, note: "Kikuka Sho" }
+  45: { action: race, note: "Queen Elizabeth II Cup" }
+  46: { action: race, note: "Mile Championship" }
+  47: { action: recreation, note: "Recreation (Early Dec)" }
+  48: { action: race, note: "Arima Kinen" }
 
-  # Post-summer: mostly racing with recreation breaks
-  - start_turn: 40
-    end_turn: 71
-    pattern: [race, race, race, recreation, race, race, recreation]
-    repeat: true
-    flex_overrides:
-      race: [double_friendship_training]
+  # --- SENIOR YEAR (turns 49-72) ---
+  49: { action: race, note: "American JC" }
+  50: { action: race, note: "Kyoto Kinen (or alternative)" }
+  51: { action: flex, note: "Flex (Early Feb)" }
+  52: { action: flex, note: "Flex (Late Feb)" }
+  53: { action: recreation, note: "Recreation (Early Mar)" }
+  54: { action: flex, note: "Flex (Late Mar)" }
+  55: { action: race, note: "Osaka Hai / Tenno Sho Spring" }
+  56: { action: recreation, note: "Recreation (Late Apr)" }
+  57: { action: race, note: "Victoria Mile" }
+  58: { action: flex, note: "SPARE" }
+  59: { action: race, note: "Yasuda Kinen" }
+  60: { action: race, note: "Takarazuka Kinen" }
+  # Senior Summer camp (turns 61-64)
+  61: { action: train, note: "Summer camp" }
+  62: { action: train, note: "Summer camp" }
+  63: { action: train, note: "Summer camp" }
+  64: { action: train, note: "Summer camp" }
+  # Senior post-summer
+  65: { action: race, note: "Niigata Kinen" }
+  66: { action: recreation, note: "Recreation (Late Sep)" }
+  67: { action: flex, note: "SPARE (or All Comers)" }
+  68: { action: race, note: "Tenno Sho Autumn" }
+  69: { action: race, note: "Queen Elizabeth II Cup" }
+  70: { action: race, note: "Japan Cup" }
+  71: { action: flex, note: "SPARE (+30 training)" }
+  72: { action: race, note: "Arima Kinen" }
+
+# No schedule_blocks needed — full schedule is explicit above.
+schedule_blocks: []
 
 # === RECREATION POLICY ===
 recreation:
@@ -81,17 +131,44 @@ friendship:
       on_miss: warn
 
 # === ITEM PRIORITIES (highest first) ===
+# From video: Scholar's Hat and Charming (Pretty Mirror) are top priority.
+# Training Application and Coaching Megaphone are IGNORE.
+# Artisan Hammer is included (unlike standard Trackblazer).
 item_priorities:
-  - heart
-  - mirror
+  # Tier 1: stat items that work without training
+  - scholar_hat
+  - charming
   - grilled_carrots
+  # Tier 2: race boosters
   - master_hammer
-  - scroll
+  - artisan_hammer
+  # Tier 3: stat-specific training boosters
+  - speed_ankle_weights
+  - power_ankle_weights
+  - stamina_ankle_weights
+  - guts_ankle_weights
+  # Tier 4: direct stat items
   - manual
+  - scroll
+  # Tier 5: mood/condition
+  - plain_cupcake
+  - berry_cupcake
+  # Tier 6: training boosts (2T megaphone > 3T)
   - empowering_mega
-  - ankle_speed
-  - ankle_power
+  - good_luck_charm
+  - reset_whistle
+  # Tier 7: energy recovery (lower priority — recreations handle most)
   - vita_65
   - vita_40
-  - motivating_mega
+  - royal_kale
   - vita_20
+  # Tier 8: motivating mega last of the buyables
+  - motivating_mega
+  # Condition cures (buy if condition appears)
+  - rich_hand_cream
+  - miracle_cure
+  - practice_dvd
+  - pocket_planner
+  - smart_scale
+  - aroma_diffuser
+  - fluffy_pillow
