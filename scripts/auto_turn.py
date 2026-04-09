@@ -102,6 +102,7 @@ _game_state = None        # Last built GameState, reused across screens
 _summer_whistle_used = False  # Reset each turn; prevents double-whistling
 _ts_climax_retries = 0        # Retry counter for TS Climax races (max 3)
 _prev_stats = None                # Previous turn's stats for suspicious jump detection
+_sirius_bond_unlocked = False     # Set True when "We're All Shining Stars" detected in game log
 
 # Map negative conditions to their cure items in the shop catalogue
 CONDITION_CURES = {
@@ -125,6 +126,7 @@ BTN_TRAINING_ITEMS = (827, 1130)
 BTN_TRAINING_ITEMS_RACE = (827, 1260)  # Training Items on race screens (ts_climax_race, required_race)
 BTN_ITEMS_CONFIRM = (779, 1772)  # "Confirm Use" / "Use Training Items" right button
 BTN_ITEMS_CLOSE = (303, 1772)    # "Close" left button
+BTN_LOG = (810, 1870)            # Log button on career_home bottom bar
 
 
 def log(msg):
@@ -175,6 +177,7 @@ def _parse_aptitudes_from_image(img):
     label_map = {
         "turf": "turf", "dirt": "dirt",
         "sprint": "short", "mile": "mile", "medium": "medium", "long": "long",
+        "front": "front", "end": "end", "pace": "pace", "late": "late",
     }
     aptitudes = {}
     w, h = img.size
@@ -243,6 +246,12 @@ def _parse_aptitudes_from_image(img):
         dist_crop.save("/tmp/aptitude_dist.png")
         _extract_from_results(ocr_image("/tmp/aptitude_dist.png"))
 
+    # Pass 4: Style row crop (y=720-780) for front/end/pace/late aptitudes
+    if not all(k in aptitudes for k in ("front", "end", "pace", "late")):
+        style_crop = img.crop((0, 720, w, 780))
+        style_crop.save("/tmp/aptitude_style.png")
+        _extract_from_results(ocr_image("/tmp/aptitude_style.png"))
+
     return aptitudes
 
 
@@ -272,16 +281,42 @@ def read_fullstats():
     if len(aptitudes) >= 4:
         _cached_aptitudes = aptitudes
 
-    # Read conditions (y=950-1250 area on Full Stats)
+    # Read conditions using header bar colors to distinguish:
+    #   Blue bar (R<100, B>150) = negative condition (Night Owl, Slacker, etc.)
+    #   Orange bar (R>200, G:100-200, B<100) = positive buff (Charming, Pure Passion, etc.)
+    # This avoids false positives from skill descriptions mentioning condition names.
+    import numpy as np
+    arr = np.array(img)
+    raw_entries = [(t.strip().lower(), c, y) for t, c, y in ocr_full_screen(img) if c > 0.3]
+    neg_texts = []
+    pos_texts = []
+    for text, conf, y_pos in raw_entries:
+        if y_pos < 930:
+            continue
+        # Sample bar color at this text's Y position, center of screen
+        py = min(int(y_pos), arr.shape[0] - 1)
+        r, g, b = int(arr[py, 540, 0]), int(arr[py, 540, 1]), int(arr[py, 540, 2])
+        if b > 150 and b > r + 30 and b > g:
+            neg_texts.append(text)
+        elif r > 200 and 80 < g < 200 and b < 120:
+            pos_texts.append(text)
+    neg_text = " ".join(neg_texts)
+    pos_text = " ".join(pos_texts)
     conditions = []
     for condition_name in CONDITION_CURES:
-        if condition_name in all_text:
+        if condition_name in neg_text:
             conditions.append(condition_name)
     _active_conditions = conditions
 
-    # Detect positive statuses
-    POSITIVE_KEYWORDS = ["charming", "practice perfect", "hot topic"]
-    _positive_statuses = [s for s in POSITIVE_KEYWORDS if s in all_text]
+    # Detect positive statuses from orange-bar entries
+    POSITIVE_KEYWORDS = ["charming", "practice perfect", "hot topic", "pure passion"]
+    _positive_statuses = [s for s in POSITIVE_KEYWORDS if s in pos_text]
+
+    # Pure Passion = Team Sirius bond event already fired
+    if "pure passion" in _positive_statuses and not _sirius_bond_unlocked:
+        _sirius_bond_unlocked = True
+        log("Pure Passion detected — Sirius bond unlocked (from Full Stats)")
+        _scorer.mark_bond_complete("team_sirius")
 
     if aptitudes:
         log(f"Aptitudes: {aptitudes}")
@@ -660,6 +695,10 @@ def detect_screen(img):
     if has("Cancel") and has("Race") and has("Enter race"):
         return "race_confirm"
 
+    # Recreation member selection screen: "Choose Recreation Partner" + Cancel, no Friendship Gauge
+    if has("Choose Recreation Partner") or (has("Choose") and has("Recreation Partner")):
+        return "recreation_member_select"
+
     # Recreation selection screen: "Recreation" header + "Friendship Gauge" + Cancel, no OK
     if has("Recreation") and has("Friendship Gauge") and has("Cancel") and not has("OK"):
         return "recreation_select"
@@ -928,6 +967,69 @@ def _find_recreation_card(img, source_key: str) -> int | None:
     return None
 
 
+def _get_recreation_member() -> str:
+    """Get the specific Sirius member name for this turn's recreation.
+
+    Extracts from schedule note format: "Sirius: Member Name (details)"
+    Returns member name string, or "" if not found.
+    """
+    if _playbook_engine:
+        scheduled = _playbook_engine._get_scheduled_action(_current_turn)
+        if scheduled and scheduled.note:
+            note = scheduled.note
+            # Format: "Sirius: Member Name (details)"
+            if "sirius:" in note.lower():
+                after_colon = note.split(":", 1)[1].strip()
+                # Take everything before the parenthetical
+                member = after_colon.split("(")[0].strip()
+                return member
+    return ""  # Empty = tap first available
+
+
+def _find_member_on_screen(img, member_name: str) -> int | None:
+    """Find the y coordinate of a member on the Choose Recreation Partner screen.
+
+    Skips entries with 'Event Completed' nearby.
+    Returns the y coordinate to tap, or None if not found.
+    """
+    if not member_name:
+        return None
+    results = ocr_full_screen(img)
+    target = member_name.lower()
+
+    # Build a set of y positions that have "Event Completed" label
+    completed_ys = set()
+    for text, conf, y in results:
+        if "completed" in text.strip().lower() or "event completed" in text.strip().lower():
+            completed_ys.add(int(y))
+
+    def is_completed(y_pos: int) -> bool:
+        """Check if a y position is near an Event Completed label."""
+        for cy in completed_ys:
+            if abs(y_pos - cy) < 60:
+                return True
+        return False
+
+    # Exact match
+    for text, conf, y in results:
+        if conf < 0.3:
+            continue
+        if target in text.strip().lower() or text.strip().lower() in target:
+            if not is_completed(int(y)):
+                return int(y)
+
+    # Partial match (first word)
+    first_word = target.split()[0] if target.split() else ""
+    if first_word:
+        for text, conf, y in results:
+            if conf < 0.3:
+                continue
+            if first_word in text.strip().lower():
+                if not is_completed(int(y)):
+                    return int(y)
+    return None
+
+
 def count_portraits(img):
     """Count support card portraits on a training preview screenshot.
 
@@ -1112,6 +1214,41 @@ def _use_cleat_for_race(is_ts_climax=False):
                 del _shop_manager._inventory[cleat_key]
         _shop_manager.save_inventory()
         time.sleep(1)
+
+
+def _read_game_log():
+    """Tap Log button on career_home, OCR the log screen, close it.
+
+    Looks for key phrases like Sirius bond unlock event.
+    Returns the full OCR text from the log screen.
+    """
+    global _sirius_bond_unlocked
+    from scripts.ocr_util import ocr_image as ocr_full
+    import tempfile, os
+
+    tap(BTN_LOG[0], BTN_LOG[1], delay=1.5)
+
+    log_img = screenshot(f"game_log_{int(time.time())}")
+    tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+    log_img.save(tmp.name)
+    results = ocr_full(tmp.name)
+    os.unlink(tmp.name)
+
+    full_text = " ".join(t.strip() for t, c, _ in results if c > 0.25)
+    log(f"Game log OCR ({len(full_text)} chars): {full_text[:200]}")
+
+    # Check for Sirius bond unlock event
+    if not _sirius_bond_unlocked and "shining stars" in full_text.lower():
+        _sirius_bond_unlocked = True
+        log("Sirius bond event detected — bond unlocked!")
+        _scorer.set_bond_override("team_sirius", 60)
+        _scorer.mark_bond_complete("team_sirius")
+
+    # Close the log — press back
+    press_back()
+    time.sleep(1.0)
+
+    return full_text
 
 
 def _detect_active_effects():
@@ -2062,8 +2199,9 @@ def read_inventory_from_training_items():
     # Carrots: only use now if Team Sirius bond < 60 or turn >= 36.
     if "grilled_carrots" in use_now:
         sirius_bond = _card_tracker.get_bond("team_sirius") if _card_tracker.is_tracked("team_sirius") else -1
-        if sirius_bond >= 60 and _current_turn < 36:
-            log(f"Saving carrots for summer camp (Sirius bond={sirius_bond}%, turn={_current_turn})")
+        bond_met = sirius_bond >= 60 or _sirius_bond_unlocked
+        if bond_met and _current_turn < 36:
+            log(f"Saving carrots for summer camp (Sirius bond={sirius_bond}%, unlocked={_sirius_bond_unlocked}, turn={_current_turn})")
             del use_now["grilled_carrots"]
 
     if use_now:
@@ -2280,7 +2418,8 @@ def handle_shop(img):
     use_now_keys = [k for k in selected_keys if ITEM_CATALOGUE[k].use_immediately]
     if "grilled_carrots" in use_now_keys:
         sirius_bond = _card_tracker.get_bond("team_sirius") if _card_tracker.is_tracked("team_sirius") else -1
-        if sirius_bond >= 60 and _current_turn < 36:
+        bond_met = sirius_bond >= 60 or _sirius_bond_unlocked
+        if bond_met and _current_turn < 36:
             log(f"Saving purchased carrots for summer camp")
             use_now_keys = [k for k in use_now_keys if k != "grilled_carrots"]
             _shop_manager.add_item("grilled_carrots")
@@ -2886,6 +3025,11 @@ def _handle_career_home(img):
     is_pre_debut = _current_turn < 12  # Pre-Debut: no shop, no inventory, no effects
 
     if not is_pre_debut:
+        _read_game_log()
+        img = _wait_for_career_home("post_log")
+        if img is None:
+            return "recovering"
+
         _detect_active_effects()
         img = _wait_for_career_home("post_effects")
         if img is None:
@@ -2918,9 +3062,10 @@ def _handle_career_home(img):
         f"Pow={_current_stats.power} Gut={_current_stats.guts} Wit={_current_stats.wit} "
         f"SP={_skill_pts}")
 
-    # Playbook: check friendship deadlines
+    # Playbook: check friendship deadlines (skip team_sirius if bond event already fired)
     if _playbook_engine:
-        deadline_result = _playbook_engine.check_friendship_deadline(_current_turn)
+        skip_cards = {"team_sirius"} if _sirius_bond_unlocked else set()
+        deadline_result = _playbook_engine.check_friendship_deadline(_current_turn, skip_cards=skip_cards)
         if deadline_result == "restart":
             log(f"PLAYBOOK: Friendship deadline missed at turn {_current_turn} — restart recommended")
         elif deadline_result == "warn":
@@ -2982,7 +3127,8 @@ def _handle_career_home(img):
     carrot_count = _shop_manager.inventory.get("grilled_carrots", 0)
     if carrot_count > 0:
         sirius_bond = _card_tracker.get_bond("team_sirius") if _card_tracker.is_tracked("team_sirius") else -1
-        if sirius_bond < 60:
+        bond_met = sirius_bond >= 60 or _sirius_bond_unlocked
+        if not bond_met:
             use_carrots = True
         elif _current_turn >= 36:
             use_carrots = True
@@ -3193,25 +3339,17 @@ def _handle_career_home(img):
 
 
 def _desired_strategy(turn=None, distance=None):
-    """Determine desired running strategy based on turn and race distance.
+    """Determine desired running strategy based on aptitude.
 
-    Rules:
-    - Junior Year (turns 1-24): Pace Chaser
-    - Mile races (<=1800m) at any point: Pace Chaser
-    - Medium+ races (>1800m) from Classic Year onward: End Closer
-
-    Args:
-        turn: current turn (1-72). Defaults to global _current_turn.
-        distance: race distance in metres. Defaults to global _last_race_distance.
+    Picks whichever of 'front' or 'pace' has the better aptitude grade.
+    Falls back to 'pace' if aptitudes are equal or unavailable.
     """
-    turn = turn if turn is not None else (_current_turn or 0)
-    dist = distance if distance is not None else (_last_race_distance or 0)
-    is_junior = turn <= 24
-    is_mile_or_shorter = 0 < dist <= 1800
-
-    if is_junior or is_mile_or_shorter:
-        return "pace"
-    return "end"
+    GRADE_ORDER = {"s": 6, "a": 5, "b": 4, "c": 3, "d": 2, "e": 1, "f": 0, "g": 0}
+    front = GRADE_ORDER.get((_cached_aptitudes or {}).get("front", "").lower(), 0)
+    pace = GRADE_ORDER.get((_cached_aptitudes or {}).get("pace", "").lower(), 0)
+    if front > pace:
+        return "front"
+    return "pace"
 
 
 def _detect_current_strategy(img):
@@ -3285,7 +3423,7 @@ _INTERMEDIATE_RESULTS = {
     "recovering", "placement_next", "ts_climax_racing", "race_day_racing",
     "ts_climax_standings", "ts_standings_next", "post_career_next",
     "post_career_confirm", "career_finishing", "warning_ok",
-    "recreation_cancel", "recreation_select", "rest_confirm", "race_back",
+    "rest", "recreation", "recreation_cancel", "recreation_select", "recreation_member_select", "rest_confirm", "race_back",
     "training_back_to_rest", "race_live_skip", "career_home_summer",
     "photo_save_cancel", "race_photo_skip",
 }
@@ -3628,15 +3766,33 @@ def _run_one_turn_inner(stop_before=None):
             tap(540, 1450)
             return "recreation_cancel"
 
+    elif screen == "recreation_member_select":
+        # Sirius member selection screen — pick the specific member from schedule
+        member = _get_recreation_member()
+        log(f"Recreation member select — looking for '{member}'")
+        tap_y = _find_member_on_screen(img, member)
+        if tap_y:
+            log(f"  Found {member} at y={tap_y}, tapping")
+            tap(540, tap_y)
+        else:
+            log(f"  WARNING: Could not find '{member}' — tapping first available")
+            tap(540, 300)  # First member row
+        return "recreation_member_select"
+
     elif screen == "recreation_confirm":
-        if _playbook_engine and _playbook_engine.wants_recreation(_current_turn):
+        # Confirm if: playbook wants recreation this turn, OR we just came from
+        # recreation_select/member_select (means we intentionally chose recreation)
+        intentional = (_last_result in ("recreation", "recreation_select", "recreation_member_select"))
+        playbook_wants = _playbook_engine and _playbook_engine.wants_recreation(_current_turn)
+        if playbook_wants or intentional:
             log("Recreation confirm — confirming (playbook scheduled)")
             ok = find_green_button(img, (1150, 1350))
             if ok:
                 tap(ok[0], ok[1])
             else:
                 tap(730, 1260)
-            _playbook_engine.on_recreation_completed(turn=_current_turn)
+            if _playbook_engine:
+                _playbook_engine.on_recreation_completed(turn=_current_turn)
             return "recreation"
         log("Recreation confirm detected — tapping Cancel (no playbook recreation)")
         tap(270, 1260)

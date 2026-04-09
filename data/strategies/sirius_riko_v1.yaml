@@ -19,29 +19,29 @@ schedule:
   # --- JUNIOR YEAR (turns 1-24) ---
   # Pre-debut (turns 1-12): flex — bond building, prioritize Sirius friendship
   # Summer camp (turns 13-15): training
-  13: { action: train, note: "Summer camp" }
-  14: { action: train, note: "Summer camp" }
-  15: { action: train, note: "Summer camp" }
+  13: { action: train, note: "Junior training (Early Jul)" }
+  14: { action: train, note: "Junior training (Late Jul)" }
+  15: { action: train, note: "Junior training (Early Aug)" }
   # Post-summer Junior
   16: { action: race, note: "Niigata Junior Stakes" }
   17: { action: race, note: "Sapporo Junior Stakes" }
-  18: { action: recreation, note: "Sirius recreation 1 (Late Sep, no energy recovery)" }
+  18: { action: recreation, note: "Sirius: Rice Shower (Late Sep)" }
   19: { action: race, note: "Saudi Arabia Royal Cup" }
   20: { action: race, note: "Artemis Stakes" }
-  21: { action: recreation, note: "Sirius recreation 2 (Early Nov)" }
+  21: { action: recreation, note: "Sirius: Mejiro McQueen (Early Nov)" }
   22: { action: race, note: "Kyoto Junior Futurity Stakes" }
   23: { action: race, note: "Asahi Hai Futurity Stakes" }
   24: { action: race, note: "Hopeful Stakes" }
 
   # --- CLASSIC YEAR (turns 25-48) ---
-  25: { action: recreation, note: "Sirius recreation 3 (Early Jan, +32 recovery)" }
+  25: { action: recreation, note: "Sirius: Winning Ticket (Early Jan, +32 recovery)" }
   26: { action: recreation, note: "Riko recreation (Late Jan)" }
   27: { action: race, note: "Kisaragi Sho" }
-  28: { action: recreation, note: "Recreation (Late Feb, +0/+20)" }
+  28: { action: recreation, note: "Sirius: Silence Suzuka (Late Feb)" }
   29: { action: race, note: "Yayoi Sho" }
   30: { action: race, note: "Spring Stakes" }
   31: { action: race, note: "Satsuki Sho" }
-  32: { action: recreation, note: "Recreation (Late Apr, +13 mood up)" }
+  32: { action: recreation, note: "Sirius: Special Week (Late Apr, +13 mood up)" }
   33: { action: race, note: "NHK Mile Cup" }
   34: { action: race, note: "Tokyo Yushun (Japanese Derby)" }
   35: { action: flex, note: "Training if strong (+52 shown), otherwise flex" }
@@ -53,12 +53,12 @@ schedule:
   40: { action: train, note: "Summer camp" }
   # Classic post-summer
   41: { action: race, note: "Niigata Kinen" }
-  42: { action: recreation, note: "Recreation (Late Sep)" }
+  42: { action: recreation, note: "Sirius: Narita Brian (Late Sep)" }
   43: { action: race, note: "All Comers (or alternative)" }
   44: { action: race, note: "Kikuka Sho" }
   45: { action: race, note: "Queen Elizabeth II Cup" }
   46: { action: race, note: "Mile Championship" }
-  47: { action: recreation, note: "Recreation (Early Dec)" }
+  47: { action: recreation, note: "Sirius: Team Sirius (Early Dec, special 7th)" }
   48: { action: race, note: "Arima Kinen" }
 
   # --- SENIOR YEAR (turns 49-72) ---

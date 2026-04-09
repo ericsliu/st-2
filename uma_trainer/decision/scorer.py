@@ -58,6 +58,27 @@ class TrainingScorer:
         self.runspec = runspec
         self.shop_manager = shop_manager
         self._friendship_priorities: list[str] = []
+        self._bond_overrides: dict[str, int] = {}  # card_id -> minimum bond level
+        self._bond_completed: set[str] = set()  # cards whose bond goal is done
+
+    def set_bond_override(self, card_name: str, min_bond: int) -> None:
+        """Set a minimum bond level override for a card.
+
+        When scoring, the card's bond will be treated as at least min_bond,
+        even if the actual OCR'd bond is lower. Useful when a bond-unlock
+        event has been confirmed via the game log.
+        """
+        self._bond_overrides[card_name] = min_bond
+        logger.info("Bond override set: %s >= %d", card_name, min_bond)
+
+    def mark_bond_complete(self, card_name: str) -> None:
+        """Mark a card's bond goal as complete.
+
+        The scorer will skip priority-card bonuses for this card entirely,
+        meaning we no longer chase tiles just because the card is present.
+        """
+        self._bond_completed.add(card_name)
+        logger.info("Bond complete for %s — priority bonus suppressed", card_name)
 
     def set_friendship_priorities(self, card_names: list[str]) -> None:
         """Set priority card names for bond building (from playbook friendship policy).
@@ -393,6 +414,8 @@ class TrainingScorer:
         if self._friendship_priorities and not self._is_summer_camp(state):
             turn = state.current_turn
             for i, pcard in enumerate(self._friendship_priorities):
+                if pcard in self._bond_completed:
+                    continue
                 if pcard in tile.support_cards:
                     bond = self._get_card_bond(pcard, state)
                     if bond < 80:
@@ -485,11 +508,18 @@ class TrainingScorer:
         return self._DEFAULT_FRIENDSHIP_DEADLINE
 
     def _get_card_bond(self, card_id: str, state: GameState) -> int:
-        """Look up bond level for a card from state.support_cards."""
+        """Look up bond level for a card from state.support_cards.
+
+        Applies bond overrides (e.g. from game-log detection) so the scorer
+        treats the card as having at least the override value.
+        """
+        raw = 80  # Unknown card assumed bonded (avoids phantom bond scores)
         for card in state.support_cards:
             if card.card_id == card_id:
-                return card.bond_level
-        return 80  # Unknown card assumed bonded (avoids phantom bond scores)
+                raw = card.bond_level
+                break
+        override = self._bond_overrides.get(card_id, 0)
+        return max(raw, override)
 
     # ------------------------------------------------------------------
     # Preset management

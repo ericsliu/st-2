@@ -22,6 +22,11 @@
   choice: 1
   note: "Riko event — choice 2 required"
 
+# "Mystery Fortune Ritual" — pick choice 2
+- text_contains: "mystery fortune ritual"
+  choice: 1
+  note: "Mystery Fortune Ritual — option 2"
+
 # === Generic overrides ===
 
 # Tutorial events — always decline the explanation

@@ -345,12 +345,15 @@ class PlaybookEngine:
             source or "unknown", self.rec_tracker.total_used, self.rec_tracker.uses_remaining,
         )
 
-    def check_friendship_deadline(self, turn: int) -> str | None:
+    def check_friendship_deadline(self, turn: int, skip_cards: set[str] | None = None) -> str | None:
         """Check if any friendship deadline has been missed.
         Returns "restart" if a restart-triggering deadline was missed,
         "warn" if a warning deadline was missed, or None.
+        skip_cards: card names to skip (e.g. bond already confirmed unlocked).
         """
         for name, deadline in self.playbook.friendship.deadlines.items():
+            if skip_cards and name in skip_cards:
+                continue
             if turn >= deadline.by_turn:
                 remaining = self.rec_tracker.remaining_for(name)
                 total = self.playbook.recreation.sources.get(name, RecreationSource()).total

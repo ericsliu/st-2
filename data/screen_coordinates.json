@@ -9,7 +9,8 @@
     "shop": {"x": 620, "y": 1750, "note": "Small target, between Recreation and Races"},
     "races": {"x": 920, "y": 1750},
     "full_stats": {"x": 990, "y": 1160, "note": "Right side, below trainee portrait. Training Items is left at ~800,1140"},
-    "training_items": {"x": 827, "y": 1130, "note": "Verified on career_home; old y=1240 hit stat bar"}
+    "training_items": {"x": 827, "y": 1130, "note": "Verified on career_home; old y=1240 hit stat bar"},
+    "log": {"x": 810, "y": 1870, "note": "Log button on bottom bar, opens turn history"}
   },
   "race_list": {
     "race_entry_1": {"x": 540, "y": 1050, "note": "First race row, tap to select"},
