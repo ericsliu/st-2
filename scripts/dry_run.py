@@ -13,6 +13,136 @@ import scripts.career_helper as ch
 import scripts.auto_turn as at
 
 
+def _print_shop_plan(live_scan: bool = False):
+    """Show the shop want list the bot would build this turn.
+
+    If live_scan=True, actually tap into the shop, OCR its contents (dry
+    handle_shop call — no purchases), then back out. This is the only way
+    to know what's actually on the shelf this turn.
+    """
+    from uma_trainer.decision.shop_manager import ITEM_CATALOGUE, ItemTier
+
+    tier_overrides, ankle_stock, buyable = at._build_shop_plan()
+    if not buyable:
+        print("   Shop plan: nothing to buy")
+        return
+
+    inv = dict(at._shop_manager.inventory)
+    print(f"   Shop want list ({len(buyable)} items, best first):")
+    for tier, cost, key in buyable[:10]:  # Top 10 — full list is long
+        item = ITEM_CATALOGUE[key]
+        owned = inv.get(key, 0)
+        max_s = ankle_stock.get(key, item.max_stock)
+        marker = "*" if key in ("pretty_mirror", "grilled_carrots") else " "
+        note = ""
+        if key in tier_overrides:
+            note = f" [override: {tier.name}]"
+        print(f"    {marker} {key:<26} {tier.name:<5} {cost:>3}c  own={owned}/{max_s}{note}")
+    if len(buyable) > 10:
+        print(f"    (+ {len(buyable) - 10} more lower-priority items)")
+
+    if not live_scan:
+        return
+
+    # ── Live scan: enter shop, OCR contents, back out ──
+    print("\n   --- Live shop scan (read-only) ---")
+    ch.tap(*at.BTN_SHOP, delay=2.5)
+    shop_img = ch.screenshot(f"dry_shop_{int(time.time())}")
+    if at.detect_screen(shop_img) != "shop":
+        print("   (Could not enter shop — staying on career_home)")
+        return
+    try:
+        result = at.handle_shop(shop_img, dry=True)
+    except Exception as e:
+        print(f"   Shop scan error: {e}")
+        return
+    if not result:
+        print("   (handle_shop returned nothing)")
+        return
+    available, would_buy = result
+
+    # Organize by status
+    would_buy_set = set(would_buy)
+    on_shelf_buy = [a for a in available if a["key"] in would_buy_set]
+    on_shelf_purchased = [a for a in available if a["purchased"]]
+    on_shelf_skip = [a for a in available if not a["purchased"] and a["key"] not in would_buy_set]
+
+    print(f"   {len(available)} items scanned on shelf")
+    if on_shelf_buy:
+        print(f"   WOULD BUY ({len(on_shelf_buy)}):")
+        for a in on_shelf_buy:
+            marker = "*" if a["key"] in ("pretty_mirror", "grilled_carrots") else " "
+            print(f"    {marker} {a['name']:<30} {a['tier']:<5} {a['cost']:>3}c")
+    else:
+        print("   WOULD BUY: nothing")
+    if on_shelf_purchased:
+        names = ", ".join(a["name"] for a in on_shelf_purchased)
+        print(f"   Already purchased: {names}")
+    if on_shelf_skip:
+        print(f"   Skipped (wrong tier / owned / unaffordable):")
+        for a in on_shelf_skip:
+            marker = "*" if a["key"] in ("pretty_mirror", "grilled_carrots") else " "
+            print(f"    {marker} {a['name']:<30} {a['tier']:<5} {a['cost']:>3}c")
+
+    # Flag missed critical items
+    critical = {"pretty_mirror", "grilled_carrots", "rich_hand_cream"}
+    on_shelf_keys = {a["key"] for a in available}
+    missing = critical - on_shelf_keys
+    if missing:
+        print(f"   NOT ON SHELF: {sorted(missing)}")
+
+
+def _print_item_use_plan():
+    """Show use-immediately items that would be consumed this turn."""
+    from uma_trainer.decision.shop_manager import ITEM_CATALOGUE
+
+    inv = dict(at._shop_manager.inventory)
+    use_now = {}
+    for key, count in inv.items():
+        item = ITEM_CATALOGUE.get(key)
+        if item and item.use_immediately and count > 0:
+            use_now[key] = count
+
+    # Apply carrot-defer rule (mirrors auto_turn.py)
+    if "grilled_carrots" in use_now:
+        try:
+            sirius_bond = at._card_tracker.get_bond("team_sirius") if at._card_tracker.is_tracked("team_sirius") else -1
+        except Exception:
+            sirius_bond = -1
+        bond_met = sirius_bond >= 60 or at._sirius_bond_unlocked
+        if bond_met and at._current_turn < 36:
+            print(f"   Carrots deferred (Sirius bond={sirius_bond}, unlocked={at._sirius_bond_unlocked}, turn<{36})")
+            del use_now["grilled_carrots"]
+
+    if use_now:
+        print(f"-> Would USE items: {use_now}")
+
+
+def _print_skill_shop_plan():
+    """Show whether the bot would visit the skill shop this turn."""
+    sp = at._skill_pts or 0
+    pb = at._playbook_engine
+    if pb and pb.playbook.skills:
+        sp_thresh = getattr(pb.playbook.skills, "defer_until_sp", None)
+        turn_thresh = getattr(pb.playbook.skills, "defer_until_turn", None)
+        gate = []
+        if sp_thresh is not None:
+            gate.append(f"SP>={sp_thresh}")
+        if turn_thresh is not None:
+            gate.append(f"turn>={turn_thresh}")
+        ok_sp = sp_thresh is None or sp >= sp_thresh
+        ok_turn = turn_thresh is None or at._current_turn >= turn_thresh
+        if ok_sp or ok_turn:
+            print(f"-> Would visit SKILL SHOP (SP={sp}, gate={' or '.join(gate) or 'none'})")
+        else:
+            print(f"   Skill shop deferred: SP={sp}, turn={at._current_turn}, gate={' or '.join(gate)}")
+    else:
+        if sp > 1000:
+            print(f"-> Would visit SKILL SHOP (SP={sp} > 1000)")
+        else:
+            print(f"   Skill shop deferred: SP={sp}")
+
+
 def gather_and_decide():
     img = ch.screenshot("dry_run")
     screen = at.detect_screen(img)
@@ -114,12 +244,24 @@ def gather_and_decide():
         if mood in ("AWFUL", "BAD"):
             print("-> Would do Recreation (mood fix)")
         elif energy < 50:
-            vita = next((k for k in ("vita_65", "vita_40", "vita_20", "royal_kale") if inv.get(k, 0) > 0), None)
-            if vita:
-                print(f"-> Would use {vita} for energy, then train")
+            has_kale = inv.get("royal_kale", 0) > 0
+            has_cupcake = inv.get("plain_cupcake", 0) > 0 or inv.get("berry_cupcake", 0) > 0
+            if has_kale and has_cupcake and energy < 30:
+                cupcake_key = "plain_cupcake" if inv.get("plain_cupcake", 0) > 0 else "berry_cupcake"
+                print(f"-> Would use royal_kale (+100 energy) + {cupcake_key} (mood restore), then train")
+            elif has_kale and energy < 20:
+                print(f"-> Would use royal_kale (+100 energy, mood will drop), then train")
             else:
-                print("-> Would rest (low energy, no items)")
+                vita = next((k for k in ("vita_65", "vita_40", "vita_20") if inv.get(k, 0) > 0), None)
+                if vita:
+                    print(f"-> Would use {vita} for energy, then train")
+                elif inv.get("good_luck_charm", 0) > 0:
+                    print(f"-> Would use good_luck_charm (0% failure), then train")
+                else:
+                    print("-> Would rest (low energy, no items)")
         else:
+            if inv.get("good_luck_charm", 0) > 0:
+                print(f"-> Would use good_luck_charm (0% failure this turn)")
             print("-> Would train")
 
     elif screen == "ts_climax_home":
@@ -134,66 +276,86 @@ def gather_and_decide():
             if inv.get(key, 0) > 0 and energy + gain <= 100:
                 print(f"-> Would use {key} (+{gain}) before training")
                 break
+        if inv.get("good_luck_charm", 0) > 0:
+            print(f"-> Would use good_luck_charm (0% failure this turn)")
         print("-> Would train")
 
     else:
-        # Normal career_home decision
+        # Normal career_home decision — mirrors auto_turn.py phase order:
+        # Phase 2 housekeeping (cure, shop, item use) ALWAYS happens first,
+        # then Phase 3 final action (playbook overrides fallback logic).
         has_energy_items = any(inv.get(k, 0) > 0 for k in ("vita_65", "vita_40", "vita_20", "royal_kale"))
 
         # Conditions to cure?
         if at._active_conditions:
-            curable = []
-            cure_map = at.CONDITION_CURE_MAP if hasattr(at, 'CONDITION_CURE_MAP') else {}
+            cure_map = getattr(at, "CONDITION_CURES", {})
+            curable_now = []        # in inventory
+            curable_post_shop = []  # in shop want list
+            uncurable = []
+            _, _, shop_buyable = at._build_shop_plan()
+            shop_keys = {key for _, _, key in shop_buyable}
             for cond in at._active_conditions:
                 cure_key = cure_map.get(cond)
                 if cure_key and inv.get(cure_key, 0) > 0:
-                    curable.append((cond, cure_key))
-            if curable:
-                print(f"-> Would cure conditions: {curable}")
+                    curable_now.append((cond, cure_key))
+                elif cure_key and cure_key in shop_keys:
+                    curable_post_shop.append((cond, cure_key))
+                else:
+                    uncurable.append(cond)
+            if curable_now:
+                print(f"-> Would cure now: {curable_now}")
+            if curable_post_shop:
+                print(f"-> Would cure after shop: {curable_post_shop}")
+            if uncurable:
+                print(f"-> CANNOT cure: {uncurable} (no items in inv or shop)")
 
-        # Shop?
-        should_shop = at._needs_shop_visit or (
-            at._current_turn >= 6 and at._current_turn % 6 == 0
-        )
+        # Shop plan (every turn post-debut) — actually enter shop to read shelves
+        should_shop = at._needs_shop_visit or at._current_turn >= 6
         if should_shop:
-            print("-> Would visit shop")
+            reason = "flagged (race win)" if at._needs_shop_visit else "per-turn"
+            print(f"-> Would visit shop ({reason})")
+            _print_shop_plan(live_scan=True)
 
-        # Consecutive race break
-        if at._scenario._consecutive_races >= 3:
-            if energy < 30:
-                print(f"-> 3+ consecutive races, energy {energy}% — would REST")
-            else:
-                print(f"-> 3+ consecutive races — would TRAIN")
+        # Use-immediately items that would be consumed this turn
+        _print_item_use_plan()
+
+        # Skill shop plan
+        _print_skill_shop_plan()
+
+        # Phase 3 final action — playbook wins if it has a non-wait decision
+        print()
+        if at._playbook_engine and pb_action.action_type.value != "wait":
+            print(f"=> FINAL ACTION (playbook): {pb_action.action_type.value.upper()} — {pb_action.reason}")
             return
 
-        # Pre-summer
+        # Legacy fallback logic (when playbook is wait/flex)
+        if at._scenario._consecutive_races >= 3:
+            if energy < 30:
+                print(f"=> FINAL ACTION: REST (3+ consecutive races, energy {energy}%)")
+            else:
+                print(f"=> FINAL ACTION: TRAIN (3+ consecutive races)")
+            return
+
         pre_summer = (35, 36, 59, 60)
         if at._current_turn in pre_summer and energy < 80:
             if race_action and has_energy_items:
-                print(f"-> Pre-summer but have energy items — would RACE: {race_action.reason}")
+                print(f"=> FINAL ACTION: RACE — {race_action.reason} (pre-summer w/ energy items)")
             elif race_action:
-                print(f"-> Pre-summer, energy {energy}% < 80%, no energy items — would REST (skip race)")
+                print(f"=> FINAL ACTION: REST (pre-summer, no energy items, skip race)")
             else:
-                print(f"-> Pre-summer, energy {energy}% < 80% — would REST")
+                print(f"=> FINAL ACTION: REST (pre-summer, energy {energy}%)")
             return
 
-        # SP check
-        if at._skill_pts > 1000:
-            print(f"-> SP {at._skill_pts} > 1000 — would visit SKILL SHOP")
-            return
-
-        # Race
         if race_action:
-            print(f"-> Would RACE: {race_action.reason}")
+            print(f"=> FINAL ACTION: RACE — {race_action.reason}")
             return
 
-        # Energy checks
         if energy < 30:
-            print(f"-> Low energy {energy}% — would REST")
+            print(f"=> FINAL ACTION: REST (low energy {energy}%)")
         elif at._current_turn < 36 and energy < 50:
-            print(f"-> Bond phase, low energy {energy}% — would REST")
+            print(f"=> FINAL ACTION: REST (bond phase, low energy {energy}%)")
         else:
-            print(f"-> Would TRAIN")
+            print(f"=> FINAL ACTION: TRAIN")
 
     # ── Phase 4: Tile scan (tap Training, preview all tiles, score, then back out) ──
 
@@ -251,6 +413,7 @@ def gather_and_decide():
                 return
             gains = at._ocr_training_gains(tile_img)
 
+        fail_rate = at._ocr_failure_rate(tile_img)
         n_cards = at.count_portraits(tile_img)
         frame_rgb = np.array(tile_img.convert("RGB"))
         frame_bgr = frame_rgb[:, :, ::-1].copy()
@@ -277,7 +440,8 @@ def gather_and_decide():
         gains_str = ", ".join(f"{k}+{v}" for k, v in sorted(gains.items()))
         cards_str = ", ".join(card_ids) if card_ids else "none"
         bonds_str = f" bonds={bond_levels}" if bond_levels else ""
-        print(f"  {tile_name}: {gains_str} | cards=[{cards_str}]{bonds_str}{hint_str}")
+        fail_str = f" fail={fail_rate}%" if fail_rate is not None else " fail=?"
+        print(f"  {tile_name}: {gains_str} | cards=[{cards_str}]{bonds_str}{hint_str}{fail_str}")
 
     # Score tiles
     state = at.build_game_state(tile_img, "training", energy=energy)
@@ -294,7 +458,20 @@ def gather_and_decide():
         print(f"  {tile.stat_type.value:8s}: {score:6.1f}  cards=[{cards_str}]  gains={dict(tile.stat_gains)}")
 
     action = at._scorer.best_action(state)
-    print(f"\n-> Would {action.action_type.value}: {action.reason}")
+    best_score = scored[0][1] if scored else 0
+    print(f"\n-> Would {action.action_type.value}: score={best_score:.1f}, stat={scored[0][0].stat_type.value if scored else '?'}")
+
+    # Whistle check (mirrors handle_training summer/TS Climax logic)
+    summer_turns = set(range(37, 41)) | set(range(61, 65))
+    is_whistle_turn = at._current_turn in summer_turns or at._current_turn >= 72
+    whistle_count = inv.get("reset_whistle", 0)
+    if is_whistle_turn and best_score < at.WHISTLE_THRESHOLD and whistle_count > 0:
+        phase = "TS CLIMAX" if at._current_turn >= 72 else "SUMMER CAMP"
+        print(f"-> Would WHISTLE ({phase}): best score {best_score:.1f} < {at.WHISTLE_THRESHOLD}, {whistle_count} whistles left")
+    elif is_whistle_turn and best_score >= at.WHISTLE_THRESHOLD:
+        print(f"   Whistle not needed: best score {best_score:.1f} >= {at.WHISTLE_THRESHOLD}")
+    elif is_whistle_turn and whistle_count == 0:
+        print(f"   WARNING: would whistle (score {best_score:.1f} < {at.WHISTLE_THRESHOLD}) but no whistles in inventory!")
 
     # Back out to career home
     ch.tap(80, 1855, delay=1.5)

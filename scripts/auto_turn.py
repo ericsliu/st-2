@@ -25,6 +25,7 @@ from uma_trainer.decision.event_handler import EventHandler
 from uma_trainer.knowledge.overrides import OverridesLoader
 from uma_trainer.types import (
     ActionType,
+    BotAction,
     EventChoice,
     GameState,
     Mood,
@@ -67,6 +68,7 @@ _scenario = load_scenario("trackblazer")
 _runspec = load_runspec("end_guts_v1")
 _scorer.scenario = _scenario
 _scorer.runspec = _runspec
+_scorer.shop_manager = _shop_manager
 # Inventory is read from Training Items screen on first career_home — no yaml loading
 _race_selector = RaceSelector(kb=_kb, overrides=_overrides, scenario=_scenario)
 _event_handler = EventHandler(kb=_kb, local_llm=None, claude_client=None, overrides=_overrides)
@@ -74,11 +76,26 @@ _event_handler = EventHandler(kb=_kb, local_llm=None, claude_client=None, overri
 from uma_trainer.perception.card_tracker import CardTracker
 _card_tracker = CardTracker()
 
+# Race plaque matcher (lazy init — loads 302 templates on first use)
+from uma_trainer.perception.plaque_matcher import PlaqueMatcher
+_plaque_matcher: PlaqueMatcher | None = None
+
+
+def _get_plaque_matcher() -> PlaqueMatcher:
+    global _plaque_matcher
+    if _plaque_matcher is None:
+        _plaque_matcher = PlaqueMatcher()
+    return _plaque_matcher
+
 # Playbook (optional — None means legacy behavior, no turn schedule)
 from uma_trainer.decision.playbook import load_playbook, PlaybookEngine
 _playbook_engine: PlaybookEngine | None = None
 _playbook_engine = load_playbook("sirius_riko_v1")
 if _playbook_engine:
+    # Playbook can override the default runspec (e.g. Sirius uses sirius_speed_v1)
+    if _playbook_engine.playbook.runspec:
+        _runspec = load_runspec(_playbook_engine.playbook.runspec)
+        _scorer.runspec = _runspec
     _playbook_engine.scorer = _scorer
     _playbook_engine.race_selector = _race_selector
     _playbook_engine._scenario = _scenario
@@ -100,9 +117,25 @@ _active_conditions = []   # Negative conditions detected this session
 _positive_statuses = []   # Positive statuses (charming, practice perfect, etc.)
 _game_state = None        # Last built GameState, reused across screens
 _summer_whistle_used = False  # Reset each turn; prevents double-whistling
+_playbook_force_train = False  # Set by playbook TRAIN turns; handle_training must not rest
+_train_drink_used = False      # Set after we drink-and-retry in handle_training (prevents loops)
+# Set when handle_training backs out to use an item (ankle weight, drink, whistle)
+# and plans to re-enter to train a specific stat. On re-entry, handle_training
+# taps the decided tile directly and skips the preview/score loop.
+_pending_training_stat = None   # "speed" | "stamina" | "power" | "guts" | "wit"
+_pending_training_turn = -1
 _ts_climax_retries = 0        # Retry counter for TS Climax races (max 3)
+_g1_retries = 0               # Total alarm clocks used this career (max 5)
+_g1_retried_this_race = False # True after we retry the current race (1 retry per race max)
+_backed_out_to_home_this_turn = False  # Prevents infinite back-out loop on recreation turns
+_recovery_skills_bought = 0           # Track recovery skills bought (need 2+ before Kikuka Sho)
+_RECOVERY_SKILL_NAMES = {"corner recovery", "straightaway recover", "standing by", "after-school stroll"}
 _prev_stats = None                # Previous turn's stats for suspicious jump detection
-_sirius_bond_unlocked = False     # Set True when "We're All Shining Stars" detected in game log
+# Persisted flag: set True when Sirius bond event fires. Survives run_one.py
+# restarts via data/sirius_bond_unlocked.flag so the playbook friendship
+# deadline check doesn't false-alarm every turn after Junior Nov.
+_SIRIUS_BOND_FILE = Path("data/sirius_bond_unlocked.flag")
+_sirius_bond_unlocked = _SIRIUS_BOND_FILE.exists()
 
 # Map negative conditions to their cure items in the shop catalogue
 CONDITION_CURES = {
@@ -261,7 +294,7 @@ def read_fullstats():
     Runs every turn to keep state in sync with the game.
     Returns dict of aptitudes or None on failure.
     """
-    global _cached_aptitudes, _active_conditions, _positive_statuses
+    global _cached_aptitudes, _active_conditions, _positive_statuses, _sirius_bond_unlocked
 
     log("Reading Full Stats...")
     tap(990, 1160, delay=2.0)
@@ -315,6 +348,7 @@ def read_fullstats():
     # Pure Passion = Team Sirius bond event already fired
     if "pure passion" in _positive_statuses and not _sirius_bond_unlocked:
         _sirius_bond_unlocked = True
+        _SIRIUS_BOND_FILE.touch()
         log("Pure Passion detected — Sirius bond unlocked (from Full Stats)")
         _scorer.mark_bond_complete("team_sirius")
 
@@ -328,7 +362,8 @@ def read_fullstats():
         log(f"Positive statuses: {_positive_statuses}")
 
     # Tap Close button (bottom center of Full Stats screen)
-    tap(540, 1800, delay=1.5)
+    # y=1770 avoids hitting Quick button (y≈1860) if career home loads early
+    tap(540, 1770, delay=1.5)
 
     return aptitudes
 
@@ -610,6 +645,41 @@ def find_green_button(img, y_range, x_range=(300, 950)):
     return (green_ys[mid][1], green_ys[mid][0])
 
 
+def _confirm_race_entry():
+    """Confirm race entry, dismissing the consecutive-races Warning popup if shown.
+
+    Returns True if a Race button was tapped.
+    """
+    img2 = screenshot(f"race_confirm_{int(time.time())}")
+
+    # Detect consecutive-races warning popup via OCR. If present, tap its OK
+    # button (located mid-screen) then re-screenshot to find the real Race
+    # button. Without this check, find_green_button scans the bottom strip and
+    # returns a bogus centroid from background bleed-through under the popup.
+    try:
+        all_text = " ".join(t for t, c, _ in ocr_full_screen(img2) if c > 0.3)
+    except Exception:
+        all_text = ""
+    if "Warning" in all_text and ("consecutive" in all_text or "3 " in all_text):
+        # Warning OK button: large green cluster around (778, 1248)
+        warn_btn = find_green_button(img2, (1180, 1310), x_range=(500, 1050))
+        tap_xy = warn_btn if warn_btn else (778, 1248)
+        log(f"Consecutive-races warning detected — tapping OK at {tap_xy}")
+        tap(tap_xy[0], tap_xy[1], delay=1.5)
+        img2 = screenshot(f"race_confirm_post_warn_{int(time.time())}")
+
+    # Find the actual Race confirm button. Narrow x_range excludes the left
+    # "Predictions" button which is also green-tinted.
+    race_btn = find_green_button(img2, (1550, 1700), x_range=(440, 780))
+    if race_btn:
+        log(f"Confirming race at {race_btn}")
+        tap(race_btn[0], race_btn[1])
+        return True
+    log("Race button not found — tapping expected location (540, 1610)")
+    tap(540, 1610)
+    return False
+
+
 def detect_screen(img):
     """Detect current screen type using OCR text markers."""
     try:
@@ -682,6 +752,11 @@ def detect_screen(img):
     if has("Goals") and has("Result Pts") and has("Next"):
         return "goal_complete"
 
+    # Quick Mode Settings dialog — Cancel + Confirm + radio buttons
+    # Triggered accidentally when Full Stats close tap lands on Quick button
+    if has("Quick Mode") and has("Confirm") and has("Cancel"):
+        return "quick_mode_settings"
+
     # Skill purchase confirmation dialog: "Learn the above skills?"
     if has("Confirmation") and has("Learn the above skills"):
         return "skill_confirm_dialog"
@@ -718,6 +793,10 @@ def detect_screen(img):
         if has("Photo Album") or has("Save image"):
             return "photo_save_popup"
         return "warning_popup"
+
+    # Try Again confirmation: has "alarm clock" text and Cancel/Try Again buttons
+    if has("alarm clock") and has("Try Again") and has("Cancel"):
+        return "try_again_confirm"
 
     # Insufficient Result Pts warning — has Cancel + Race buttons
     if has("Insufficient") and has("Result Pts") and has("Race"):
@@ -848,27 +927,6 @@ def detect_screen(img):
     if has("Skip") and has("Quick") and not has("Rest") and not has("Races") and not has("Log"):
         return "cutscene"
 
-    # Dark overlay with choice box — event choice on dimmed background.
-    # When Skip is toggled off, events show dialogue then present choices
-    # on a dimmed screen. Detect by checking: dark top half + bright choice band.
-    top_brightness = 0
-    for x in range(200, 900, 40):
-        r, g, b = px(img, x, 400)
-        top_brightness += r + g + b
-    choice_brightness = 0
-    choice_band_y = 0
-    for y in range(900, 1500, 50):
-        band = 0
-        for x in range(100, 980, 40):
-            r, g, b = px(img, x, y)
-            band += r + g + b
-        if band > choice_brightness:
-            choice_brightness = band
-            choice_band_y = y
-    if top_brightness < 3000 and choice_brightness > 10000:
-        log(f"Dimmed event choice detected (top={top_brightness}, band={choice_brightness} at y={choice_band_y})")
-        return "event_choice_dimmed"
-
     # Dark overlay / TAP prompt — check pixel brightness as fallback
     total_brightness = 0
     for x in range(300, 800, 20):
@@ -880,6 +938,10 @@ def detect_screen(img):
     # Result Pts popup — white popup over dark background
     if has("Result Pts") and has("Close"):
         return "result_pts_popup"
+
+    # Log screen — "Log" header at top, "Close" button at bottom
+    if has("Log") and has("Close"):
+        return "log_close"
 
     return "unknown"
 
@@ -924,7 +986,7 @@ def _detect_tile_hints(frame_bgr) -> dict:
 # Map playbook source keys to OCR-matchable strings on the recreation screen
 _RECREATION_SOURCE_NAMES = {
     "team_sirius": ["team sirius", "sirius"],
-    "riko": ["riko kashimoto", "riko"],
+    "riko": ["riko", "kashimoto", "riko kashimoto"],
 }
 
 
@@ -952,17 +1014,33 @@ def _find_recreation_card(img, source_key: str) -> int | None:
     """Find the y coordinate of a recreation card on the selection screen.
 
     OCRs the screen and looks for the card name matching source_key.
+    Skips cards with 'Event Complete' nearby.
     Returns the y coordinate to tap, or None if not found.
     """
     results = ocr_full_screen(img)
     match_names = _RECREATION_SOURCE_NAMES.get(source_key, [source_key])
 
+    # Collect y positions of "Event Complete" badges
+    complete_ys = set()
+    for text, conf, y_pos in results:
+        if conf < 0.3:
+            continue
+        if "event complete" in text.strip().lower() or "completed" in text.strip().lower():
+            complete_ys.add(int(y_pos))
+
+    log(f"  Recreation card OCR ({len(results)} results, looking for {match_names}, complete_ys={complete_ys}):")
     for text, conf, y_pos in results:
         if conf < 0.3:
             continue
         text_lower = text.strip().lower()
+        log(f"    y={y_pos:.0f} conf={conf:.2f} '{text.strip()}'")
         for name in match_names:
             if name in text_lower:
+                # Skip if an "Event Complete" badge is near this card (within 80px)
+                nearby_complete = any(abs(int(y_pos) - cy) < 120 for cy in complete_ys)
+                if nearby_complete:
+                    log(f"  Skipping '{name}' at y={y_pos:.0f} — Event Complete")
+                    continue
                 return int(y_pos)
     return None
 
@@ -1105,55 +1183,97 @@ def has_green_aptitude_badge(img, card_y_start, card_y_end):
 
 
 def _ocr_race_list(img):
-    """OCR the race list screen and return list of RaceOption objects."""
-    results = ocr_full_screen(img)
-    sorted_results = sorted(results, key=lambda r: r[2])
+    """OCR the race list screen and return list of RaceOption objects.
 
-    # Race cards are stacked vertically. Each card has:
-    # - Race name (large text)
-    # - Grade badge (G1/G2/G3/OP)
-    # - Distance/surface text
-    # - Green aptitude badges if B+ aptitude
-    # Cards are at roughly y=800-1000 (card 1), y=1100-1300 (card 2), etc.
+    Each race card has the race name as a stylized plaque on the LEFT (x<330),
+    with the track/distance text in the MIDDLE (x=400-800). The plaque text
+    usually wraps onto two lines (e.g. "Asahi Hai" / "Futurity Stakes").
+    We split by x-coordinate to avoid confusing the two.
+    """
+    import re
+    import tempfile
+    from scripts.ocr_util import ocr_image as _ocr_image
+
+    # OCR the full image with bbox so we have x-coordinates
+    tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+    img.save(tmp.name)
+    raw = _ocr_image(tmp.name)
+    try:
+        import os
+        os.unlink(tmp.name)
+    except Exception:
+        pass
+
+    img_w, img_h = img.size
+    # Convert each result to (text, conf, x, y, w, h) in top-left pixel coords
+    items = []
+    for text, conf, bbox in raw:
+        if conf < 0.3:
+            continue
+        x = int(bbox[0] * img_w)
+        y = int((1.0 - bbox[1] - bbox[3]) * img_h)
+        w = int(bbox[2] * img_w)
+        h = int(bbox[3] * img_h)
+        items.append((text.strip(), conf, x, y, w, h))
+
+    # Race cards are stacked vertically. Each card spans ~135 pixels.
+    # Card regions tuned to match the in-game layout (header + banner + 1-3 races).
     races = []
     CARD_REGIONS = [
-        {"y_range": (800, 1050), "tap_y": 950},
-        {"y_range": (1050, 1300), "tap_y": 1200},
-        {"y_range": (1300, 1550), "tap_y": 1450},
+        {"y_range": (1080, 1245), "tap_y": 1165},
+        {"y_range": (1245, 1460), "tap_y": 1355},
+        {"y_range": (1460, 1680), "tap_y": 1570},
     ]
+
+    # Common plaque OCR artifacts to strip
+    def _clean_plaque(s: str) -> str:
+        s = s.strip()
+        s = re.sub(r'[=\-–—•·]+$', '', s).strip()
+        s = re.sub(r'^[=\-–—•·]+', '', s).strip()
+        return s
 
     for i, region in enumerate(CARD_REGIONS):
         y_min, y_max = region["y_range"]
-        card_texts = []
-        for text, conf, y_pos in sorted_results:
-            if conf < 0.3:
-                continue
-            if y_min <= y_pos <= y_max:
-                card_texts.append((text.strip(), y_pos))
-
-        if not card_texts:
+        card_items = [it for it in items if y_min <= it[3] <= y_max]
+        if not card_items:
             continue
 
-        # Find race name (longest text, not a grade/number)
-        name = ""
+        # Split by x: plaque zone (left) vs track zone (right)
+        PLAQUE_X_MAX = 360   # plaque text bbox starts at x<330 in samples
+        TRACK_X_MIN = 380    # track desc starts at x>400
+
+        plaque_items = sorted(
+            [it for it in card_items if it[2] < PLAQUE_X_MAX],
+            key=lambda it: it[3],
+        )
+        track_items = [it for it in card_items if it[2] >= TRACK_X_MIN]
+
+        # Build race name by joining plaque lines top-to-bottom.
+        # Drop pure grade badges and digit-only entries from the plaque.
+        plaque_parts = []
+        for text, conf, x, y, w, h in plaque_items:
+            if text in ("G1", "G2", "G3", "OP", "Pre-OP"):
+                continue
+            if text.isdigit():
+                continue
+            cleaned = _clean_plaque(text)
+            if len(cleaned) >= 3:
+                plaque_parts.append(cleaned)
+        name = " ".join(plaque_parts).strip()
+
+        # Grade from anywhere in the card
         grade = ""
-        for text, y_pos in card_texts:
-            tl = text.lower()
+        for text, conf, x, y, w, h in card_items:
             if text in ("G1", "G2", "G3", "OP", "Pre-OP"):
                 grade = text
-            elif len(text) > len(name) and not text.isdigit() and len(text) > 3:
-                name = text
+                break
 
-        if not name:
-            continue
-
-        # Parse distance and fans from card text (e.g. "1400m", "+6,500 fans")
-        import re
+        # Distance/surface/fans from track zone (right side of card)
         distance = 0
         surface = "turf"
         fan_reward = 0
-        for text, y_pos in card_texts:
-            m = re.search(r'(\d{4})m', text)
+        for text, conf, x, y, w, h in track_items:
+            m = re.search(r'(\d{3,4})m', text)
             if m:
                 distance = int(m.group(1))
             tl = text.lower()
@@ -1161,13 +1281,89 @@ def _ocr_race_list(img):
                 surface = "dirt"
             elif "turf" in tl:
                 surface = "turf"
-            # Parse fan reward: "+6,500 fans" or "+7000 fans"
             fm = re.search(r'\+?([\d,]+)\s*fans?', tl)
             if fm:
                 fan_reward = int(fm.group(1).replace(",", ""))
 
-        # Check aptitude from green badges
-        apt_ok = has_green_aptitude_badge(img, y_min + 100, y_max - 30)
+        if not name:
+            # Fall back to the longest track-zone text so we don't drop the card entirely
+            longest = max(
+                (it for it in track_items if len(it[0]) > 3 and not it[0].isdigit()),
+                key=lambda it: len(it[0]),
+                default=None,
+            )
+            if longest:
+                name = longest[0]
+            else:
+                continue
+
+        # Skip UI elements that aren't real races (no distance detected)
+        if distance == 0:
+            continue
+
+        # Build a track description for logging/debugging. Concatenate all
+        # track-zone text snippets so venue / direction tokens (which may
+        # OCR as separate items) are available to the resolver.
+        track_desc_main = ""
+        for text, conf, x, y, w, h in track_items:
+            if re.search(r'\d{3,4}m', text):
+                track_desc_main = text
+                break
+        track_desc_full = " ".join(it[0] for it in track_items).strip()
+        track_desc = track_desc_main or track_desc_full
+
+        # Extract direction from the track zone ("Left", "Right", "Line").
+        direction_ocr = ""
+        tdf_low = track_desc_full.lower()
+        if "right" in tdf_low:
+            direction_ocr = "right"
+        elif "left" in tdf_low:
+            direction_ocr = "left"
+        elif "line" in tdf_low:
+            direction_ocr = "line"
+
+        apt_ok = has_green_aptitude_badge(img, y_min + 20, y_max - 20)
+
+        # Combined plaque + feature resolver — authoritative race identity.
+        # Falls back to the OCR'd plaque name if the resolver can't agree
+        # with the observed distance/surface.
+        ocr_name = name
+        banner_id: int | None = None
+        resolved_name: str | None = None
+        plaque_conf: float = 0.0
+        feature_score: float = 0.0
+        combined_conf: float = 0.0
+        try:
+            matcher = _get_plaque_matcher()
+            resolved = matcher.resolve_race(
+                img,
+                region,
+                distance=distance,
+                surface=surface,
+                direction=direction_ocr,
+                track_desc=track_desc_full,
+            )
+            if resolved is not None:
+                banner_id = resolved.banner_id
+                resolved_name = resolved.race_name
+                plaque_conf = resolved.plaque_confidence
+                feature_score = resolved.feature_score
+                combined_conf = resolved.combined_confidence
+                if resolved_name and combined_conf >= 0.60:
+                    name = resolved_name
+            else:
+                # No resolver match; fall back to raw plaque match so we
+                # still record a banner_id when it's usable.
+                raw = matcher.match_card(img, region)
+                if raw is not None:
+                    banner_id = raw.banner_id
+                    plaque_conf = raw.confidence
+                    if raw.race_names:
+                        resolved_name = raw.race_names[0]
+                        if plaque_conf >= 0.60:
+                            name = resolved_name
+        except Exception as e:  # pragma: no cover — matcher should never crash a turn
+            log(f"  Race {i+1}: plaque matcher error: {e}")
 
         race = RaceOption(
             name=name,
@@ -1178,9 +1374,22 @@ def _ocr_race_list(img):
             is_aptitude_ok=apt_ok,
             position=i,
             tap_coords=(540, region["tap_y"]),
+            banner_id=banner_id,
         )
         races.append(race)
-        log(f"  Race {i+1}: '{name}' grade={grade} dist={distance}m {surface} fans={fan_reward} apt_ok={apt_ok}")
+        plaque_log = ""
+        if banner_id is not None:
+            plaque_log = (
+                f" plaque={banner_id}/{plaque_conf:.2f}"
+                f" feat={feature_score:.2f} combined={combined_conf:.2f}"
+            )
+            if resolved_name and resolved_name != ocr_name:
+                plaque_log += f" ocr='{ocr_name}' -> race='{resolved_name}'"
+        log(
+            f"  Race {i+1}: '{name}' [{track_desc}] grade={grade} "
+            f"dist={distance}m {surface} fans={fan_reward} apt_ok={apt_ok}"
+            f"{plaque_log}"
+        )
 
     return races
 
@@ -1240,6 +1449,7 @@ def _read_game_log():
     # Check for Sirius bond unlock event
     if not _sirius_bond_unlocked and "shining stars" in full_text.lower():
         _sirius_bond_unlocked = True
+        _SIRIUS_BOND_FILE.touch()
         log("Sirius bond event detected — bond unlocked!")
         _scorer.set_bond_override("team_sirius", 60)
         _scorer.mark_bond_complete("team_sirius")
@@ -1307,14 +1517,20 @@ def _detect_active_effects():
                 turns_left = int(digits[0])
 
     # Update _shop_manager._active_effects
-    from uma_trainer.decision.shop_manager import ActiveEffect
+    from uma_trainer.decision.shop_manager import ActiveEffect, ITEM_TRAINING_EFFECTS
     for item_key in found_effects:
         already_tracked = any(e.item_key == item_key for e in _shop_manager._active_effects)
         if not already_tracked:
+            effect_def = ITEM_TRAINING_EFFECTS.get(item_key, {})
             _shop_manager._active_effects.append(
-                ActiveEffect(item_key=item_key, turns_remaining=turns_left + 1)
+                ActiveEffect(
+                    item_key=item_key,
+                    turns_remaining=turns_left + 1,
+                    multiplier=effect_def.get("multiplier", 1.0),
+                    zero_failure=effect_def.get("zero_failure", False),
+                )
             )
-            log(f"Detected active effect: {item_key} ({turns_left} turn(s) left)")
+            log(f"Detected active effect: {item_key} ({turns_left} turn(s) left, ×{effect_def.get('multiplier', 1.0):.1f})")
 
     if not found_effects:
         log(f"Active effects popup opened but no recognized effects. OCR: {all_text[:200]}")
@@ -1387,6 +1603,25 @@ def handle_race_list(img):
         press_back()
         return "race_back"
 
+    # Re-seed playbook target race from the schedule. The target may have been
+    # set in a previous process that already ended (run_one_turn stops on turn
+    # advance, which can leave us mid-turn on race_list). Since _race_selector
+    # is a fresh instance in each process, we need to reconstruct the target
+    # from the playbook schedule for the current turn.
+    if _playbook_engine and not _race_selector._target_race_name:
+        scheduled = _playbook_engine._get_scheduled_action(_current_turn)
+        target_name = ""
+        if scheduled and scheduled.action == "race":
+            target_name = scheduled.race or ""
+        elif scheduled and scheduled.pair and scheduled.role == "lead":
+            # Pair lead committed to race branch — look up the commitment
+            commitment = _playbook_engine._get_commitment(scheduled.pair)
+            if commitment and commitment.get("choice") == "race":
+                target_name = scheduled.race or ""
+        if target_name:
+            _race_selector._target_race_name = target_name
+            log(f"Re-seeded playbook target from schedule: {target_name}")
+
     # Race Day forced race — pick first real race (skip header entries)
     # Detect Race Day from OCR: "Race Day" text visible on race list screen
     all_text = " ".join(t for t, c, _ in ocr_full_screen(img) if c > 0.3)
@@ -1397,13 +1632,7 @@ def handle_race_list(img):
         _last_race_distance = pick.distance
         log(f"Race Day — selecting '{pick.name}' at {pick.tap_coords}")
         tap(pick.tap_coords[0], pick.tap_coords[1], delay=1.5)
-        img2 = screenshot(f"race_confirm_{int(time.time())}")
-        race_btn = find_green_button(img2, (1550, 1650))
-        if race_btn:
-            log(f"Confirming race at {race_btn}")
-            tap(race_btn[0], race_btn[1])
-        else:
-            tap(540, 1590)
+        _confirm_race_entry()
         return "race_enter"
 
     # Use game state from career_home (built earlier in the same process).
@@ -1412,6 +1641,39 @@ def handle_race_list(img):
     else:
         log("Warning: no cached game state — building from race list (stats may be inaccurate)")
         state = build_game_state(img, "race_list")
+    # If we have a playbook target and it's not in the visible races, scroll
+    # down to look for it. Some months have 3+ races and only 2 fit on screen.
+    _RACE_ABBREVS = {"jcc": "jockey club cup", "nhk": "nhk", "qe": "queen elizabeth"}
+    def _race_name_matches(target_lower, race_name_lower):
+        if target_lower in race_name_lower or race_name_lower in target_lower:
+            return True
+        expanded = race_name_lower
+        for abbr, full in _RACE_ABBREVS.items():
+            if abbr in race_name_lower.split():
+                expanded = race_name_lower.replace(abbr, full)
+        return target_lower in expanded or expanded in target_lower
+
+    target = _race_selector._target_race_name.lower().strip() if _race_selector._target_race_name else ""
+    if target:
+        target_found = any(_race_name_matches(target, r.name.lower()) for r in races)
+        if not target_found:
+            log(f"  Target race '{target}' not visible — scrolling to find it")
+            for scroll_attempt in range(4):
+                # Gentle scroll — one card height (~180px) at a time
+                swipe(540, 1400, 540, 1220, settle=1.5)
+                scroll_img = screenshot(f"race_list_scroll_{scroll_attempt}")
+                extra = _ocr_race_list(scroll_img)
+                for r in extra:
+                    if r.name.lower() not in [er.name.lower() for er in races]:
+                        races.append(r)
+                        log(f"  Race {len(races)} (scroll): '{r.name}' grade={r.grade} dist={r.distance}m")
+                # Check if target is now found — use the scrolled-page races
+                # since those have valid tap coords for current scroll position
+                if any(_race_name_matches(target, r.name.lower()) for r in extra):
+                    races = extra
+                    log(f"  Found target after scroll — using scrolled race list")
+                    break
+
     state.available_races = races
     action = _race_selector.decide(state)
     log(f"RaceSelector: {action.reason}")
@@ -1434,15 +1696,7 @@ def handle_race_list(img):
                 img = screenshot(f"race_reenter_{int(time.time())}")
         log(f"Selecting race at {action.tap_coords}")
         tap(action.tap_coords[0], action.tap_coords[1], delay=1.5)
-        # Tap the green "Race" button to confirm entry
-        img2 = screenshot(f"race_confirm_{int(time.time())}")
-        race_btn = find_green_button(img2, (1550, 1650))
-        if race_btn:
-            log(f"Confirming race at {race_btn}")
-            tap(race_btn[0], race_btn[1])
-        else:
-            log("Race button not found — tapping expected location")
-            tap(540, 1590)
+        _confirm_race_entry()
         return "race_enter"
 
     # No good race — go back
@@ -1560,11 +1814,18 @@ def handle_event(img):
         full_text = " ".join(t for t, c, _ in all_text if c > 0.3)
     except Exception:
         full_text = event_name
+    log(f"Event full text: '{full_text[:200]}'")
 
     # If Skip is toggled off, event shows dialogue instead of choices.
     # Re-enable skip so events auto-advance to the choice screen.
-    if "skip off" in full_text.lower():
-        log("Skip is OFF — tapping Skip Off to re-enable skip mode")
+    # Check if Skip is toggled off by sampling the button color.
+    # Skip ON = green button (avg G > 180, G > R). Skip OFF = grey/white.
+    import numpy as np
+    skip_crop = img.crop((280, 1855, 440, 1890))
+    skip_avg = np.array(skip_crop)[:, :, :3].mean(axis=(0, 1))
+    skip_is_green = skip_avg[1] > 180 and skip_avg[1] > skip_avg[0]
+    if not skip_is_green:
+        log(f"Skip is OFF (button color R={skip_avg[0]:.0f} G={skip_avg[1]:.0f} B={skip_avg[2]:.0f}) — tapping to re-enable")
         tap(380, 1876)
         time.sleep(1)
         return "event"
@@ -1851,11 +2112,12 @@ def _scan_all_skills():
     return list(all_skills.values()), sp
 
 
-def handle_skill_shop(img):
+def handle_skill_shop(img, force_recovery=False):
     """Buy skills from the skill shop screen.
 
     Strategy: scan all pages, sort by priority, buy highest-priority
     skills until we hit SP reserve. At Complete Career, spend everything.
+    If force_recovery=True, lower SP reserve and prioritize recovery skills.
     """
     global _skill_shop_done
 
@@ -1869,11 +2131,20 @@ def handle_skill_shop(img):
         return "skill_back"
 
     # Phase 2: Sort by priority (highest first), then by cost (cheapest first for ties)
+    # Boost recovery skills to top priority when forcing
+    if force_recovery:
+        for s in all_skills:
+            if s.name.lower() in _RECOVERY_SKILL_NAMES:
+                s.priority = max(s.priority, 20)  # Ensure they sort first
+                log(f"  Boosting recovery skill: {s.name} (prio → {s.priority})")
     all_skills.sort(key=lambda s: (-s.priority, s.cost))
 
     is_end_game = _last_result in ("complete_career",)
     strategy = _overrides.get_strategy()
     sp_reserve = 0 if is_end_game else strategy.raw.get("skill_pts_reserve", 800)
+    if force_recovery:
+        sp_reserve = min(sp_reserve, 400)  # Lower reserve to ensure recovery skills get bought
+        log(f"Skill shop — force_recovery mode, SP reserve lowered to {sp_reserve}")
 
     # Build prereq map and skill lookup from strategy
     prereqs = strategy.raw.get("skill_prereqs", {})
@@ -1991,6 +2262,13 @@ def handle_skill_shop(img):
             else:
                 tap(540, 960)
 
+    # Track recovery skills bought
+    global _recovery_skills_bought
+    for name in bought:
+        if name.lower() in _RECOVERY_SKILL_NAMES:
+            _recovery_skills_bought += 1
+            log(f"  Recovery skill bought: {name} (total: {_recovery_skills_bought})")
+
     return "skill_shop"
 
 
@@ -2001,7 +2279,11 @@ try:
     _last_shop_turn = int(_SHOP_TURN_FILE.read_text().strip())
 except Exception:
     _last_shop_turn = -1
-_needs_shop_visit = False  # Set True only on race win or explicit trigger
+
+# Persisted across process restarts so that a race win → shop visit transition
+# survives interruptions (e.g. the game's Data Update popup).
+_NEEDS_SHOP_FILE = Path("data/needs_shop.flag")
+_needs_shop_visit = _NEEDS_SHOP_FILE.exists()
 _inventory_checked = False  # Read Training Items on first career_home
 
 
@@ -2139,6 +2421,8 @@ def read_inventory_from_training_items():
         # Second pass: for each matched item, find nearby held count
         for name_y, item_key, item in matched_items:
             held_count = 1  # default
+            count_source = "default"
+            count_raw = ""
             for text, conf, py in entries:
                 # Look for count near the item name/effect (within 80px)
                 if abs(py - name_y) > 80:
@@ -2147,20 +2431,25 @@ def read_inventory_from_training_items():
                 m = re.search(r'(\d+)\s*[>»\\$•·|/~:×x]\s*(\d+)', text)
                 if m:
                     held_count = int(m.group(1))
+                    count_source = "N>N"
+                    count_raw = text.strip()
                     break
                 # "N >" (OCR split the second number into a separate entry)
                 m2 = re.search(r'^(\d+)\s*[>»\\$•·|/~:×x]', text.strip())
                 if m2 and int(m2.group(1)) > 0:
                     held_count = int(m2.group(1))
+                    count_source = "N>"
+                    count_raw = text.strip()
                     break
                 # "• N" pattern
                 m3 = re.match(r'[•·]\s*(\d+)', text.strip())
                 if m3:
                     held_count = int(m3.group(1))
+                    count_source = "dot-N"
+                    count_raw = text.strip()
                     break
 
-            if held_count > 1:
-                log(f"  Held count for {item_key}: {held_count}")
+            log(f"  {item_key}: held={held_count} (src={count_source}, raw='{count_raw}')")
             page_keys.add(item_key)
             if item.use_immediately:
                 use_now[item_key] = use_now.get(item_key, 0) + held_count
@@ -2184,14 +2473,19 @@ def read_inventory_from_training_items():
             break
         all_found_keys |= new_keys
 
-    # Reset and set inventory (include use_immediately items so they can be consumed)
-    _shop_manager._inventory.clear()
-    for key, count in inventory.items():
-        _shop_manager._inventory[key] = count
-    for key, count in use_now.items():
-        _shop_manager._inventory[key] = _shop_manager._inventory.get(key, 0) + count
-    _shop_manager.save_inventory()
-    log(f"Inventory from Training Items: {dict(_shop_manager.inventory)}")
+    # Reset and set inventory (include use_immediately items so they can be consumed).
+    # SAFETY: if OCR found nothing, the read likely failed (wrong screen, OCR glitch).
+    # Don't wipe the existing inventory in that case — trust prior state instead.
+    if not inventory and not use_now:
+        log(f"Inventory OCR returned empty — keeping existing inventory: {dict(_shop_manager.inventory)}")
+    else:
+        _shop_manager._inventory.clear()
+        for key, count in inventory.items():
+            _shop_manager._inventory[key] = count
+        for key, count in use_now.items():
+            _shop_manager._inventory[key] = _shop_manager._inventory.get(key, 0) + count
+        _shop_manager.save_inventory()
+        log(f"Inventory from Training Items: {dict(_shop_manager.inventory)}")
 
     _inventory_checked = True
 
@@ -2215,8 +2509,102 @@ def read_inventory_from_training_items():
         tap(302, 1772, delay=1.5)  # Tap Close (left button)
 
 
-def handle_shop(img):
-    """Buy priority items from the shop screen, then exit."""
+def _build_shop_plan():
+    """Compute shop tier overrides, ankle stock limits, and want list.
+
+    Returns (tier_overrides, ankle_stock_overrides, want_list) where want_list is
+    a list of (tier, cost, key) tuples sorted by priority (best first). Pure — no
+    taps, no screen interaction.
+    """
+    from uma_trainer.decision.shop_manager import ITEM_CATALOGUE, ItemTier
+
+    inventory = _shop_manager.inventory
+    tier_order = {ItemTier.SS: 0, ItemTier.S: 1, ItemTier.A: 2, ItemTier.B: 3}
+
+    # Dynamic tier overrides based on game state
+    tier_overrides = {}
+    friendship_deadline = 36
+    all_maxed = _card_tracker.all_bonds_maxed() if _card_tracker.card_count > 0 else False
+    if _current_turn < friendship_deadline:
+        tier_overrides["grilled_carrots"] = ItemTier.SS
+    elif not all_maxed:
+        tier_overrides["grilled_carrots"] = ItemTier.B  # Still useful for unbonded cards
+    else:
+        tier_overrides["grilled_carrots"] = ItemTier.NEVER  # All bonds maxed, no point
+
+    # Runspec shop_item_tiers: build build-specific priorities. Runspec tiers
+    # override catalogue defaults but are themselves overridden by any dynamic
+    # turn-based tier_overrides already set above.
+    if _runspec and _runspec.shop_item_tiers:
+        _TIER_MAP = {
+            "SS": ItemTier.SS, "S": ItemTier.S, "A": ItemTier.A,
+            "B": ItemTier.B, "NEVER": ItemTier.NEVER,
+        }
+        for key, tier_str in _runspec.shop_item_tiers.items():
+            if key in tier_overrides:
+                continue
+            tier = _TIER_MAP.get(tier_str.upper())
+            if tier is not None:
+                tier_overrides[key] = tier
+
+    # Dynamic ankle weight max_stock based on deck composition from runspec.
+    ANKLE_BUDGET = 4
+    ankle_stock_overrides = {}
+    deck = _runspec.deck if _runspec else {}
+    if deck:
+        ANKLE_STATS = ("speed", "stamina", "power", "guts")
+        ankle_cards = {s: deck.get(s, 0) for s in ANKLE_STATS}
+        total_ankle_cards = sum(ankle_cards.values())
+        for stat in ANKLE_STATS:
+            ankle_key = f"{stat}_ankle_weights"
+            n_cards = ankle_cards[stat]
+            if n_cards == 0:
+                ankle_stock_overrides[ankle_key] = 1
+            else:
+                share = max(1, round(ANKLE_BUDGET * n_cards / total_ankle_cards))
+                ankle_stock_overrides[ankle_key] = share
+
+    # Late-career megaphone cap based on remaining training turns to cover.
+    # Megaphone-worthy training turns after senior summer: flex pairs (66-67),
+    # flex turn 71, and TS Climax training turns (~4-5 of 72-78).
+    # motivating = 3 turn duration, empowering = 2 turn duration.
+    mega_cap = {}
+    max_turn = 72
+    if _current_turn >= 61:
+        remaining_training_turns = max(0, max_turn - _current_turn)
+        # Count existing coverage from items already owned
+        owned_motiv = inventory.get("motivating_mega", 0)
+        owned_empow = inventory.get("empowering_mega", 0)
+        coverage = owned_motiv * 3 + owned_empow * 2
+        turns_uncovered = max(0, remaining_training_turns - coverage)
+        # Only buy more if we have uncovered turns
+        mega_cap["motivating_mega"] = owned_motiv + (turns_uncovered // 3)
+        mega_cap["empowering_mega"] = owned_empow + (turns_uncovered // 2)
+
+    buyable = []
+    for key, item in ITEM_CATALOGUE.items():
+        tier = tier_overrides.get(key, item.tier)
+        if tier == ItemTier.NEVER:
+            continue
+        max_stock = mega_cap.get(key, ankle_stock_overrides.get(key, item.max_stock))
+        owned = inventory.get(key, 0)
+        if owned >= max_stock:
+            continue
+        if key == "pretty_mirror" and "charming" in _positive_statuses:
+            continue
+        buyable.append((tier, item.cost, key))
+    buyable.sort(key=lambda t: (tier_order.get(t[0], 9), t[1]))
+    return tier_overrides, ankle_stock_overrides, buyable
+
+
+def handle_shop(img, dry=False):
+    """Buy priority items from the shop screen, then exit.
+
+    If dry=True, scan the shop but do NOT tap checkboxes or confirm purchases.
+    Returns (available_items, would_buy) where available_items is a list of
+    dicts {key, name, purchased, cost, tier} and would_buy is the list of
+    item keys that the bot would actually purchase within the coin budget.
+    """
     from uma_trainer.decision.shop_manager import ITEM_CATALOGUE, ItemTier
     from rapidfuzz import fuzz, process
 
@@ -2240,54 +2628,12 @@ def handle_shop(img):
         press_back()
         return "shop_back"
 
-    # Build want list from catalogue
-    inventory = _shop_manager.inventory
+    tier_overrides, ankle_stock_overrides, buyable = _build_shop_plan()
     tier_order = {ItemTier.SS: 0, ItemTier.S: 1, ItemTier.A: 2, ItemTier.B: 3}
-
-    # Dynamic tier overrides based on game state
-    tier_overrides = {}
-    friendship_deadline = 36
-    if _current_turn < friendship_deadline:
-        tier_overrides["grilled_carrots"] = ItemTier.SS
-    else:
-        tier_overrides["grilled_carrots"] = ItemTier.NEVER
-
-    # Dynamic ankle weight max_stock based on deck composition from runspec.
-    # Stats with more cards get more ankle weight slots for summer camp.
-    # Total budget = 4 (one summer camp's worth of turns).
-    ANKLE_BUDGET = 4
-    ankle_stock_overrides = {}
+    inventory = _shop_manager.inventory
     deck = _runspec.deck if _runspec else {}
     if deck:
-        # Wit has no ankle weights in-game; only count stats that have them
-        ANKLE_STATS = ("speed", "stamina", "power", "guts")
-        ankle_cards = {s: deck.get(s, 0) for s in ANKLE_STATS}
-        total_ankle_cards = sum(ankle_cards.values())
-        for stat in ANKLE_STATS:
-            ankle_key = f"{stat}_ankle_weights"
-            n_cards = ankle_cards[stat]
-            if n_cards == 0:
-                ankle_stock_overrides[ankle_key] = 1
-            else:
-                share = max(1, round(ANKLE_BUDGET * n_cards / total_ankle_cards))
-                ankle_stock_overrides[ankle_key] = share
         log(f"Deck: {deck} → ankle stock: {ankle_stock_overrides}")
-
-    buyable = []
-    for key, item in ITEM_CATALOGUE.items():
-        tier = tier_overrides.get(key, item.tier)
-        if tier == ItemTier.NEVER:
-            continue
-        max_stock = ankle_stock_overrides.get(key, item.max_stock)
-        owned = inventory.get(key, 0)
-        if owned >= max_stock:
-            continue
-        # Skip mirror if Charming status is already active
-        if key == "charming" and "charming" in _positive_statuses:
-            log("Skipping Pretty Mirror — already have Charming status")
-            continue
-        buyable.append((tier_order.get(tier, 9), item.cost, key))
-    buyable.sort()
     want_keys = [key for _, _, key in buyable]
 
     if not want_keys:
@@ -2296,6 +2642,11 @@ def handle_shop(img):
         return "shop_back"
 
     log(f"Want list: {want_keys[:8]}")
+
+    # Coins to hold back for unbought SS items that might appear later in the
+    # shelf scan. Prevents buying lower-tier items that starve out an SS
+    # purchase (e.g. Pretty Mirror @ 150 coins for Charming).
+    ss_want = [(cost, key) for tier, cost, key in buyable if tier == ItemTier.SS]
 
     # Build name matcher — include stat-prefixed variants for items like
     # "Stamina Scroll", "Speed Manual", "Guts Ankle Weights" etc.
@@ -2313,6 +2664,8 @@ def handle_shop(img):
     selected_keys = []
     spent = 0
     tapped_positions = []
+    dry_available = []  # (dry mode) every matched item seen on shelf
+    dry_seen_keys = set()
 
     for scroll in range(5):
         if scroll > 0:
@@ -2342,23 +2695,29 @@ def handle_shop(img):
             matched_name, score, _idx = result
             item_key = name_to_key[matched_name]
 
+            # Check if already purchased (OCR badge detection)
+            right_texts = ocr_region(img, 700, y, 1080, y + 120, save_path="/tmp/shop_right.png")
+            right_text = " ".join(t.strip().lower() for t, c in right_texts if c > 0.3)
+            is_purchased = "purchased" in right_text or "purch" in right_text
+
+            # In dry mode, record every item seen on shelf (even NEVER-tier/purchased)
+            if dry and item_key not in dry_seen_keys:
+                dry_seen_keys.add(item_key)
+                dry_item = ITEM_CATALOGUE[item_key]
+                dry_tier = tier_overrides.get(item_key, dry_item.tier)
+                dry_available.append({
+                    "key": item_key,
+                    "name": dry_item.name,
+                    "cost": dry_item.cost,
+                    "tier": dry_tier.name,
+                    "purchased": is_purchased,
+                })
+
             # Skip if matched item is NEVER-tier (after overrides)
             effective_item_tier = tier_overrides.get(item_key, ITEM_CATALOGUE[item_key].tier)
             if effective_item_tier == ItemTier.NEVER:
                 y += 150
                 continue
-
-            # Check if already purchased (OCR + orange pixel fallback)
-            right_texts = ocr_region(img, 700, y + 20, 1050, y + 80, save_path="/tmp/shop_right.png")
-            right_text = " ".join(t.strip().lower() for t, c in right_texts if c > 0.3)
-            is_purchased = "purchased" in right_text or "purch" in right_text
-            if not is_purchased:
-                # Fallback: check for orange "Purchased" badge pixel
-                try:
-                    pr, pg, pb = img.getpixel((980, y + 40))[:3]
-                    is_purchased = pr > 200 and pg < 150 and pb < 100
-                except Exception:
-                    pass
 
             if is_purchased or item_key not in want_keys:
                 y += 150
@@ -2373,9 +2732,23 @@ def handle_shop(img):
                 y += 150
                 continue
 
-            # Check affordability — reserve 100 coins for SS/S tier items
+            # Check affordability — reserve coins for higher-tier items
             effective_tier = tier_overrides.get(item_key, item.tier)
-            coin_reserve = 0 if effective_tier in (ItemTier.SS, ItemTier.S) else 100
+            if _current_turn >= 48 or effective_tier in (ItemTier.SS, ItemTier.S):
+                coin_reserve = 0
+            elif effective_tier == ItemTier.A:
+                coin_reserve = 50
+            else:
+                coin_reserve = 0  # B-tier: no reserve
+            # Hold back coins for any unbought SS-tier want items, so we don't
+            # blow coins on lower-tier purchases before reaching an SS item
+            # further down the shelf.
+            if effective_tier != ItemTier.SS:
+                ss_reserve = sum(
+                    c for c, k in ss_want
+                    if k != item_key and k not in selected_keys
+                )
+                coin_reserve = max(coin_reserve, ss_reserve)
             if coins is not None and (spent + item.cost + coin_reserve) > coins:
                 y += 150
                 continue
@@ -2383,6 +2756,14 @@ def handle_shop(img):
             # Deduplicate (don't tap same position twice)
             abs_y = y + scroll * 350
             if any(abs(abs_y - py) < 200 and pk == item_key for pk, py in tapped_positions):
+                y += 150
+                continue
+
+            if dry:
+                log(f"  Dry: would select: {item.name} ({item.cost} coins)")
+                tapped_positions.append((item_key, abs_y))
+                selected_keys.append(item_key)
+                spent += item.cost
                 y += 150
                 continue
 
@@ -2394,35 +2775,77 @@ def handle_shop(img):
             spent += item.cost
             y += 150
 
+    if dry:
+        log(f"Dry shop scan: {len(dry_available)} items on shelf, would buy {len(selected_keys)} ({spent} coins)")
+        # Exit without confirming
+        for attempt in range(3):
+            press_back()
+            time.sleep(1.5)
+            img2 = screenshot(f"shop_dry_exit_{int(time.time())}")
+            if detect_screen(img2) != "shop":
+                break
+        return dry_available, selected_keys
+
     if selected_keys:
         log(f"Confirming purchase of {len(selected_keys)} items ({spent} coins): {selected_keys}")
         # Tap Confirm button
         tap(540, 1640, delay=2.0)
-        # Tap Exchange button
-        tap(810, 1780, delay=2.0)
-        # Tap Close on Exchange Complete
-        tap(270, 1780, delay=2.0)
+        # Tap Exchange button (opens Exchange Complete "Use Now" dialog)
+        tap(810, 1780, delay=2.5)
 
+        # Decide which just-purchased items to use on the Exchange Complete screen.
+        # - use_immediately items (manual, scroll, carrots, pretty_mirror): always, unless saving carrots
+        # - cure items matching active conditions: use immediately
+        use_now_keys = [k for k in selected_keys if ITEM_CATALOGUE[k].use_immediately]
+        # Carrots before summer camp with bond met: save for later
+        save_carrots = False
+        if "grilled_carrots" in use_now_keys:
+            sirius_bond = _card_tracker.get_bond("team_sirius") if _card_tracker.is_tracked("team_sirius") else -1
+            bond_met = sirius_bond >= 60 or _sirius_bond_unlocked
+            if bond_met and _current_turn < 36:
+                log(f"Saving purchased carrots for summer camp")
+                use_now_keys = [k for k in use_now_keys if k != "grilled_carrots"]
+                save_carrots = True
+        # Cure items matching active conditions
+        for cond in list(_active_conditions):
+            cure_key = CONDITION_CURES.get(cond)
+            if cure_key and cure_key in selected_keys and cure_key not in use_now_keys:
+                log(f"Will cure '{cond}' with freshly-bought {cure_key}")
+                use_now_keys.append(cure_key)
+
+        # Drive the Exchange Complete "Use Now" screen
+        used = _use_shop_exchange_items(use_now_keys)
+
+        # Update inventory: use_immediately items never go in; cure items do unless
+        # we just consumed them at Exchange Complete.
+        consumed_this_turn = set(use_now_keys) if used else set()
         for key in selected_keys:
             item = ITEM_CATALOGUE[key]
-            if not item.use_immediately:
-                _shop_manager.add_item(key)
+            if item.use_immediately:
+                if key == "grilled_carrots" and save_carrots:
+                    _shop_manager.add_item(key)
+                else:
+                    log(f"  {item.name} — used immediately, not added to inventory")
             else:
-                log(f"  {item.name} — used immediately, not added to inventory")
+                if key in consumed_this_turn:
+                    log(f"  {item.name} — consumed at Exchange Complete, not added to inventory")
+                else:
+                    _shop_manager.add_item(key)
         _shop_manager.save_inventory()
         log(f"Inventory updated: {dict(_shop_manager.inventory)}")
+
+        # Clear conditions we just cured via Exchange Complete
+        if used:
+            cured = set()
+            for cond in list(_active_conditions):
+                cure_key = CONDITION_CURES.get(cond)
+                if cure_key and cure_key in consumed_this_turn:
+                    cured.add(cond)
+            for c in cured:
+                _active_conditions.remove(c)
+                log(f"Cleared condition '{c}' (cured at Exchange Complete)")
     else:
         log("No items selected for purchase")
-
-    # Track which use-immediately items were bought (except carrots being saved)
-    use_now_keys = [k for k in selected_keys if ITEM_CATALOGUE[k].use_immediately]
-    if "grilled_carrots" in use_now_keys:
-        sirius_bond = _card_tracker.get_bond("team_sirius") if _card_tracker.is_tracked("team_sirius") else -1
-        bond_met = sirius_bond >= 60 or _sirius_bond_unlocked
-        if bond_met and _current_turn < 36:
-            log(f"Saving purchased carrots for summer camp")
-            use_now_keys = [k for k in use_now_keys if k != "grilled_carrots"]
-            _shop_manager.add_item("grilled_carrots")
 
     # Exit shop
     for attempt in range(3):
@@ -2437,12 +2860,155 @@ def handle_shop(img):
         log("WARNING: Could not exit shop after 3 attempts")
         return "shop_stuck"
 
-    # Use immediately-consumable items via Training Items screen
-    if use_now_keys:
-        time.sleep(1.0)
-        _use_training_items(use_now_keys)
-
     return "shop_done"
+
+
+def _use_shop_exchange_items(use_now_keys):
+    """Use items on the shop Exchange Complete screen.
+
+    Assumes the Exchange Complete dialog is already open (tap Exchange before
+    calling). OCRs visible item rows, taps '+' for each requested item, then
+    taps Confirm Use and handles the final confirmation popup.
+
+    Returns True if items were used (Confirm Use tapped), False if we tapped
+    Close instead (nothing to use or nothing matched).
+    """
+    from scripts.ocr_util import ocr_image as ocr_full
+
+    # Close button (left, white) and Confirm Use (right, green, grays out when all 0)
+    CLOSE_BTN = (270, 1780)
+    CONFIRM_USE_BTN = (810, 1780)
+
+    if not use_now_keys:
+        log("Exchange Complete: nothing to use — tapping Close")
+        tap(*CLOSE_BTN, delay=2.0)
+        return False
+
+    # Matches any just-purchased item that could be use-now from the shop
+    keyword_to_key = {
+        "manual": "manual",
+        "scroll": "scroll",
+        "carrots": "grilled_carrots",
+        "grilled": "grilled_carrots",
+        "pretty mirror": "pretty_mirror",
+        "mirror": "pretty_mirror",
+        "hand cream": "rich_hand_cream",
+        "fluffy": "fluffy_pillow",
+        "pillow": "fluffy_pillow",
+        "aroma": "aroma_diffuser",
+        "pocket planner": "pocket_planner",
+        "practice drills": "practice_dvd",
+        "smart scale": "smart_scale",
+        "miracle": "miracle_cure",
+    }
+
+    use_counts = {}
+    for k in use_now_keys:
+        use_counts[k] = use_counts.get(k, 0) + 1
+    log(f"Exchange Complete: want to use {use_counts}")
+
+    img = screenshot(f"shop_exchange_{int(time.time())}")
+    img.save("/tmp/shop_exchange.png")
+    results = ocr_full("/tmp/shop_exchange.png")
+
+    # Find green "+" button y-positions by scanning for green pixels in the +
+    # button column (~x=950-1010). Filter out Confirm Use (y>=1700).
+    h = img.size[1]
+    green_ys = []
+    for y in range(160, 1700, 5):
+        green_count = 0
+        for x in range(950, 1010, 5):
+            r, g, b = img.getpixel((x, y))[:3]
+            if g > 150 and g > r + 30 and g > b + 30:
+                green_count += 1
+        if green_count >= 3:
+            green_ys.append(y)
+    plus_positions = []
+    if green_ys:
+        clusters = [[green_ys[0]]]
+        for i in range(1, len(green_ys)):
+            if green_ys[i] - green_ys[i - 1] > 50:
+                clusters.append([])
+            clusters[-1].append(green_ys[i])
+        plus_positions = [sum(c) // len(c) for c in clusters]
+    log(f"  Exchange Complete: {len(plus_positions)} + buttons at y={plus_positions}")
+
+    # Find wanted item names via OCR, convert bbox to pixel y
+    all_item_names = []
+    for text, conf, bbox in results:
+        if conf < 0.7:
+            continue
+        lower = text.strip().lower()
+        for keyword, key in keyword_to_key.items():
+            if keyword in lower:
+                bx, by, bw, bh = bbox
+                name_y = (1.0 - by - bh) * h
+                all_item_names.append((name_y, key, text.strip()))
+                break
+    all_item_names.sort(key=lambda x: x[0])
+    deduped = []
+    for item in all_item_names:
+        if not deduped or abs(item[0] - deduped[-1][0]) > 80:
+            deduped.append(item)
+    all_item_names = deduped
+
+    # Assign each wanted item to its nearest unused + button
+    items_on_screen = []
+    used_btns = set()
+    for name_y, key, name in all_item_names:
+        if key not in use_counts:
+            continue
+        best_btn = None
+        best_dist = 999
+        for py in plus_positions:
+            if py in used_btns:
+                continue
+            dist = abs(py - name_y)
+            if dist < best_dist:
+                best_dist = dist
+                best_btn = py
+        if best_btn is not None:
+            used_btns.add(best_btn)
+            items_on_screen.append((best_btn, key, name))
+
+    if not items_on_screen:
+        all_texts = [(t.strip(), round(c, 2)) for t, c, b in results if c > 0.5 and len(t.strip()) > 2]
+        log(f"  Exchange Complete: no matching items. OCR saw: {all_texts[:15]}")
+        tap(*CLOSE_BTN, delay=2.0)
+        return False
+
+    log(f"  Matched items: {[(n, k, int(y)) for y, k, n in items_on_screen]}")
+
+    # Tap + for each matched item the required number of times
+    used_any = False
+    for idx, (btn_y, item_key, display_name) in enumerate(items_on_screen):
+        if item_key not in use_counts:
+            continue
+        remaining = use_counts[item_key]
+        future_rows = sum(1 for _, k, _ in items_on_screen[idx + 1:] if k == item_key)
+        taps = max(1, remaining - future_rows)
+        log(f"  {display_name}: tapping + {taps}x at (975, {btn_y})")
+        for _ in range(taps):
+            tap(975, btn_y, delay=0.3)
+        used_any = True
+        use_counts[item_key] -= taps
+        if use_counts[item_key] <= 0:
+            del use_counts[item_key]
+
+    if not used_any:
+        log("  Nothing tapped — tapping Close")
+        tap(*CLOSE_BTN, delay=2.0)
+        return False
+
+    # Confirm Use (green) → final confirmation popup (Use button, same position
+    # as Training Items) → result Close
+    log("  Tapping Confirm Use")
+    tap(*CONFIRM_USE_BTN, delay=2.5)
+    # Final confirmation popup mirrors Training Items layout
+    tap(*BTN_ITEMS_CONFIRM, delay=3.0)
+    # Result screen Close
+    tap(*BTN_ITEMS_CLOSE, delay=2.0)
+    return True
 
 
 def _use_training_items(item_keys):
@@ -2478,7 +3044,10 @@ def _use_training_items(item_keys):
         "artisan": "artisan_hammer",
         "master": "master_hammer",
         "good-luck": "good_luck_charm",
+        "good luck": "good_luck_charm",
         "reset whistle": "reset_whistle",
+        "plain cupcake": "plain_cupcake",
+        "berry cupcake": "berry_cupcake",
     }
 
     # Count how many of each item to use
@@ -2714,14 +3283,27 @@ def _ocr_training_gains(img):
         if center_y > 0.60:
             continue
         # Strip "+" prefix and common OCR artifacts
-        clean = t.replace("+", "").replace("$", "").replace(",", "").strip()
+        has_space = " " in t.strip()
+        clean = t.replace("+", "").replace("$", "").replace(",", "").replace(" ", "").strip()
+        # Extract the leading run of digits — OCR sometimes appends trailing
+        # punctuation ("+30-", "+30.") which breaks int() parsing.
+        import re as _re
+        m = _re.match(r"(\d+)", clean)
+        if not m:
+            continue
+        clean = m.group(1)
         # Low-confidence "4N" is likely "+N" (inversion doesn't always fix it)
-        if conf < 0.6 and clean.isdigit() and len(clean) >= 2 and clean[0] == "4":
+        if conf < 0.6 and len(clean) >= 2 and clean[0] == "4":
             clean = clean[1:]
         try:
             val = int(clean)
         except ValueError:
             continue
+        # Low-confidence readings with a space (e.g. "+ 70") are usually a
+        # single digit where OCR hallucinated an extra character. The second
+        # character is almost always "0" in these cases — strip it.
+        if conf < 0.6 and has_space and len(clean) >= 2 and clean.endswith("0"):
+            val = int(clean[:-1])
         if val > 80 or val < 1:
             continue
         center_x = bbox[0] + bbox[2] / 2
@@ -2755,8 +3337,104 @@ def _ocr_failure_rate(img):
     return None
 
 
+# Minimum score that justifies spending an energy drink.
+# Below this, the best tile isn't worth the 50+ coin drink.
+DRINK_WORTH_IT_SCORE = 25
+
+# Minimum score to accept a summer camp / TS Climax tile without whistling.
+# Calibrated with megaphone active: +22 power with 2 cards scores ~53.
+WHISTLE_THRESHOLD = 50
+
+
+def _try_drink_and_retry_training(best_score, scored_tiles):
+    """Decide whether to spend an energy drink to make training viable.
+
+    Only drinks if:
+      - Best tile's score >= DRINK_WORTH_IT_SCORE (tile is worth training)
+      - An energy drink is available in inventory
+
+    If both conditions are met: back out to career_home, use the drink,
+    re-enter training, and return True. Otherwise return False.
+    """
+    global _train_drink_used
+    if best_score < DRINK_WORTH_IT_SCORE:
+        log(f"Drink skipped — best score {best_score:.1f} < {DRINK_WORTH_IT_SCORE} (not worth it)")
+        return False
+    # Pick smallest drink that covers the gap (we've already fallen below the
+    # failure threshold, so any refill is useful — prefer cheapest vita).
+    inventory = _shop_manager.inventory
+    candidates = [("vita_20", 20), ("vita_40", 40), ("royal_kale", 50), ("vita_65", 65)]
+    chosen = None
+    for key, gain in candidates:
+        if inventory.get(key, 0) > 0:
+            chosen = (key, gain)
+            break
+    if not chosen:
+        log("Drink skipped — no energy drinks in inventory")
+        return False
+    key, gain = chosen
+    top_stat = scored_tiles[0][0].stat_type.value if scored_tiles else "?"
+    log(f"Drink worth it — best={top_stat} score={best_score:.1f}, using {key} (+{gain})")
+    tap(80, 1855)  # Back to career home
+    time.sleep(2)
+    if _use_training_items([key]):
+        if _shop_manager._inventory.get(key, 0) > 0:
+            _shop_manager._inventory[key] -= 1
+            if _shop_manager._inventory[key] <= 0:
+                del _shop_manager._inventory[key]
+        _shop_manager.save_inventory()
+        _train_drink_used = True  # prevent re-entry loop
+        log(f"  {key} used, re-entering training")
+        return True
+    log(f"  Failed to use {key}")
+    return False
+
+
 def handle_training():
     """Preview all 5 training tiles and pick the best using uma_trainer scorer."""
+    global _pending_training_stat, _pending_training_turn, _summer_whistle_used, _train_drink_used
+    global _playbook_force_train
+
+    # Post-ankle re-entry fast path: if we already decided a stat earlier this
+    # turn (e.g. scored → backed out → applied ankle weight → came back), skip
+    # the preview/score loop entirely and commit the already-chosen tile. This
+    # avoids a second wasteful round of tile-preview taps, and makes the on-
+    # screen behavior read as "score → apply ankle → train" instead of looking
+    # like the bot previews twice with no commit.
+    if _pending_training_stat and _pending_training_turn == _current_turn:
+        stat = _pending_training_stat
+        _pending_training_stat = None
+        _pending_training_turn = -1
+        tile_key = stat.capitalize()
+        if tile_key in TRAINING_TILES:
+            tx, ty = TRAINING_TILES[tile_key]
+            log(f"Post-item re-entry — committing {stat} directly at ({tx}, {ty})")
+            # Verify we're on training screen
+            img_check = screenshot(f"train_reenter_{int(time.time())}")
+            if detect_screen(img_check) != "training":
+                log(f"  Not on training screen — falling through to normal flow")
+            else:
+                _scenario.on_non_race_action()
+                # Tap to raise the tile (first tap selects it)
+                tap(tx, ty, delay=1)
+                # Read failure rate from the selected tile before confirming
+                sel_img = screenshot(f"train_reenter_selected_{int(time.time())}")
+                failure_rate = _ocr_failure_rate(sel_img)
+                if failure_rate is None:
+                    sel_screen = detect_screen(sel_img)
+                    if sel_screen != "training":
+                        log(f"  Training already confirmed ({sel_screen})")
+                        return sel_screen
+                    log(f"  Could not read failure rate on re-entry — committing anyway")
+                    failure_rate = 0
+                if failure_rate > 0:
+                    log(f"  Failure rate: {failure_rate}%")
+                # Tap again to confirm the training
+                tap(tx, ty, delay=1)
+                return "training"
+        else:
+            log(f"Post-item re-entry: unknown stat '{stat}' — falling through to normal flow")
+
     log("Training — previewing all tiles")
 
     # Check which tile is pre-raised by reading gains before tapping
@@ -2811,6 +3489,7 @@ def handle_training():
 
             gains = _ocr_training_gains(img)
 
+        fail_rate = _ocr_failure_rate(img)
         # Count support card portraits and read bond levels
         n_cards = count_portraits(img)
 
@@ -2843,7 +3522,8 @@ def handle_training():
         hint_str = " HINT" if has_hint else ""
         bond_str = f" bonds={bond_levels}" if bond_levels else ""
         gains_str = ", ".join(f"{k}+{v}" for k, v in sorted(gains.items()))
-        log(f"  {tile_name}: total={tile.total_stat_gain}, cards={n_cards}{bond_str}{hint_str} ({gains_str})")
+        fail_str = f" fail={fail_rate}%" if fail_rate is not None else " fail=?"
+        log(f"  {tile_name}: total={tile.total_stat_gain}, cards={n_cards}{bond_str}{hint_str}{fail_str} ({gains_str})")
 
     # Build GameState and let the scorer decide
     energy = get_energy_level(img)
@@ -2854,6 +3534,20 @@ def handle_training():
     if _card_tracker.card_count > 0:
         log(f"Bond tracker: {_card_tracker.summary()}")
 
+    # Pair commitment: if this is a pair-lead turn that needs tile preview to
+    # decide between race+Riko vs train+train, evaluate now and either commit
+    # to train (continue normal flow with _playbook_force_train) or back out
+    # to career home so the new commitment routes us to the race branch.
+    if _playbook_engine:
+        pair_choice = _playbook_engine.commit_pair_after_tiles(state)
+        if pair_choice == "race":
+            log("Pair commitment: tile preview → race branch, backing out to career home")
+            tap(80, 1855)  # Back to career home
+            return "training_back_to_rest"
+        elif pair_choice == "train":
+            log(f"Pair commitment: tile preview → train branch (best tile ≥ {_playbook_engine.PAIR_TRAIN_TILE_THRESHOLD})")
+            _playbook_force_train = True
+
     action = _scorer.best_action(state)
     scored_tiles = _scorer.score_tiles(state) if state.training_tiles else []
     best_score = scored_tiles[0][1] if scored_tiles else 0
@@ -2861,9 +3555,10 @@ def handle_training():
     for st_tile, st_score in scored_tiles:
         log(f"  {st_tile.stat_type.value:8s}: score={st_score:5.1f}  cards={len(st_tile.support_cards)}  gains={dict(st_tile.stat_gains) if st_tile.stat_gains else {}}")
 
-    # Summer camp / TS Climax: use reset whistle if best score is underwhelming
-    global _summer_whistle_used
-    WHISTLE_THRESHOLD = 40
+    # Summer camp / TS Climax: use reset whistle if best score is underwhelming.
+    # Calibrated against megaphone-boosted gains: a "good" tile (+25 raw speed,
+    # +10 raw power) scores ~80+ with empowering mega. 50 catches bad shuffles
+    # while accepting decent tiles (e.g. +22 power with 2 cards scores ~53).
     summer_turns = set(range(37, 41)) | set(range(61, 65))
     is_whistle_turn = _current_turn in summer_turns or _current_turn >= 72
     if (is_whistle_turn
@@ -2910,7 +3605,10 @@ def handle_training():
                         del _shop_manager._inventory[ankle_key]
                 _shop_manager.save_inventory()
                 _shop_manager.activate_item(ankle_key)
-                log(f"{phase} — {ankle_key} active, re-entering training")
+                # Remember the chosen stat so re-entry skips preview
+                _pending_training_stat = stat_name
+                _pending_training_turn = _current_turn
+                log(f"{phase} — {ankle_key} active, re-entering to train {stat_name} directly")
             else:
                 log(f"{phase} — Failed to use {ankle_key}, removing from tracked inventory")
                 if _shop_manager._inventory.get(ankle_key, 0) > 0:
@@ -2921,10 +3619,35 @@ def handle_training():
             return "training_back_to_rest"  # Re-enters training via summer/TS handler
 
     if action.action_type == ActionType.REST:
-        log("Scorer says rest — tapping Back to return to career home")
-        _scenario.on_non_race_action()
-        tap(80, 1855)
-        return "training_back_to_rest"
+        # Playbook-forced TRAIN turns must not rest. If there's a worthwhile tile,
+        # drink and retry; otherwise pick the lowest-failure tile (usually Wit).
+        if _playbook_force_train and not _train_drink_used:
+            if _try_drink_and_retry_training(best_score, scored_tiles):
+                return "training_back_to_rest"
+            # No drink available or no worthwhile tile — pick lowest-failure tile
+            log("Playbook TRAIN: no drink worth it, picking lowest-failure tile")
+            wit_tile = next((t for t in tiles if t.stat_type.value == "wit"), None)
+            if wit_tile is not None:
+                action = BotAction(
+                    action_type=ActionType.TRAIN,
+                    target="wit",
+                    tap_coords=wit_tile.tap_coords,
+                    reason="playbook TRAIN: lowest-failure fallback",
+                )
+            else:
+                log("  No Wit tile found — falling back to best-gain tile")
+                best = max(tiles, key=lambda t: t.total_stat_gain)
+                action = BotAction(
+                    action_type=ActionType.TRAIN,
+                    target=best.stat_type.value,
+                    tap_coords=best.tap_coords,
+                    reason="playbook TRAIN: highest-gain fallback",
+                )
+        else:
+            log("Scorer says rest — tapping Back to return to career home")
+            _scenario.on_non_race_action()
+            tap(80, 1855)
+            return "training_back_to_rest"
 
     # Find the tile the scorer chose and tap it
     _scenario.on_non_race_action()
@@ -2969,9 +3692,27 @@ def handle_training():
 
     summer_camp = _scenario.get_event_turns("summer_camp")
     in_summer = _current_turn in summer_camp
-    max_failure = 5 if in_summer else 15
+    chosen_stat = chosen_tile_name.lower() if chosen_tile_name else ""
+    if in_summer:
+        max_failure = 5
+    elif chosen_stat == "wit":
+        max_failure = 10
+    else:
+        max_failure = 5
     if failure_rate > max_failure:
-        log(f"Failure rate {failure_rate}% > {max_failure}% — backing out to rest")
+        # Summer camp and playbook TRAIN turns: always try drink before resting.
+        # These turns are too valuable to waste on rest.
+        should_try_drink = (in_summer or _playbook_force_train) and not _train_drink_used
+        if should_try_drink:
+            log(f"Failure rate {failure_rate}% > {max_failure}% — trying energy drink first")
+            if _try_drink_and_retry_training(best_score, scored_tiles):
+                return "training_back_to_rest"
+            if in_summer:
+                log(f"SUMMER CAMP — No drinks left, failure {failure_rate}% too high — backing out to rest")
+            else:
+                log(f"Playbook TRAIN: no drink — failure {failure_rate}% too high, backing out to rest")
+        else:
+            log(f"Failure rate {failure_rate}% > {max_failure}% — backing out to rest")
         tap(80, 1855)  # Back to career home
         time.sleep(1)
         tap(*BTN_REST)
@@ -3009,16 +3750,77 @@ def _wait_for_career_home(tag=""):
     return None
 
 
+def _do_fast_path_shop():
+    """Visit shop on fast-path turns (race/recreation) so coins don't pile up."""
+    global _needs_shop_visit, _last_shop_turn
+    is_pre_debut = _current_turn < 6
+    if is_pre_debut:
+        return
+    should_shop = _needs_shop_visit or _last_shop_turn != _current_turn
+    if not should_shop:
+        return
+    reason = "flagged" if _needs_shop_visit else f"per-turn ({_current_turn})"
+    log(f"Visiting shop — {reason}")
+    _last_shop_turn = _current_turn
+    _SHOP_TURN_FILE.write_text(str(_current_turn))
+    _needs_shop_visit = False
+    try:
+        _NEEDS_SHOP_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
+    tap(*BTN_SHOP, delay=2.5)
+    img3 = screenshot(f"shop_visit_{int(time.time())}")
+    screen3 = detect_screen(img3)
+    if screen3 == "shop":
+        handle_shop(img3)
+        for _ in range(15):
+            time.sleep(2)
+            img3 = screenshot(f"shop_exit_{int(time.time())}")
+            s3 = detect_screen(img3)
+            if s3 == "career_home":
+                break
+            elif s3 == "shop":
+                handle_shop(img3)
+            elif s3 in ("warning_popup", "unknown"):
+                btn = find_green_button(img3, (1780, 1900))
+                if btn:
+                    tap(btn[0], btn[1])
+                else:
+                    tap(540, 960)
+        _wait_for_career_home("post_shop_fast")
+
+
 def _handle_career_home(img):
     """Full career_home handler: gather state → housekeeping → decide → act."""
     global _game_state, _skill_shop_done, _needs_shop_visit, _last_shop_turn
     global _inventory_checked, _summer_whistle_used
+    global _playbook_force_train, _train_drink_used
+    global _pending_training_stat, _pending_training_turn
+    global _last_race_was_g1, _g1_retried_this_race, _backed_out_to_home_this_turn
+
+    # Check Skip button — re-enable if toggled off
+    import numpy as np
+    skip_crop = img.crop((280, 1855, 440, 1890))
+    skip_avg = np.array(skip_crop)[:, :, :3].mean(axis=(0, 1))
+    if not (skip_avg[1] > 180 and skip_avg[1] > skip_avg[0]):
+        log(f"Skip is OFF on career home (R={skip_avg[0]:.0f} G={skip_avg[1]:.0f} B={skip_avg[2]:.0f}) — tapping to re-enable")
+        tap(90, 1876)
+        time.sleep(1)
+        img = screenshot(f"career_home_skip_fix_{int(time.time())}")
 
     # =====================================================================
     # PHASE 1: Gather state (stats, aptitudes, conditions, inventory)
     # =====================================================================
     _skill_shop_done = False
     _summer_whistle_used = False
+    _playbook_force_train = False
+    _train_drink_used = False
+    _backed_out_to_home_this_turn = False
+    # Clear pending training stat only on a NEW turn — within the same turn
+    # we preserve it so the post-ankle re-entry to handle_training finds it.
+    if _pending_training_turn != _current_turn:
+        _pending_training_stat = None
+        _pending_training_turn = -1
     energy = get_energy_level(img)
     build_game_state(img, "career_home", energy=energy)
 
@@ -3047,6 +3849,49 @@ def _handle_career_home(img):
 
     # Build authoritative game state with aptitudes
     _game_state = build_game_state(img, "career_home", energy=energy)
+
+    # Fast-path: if playbook says race or recreation and no conditions to cure,
+    # skip slow housekeeping (inventory, shop) but still detect active effects
+    # (needed for cleat hammer decisions on race turns).
+    if _playbook_engine and not _active_conditions and not is_pre_debut:
+        scheduled = _playbook_engine._get_scheduled_action(_current_turn)
+        if scheduled and scheduled.action in ("race", "recreation"):
+            _detect_active_effects()
+            img = _wait_for_career_home("post_effects_fast")
+            if img is None:
+                return "recovering"
+            energy = get_energy_level(img)
+            _game_state = build_game_state(img, "career_home", energy=energy)
+            log(f"State gathered: Turn {_current_turn}, Energy {energy}%, "
+                f"Stats Spd={_current_stats.speed} Sta={_current_stats.stamina} "
+                f"Pow={_current_stats.power} Gut={_current_stats.guts} Wit={_current_stats.wit} "
+                f"SP={_skill_pts}")
+            skip_cards = {"team_sirius"} if _sirius_bond_unlocked else set()
+            _playbook_engine.check_friendship_deadline(_current_turn, skip_cards=skip_cards)
+            rec_remaining = _playbook_engine.rec_tracker.uses_remaining
+            log(f"Playbook: Recreation remaining={rec_remaining}, total_used={_playbook_engine.rec_tracker.total_used}")
+            pb_action = _playbook_engine.decide_turn(_game_state)
+            if pb_action.action_type in (ActionType.GO_OUT, ActionType.RACE):
+                # Shop visit before fast-path — don't skip buying just because
+                # we're racing or recreating
+                _do_fast_path_shop()
+                if pb_action.action_type == ActionType.GO_OUT:
+                    log(f"Playbook: Recreation — {pb_action.reason} (fast-path)")
+                    _scenario.on_non_race_action()
+                    tap(*BTN_RECREATION)
+                    return "recreation"
+                else:
+                    log(f"Playbook: Racing — {pb_action.reason} (fast-path)")
+                    scheduled = _playbook_engine._get_scheduled_action(_current_turn)
+                    target_name = ""
+                    if scheduled:
+                        target_name = scheduled.race or ""
+                    if target_name:
+                        _race_selector._target_race_name = target_name
+                        log(f"  Target race: {target_name}")
+                    _g1_retried_this_race = False
+                    tap(*BTN_HOME_RACES)
+                    return "going_to_races"
 
     # Read inventory on first turn, then every 6 turns (synced with shop refreshes)
     if not is_pre_debut and (not _inventory_checked or _current_turn % 6 == 0):
@@ -3077,7 +3922,7 @@ def _handle_career_home(img):
     # PHASE 2: Housekeeping (cure, shop, consumables, mood)
     # =====================================================================
 
-    # Cure conditions
+    # Cure conditions (first pass — use items already in inventory)
     if _active_conditions:
         cure_conditions_from_inventory()
         time.sleep(1)
@@ -3085,16 +3930,22 @@ def _handle_career_home(img):
         if img is None:
             return "recovering"
 
-    # Shop visit
+    # Shop visit — every turn post-debut, at most once per turn
+    # Happens BEFORE the post-shop cure pass so newly-purchased cure items can
+    # be used on the same turn.
     should_shop = _needs_shop_visit or (
-        _current_turn >= 6 and _current_turn % 6 == 0 and _last_shop_turn != _current_turn
+        _current_turn >= 6 and _last_shop_turn != _current_turn
     )
     if should_shop:
-        reason = "flagged" if _needs_shop_visit else f"refresh turn ({_current_turn})"
+        reason = "flagged" if _needs_shop_visit else f"per-turn ({_current_turn})"
         log(f"Visiting shop — {reason}")
         _last_shop_turn = _current_turn
         _SHOP_TURN_FILE.write_text(str(_current_turn))
         _needs_shop_visit = False
+        try:
+            _NEEDS_SHOP_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
         tap(*BTN_SHOP, delay=2.5)
         img3 = screenshot(f"shop_visit_{int(time.time())}")
         screen3 = detect_screen(img3)
@@ -3119,6 +3970,16 @@ def _handle_career_home(img):
         if img is None:
             return "recovering"
         energy = get_energy_level(img)
+
+        # Second cure pass — if the shop visit bought cure items, use them now
+        if _active_conditions:
+            log(f"Post-shop cure pass for still-active conditions: {_active_conditions}")
+            cure_conditions_from_inventory()
+            time.sleep(1)
+            img = _wait_for_career_home("post_cure2")
+            if img is None:
+                return "recovering"
+            energy = get_energy_level(img)
 
     # Use consumables (manuals, scrolls, and conditionally carrots)
     # Carrots: use immediately if Team Sirius bond < 60 or unknown.
@@ -3153,9 +4014,14 @@ def _handle_career_home(img):
         if img is None:
             return "recovering"
 
-    # Mood management
+    # Mood management — use cupcakes during summer camp and TS Climax (Great mood
+    # required for training stacking). Outside those phases, normal mood is fine.
     mood = detect_mood(img)
-    if _current_turn >= 29 and mood in ("NORMAL", "BAD"):
+    summer_camp_turns = _scenario.get_event_turns("summer_camp")
+    twinkle_star_turns = _scenario.get_event_turns("twinkle_star")
+    in_summer_camp = _current_turn in summer_camp_turns
+    in_ts_climax = _current_turn in twinkle_star_turns
+    if (in_summer_camp or in_ts_climax) and mood in ("NORMAL", "BAD"):
         inventory = _shop_manager.inventory
         cupcake_key = None
         if mood == "BAD" and inventory.get("berry_cupcake", 0) > 0:
@@ -3179,10 +4045,18 @@ def _handle_career_home(img):
 
     # Skill shop — visit if SP exceeds threshold (configurable via strategy.yaml)
     # Playbook can defer skill buying (e.g., Sirius strategy waits until ~2500 SP)
+    # Exception: force skill shop before Kikuka Sho (turn 44) to buy recovery skills
     sp_threshold = _overrides.get_strategy().raw.get("skill_shop_sp_threshold", 1200)
-    if _playbook_engine and _playbook_engine.should_defer_skills(_skill_pts, _current_turn):
+    force_recovery_shop = (
+        _current_turn in (43, 44)
+        and _recovery_skills_bought < 2
+        and not _skill_shop_done
+    )
+    if not force_recovery_shop and _playbook_engine and _playbook_engine.should_defer_skills(_skill_pts, _current_turn):
         log(f"Playbook: deferring skill shop (SP={_skill_pts}, turn={_current_turn})")
-    elif _skill_pts > sp_threshold and not _skill_shop_done:
+    elif force_recovery_shop or (_skill_pts > sp_threshold and not _skill_shop_done):
+        if force_recovery_shop:
+            log(f"Forcing skill shop for recovery skills before Kikuka Sho (have {_recovery_skills_bought}/2)")
         log(f"SP {_skill_pts} > {sp_threshold} — visiting skill shop")
         tap(*BTN_HOME_SKILLS)
         time.sleep(2)
@@ -3190,7 +4064,7 @@ def _handle_career_home(img):
             img_sk = screenshot(f"skill_visit_{int(time.time())}")
             s_sk = detect_screen(img_sk)
             if s_sk == "skill_shop":
-                result = handle_skill_shop(img_sk)
+                result = handle_skill_shop(img_sk, force_recovery=force_recovery_shop)
                 if result == "skill_back":
                     break
             elif s_sk == "career_home":
@@ -3214,6 +4088,7 @@ def _handle_career_home(img):
     # =====================================================================
 
     # Slacker is debilitating — go to Infirmary immediately if still active
+    # (fires regardless of scheduled action — slacker kills all training value)
     if "slacker" in _active_conditions:
         log("SLACKER detected — going to Infirmary immediately")
         tap(*BTN_INFIRMARY)
@@ -3222,6 +4097,14 @@ def _handle_career_home(img):
     # Playbook-driven decision (if active) — consult turn schedule before dynamic logic
     if _playbook_engine and _last_result != "race_back":
         pb_action = _playbook_engine.decide_turn(_game_state)
+        # Negative condition on flex/train/rest turns → divert to Infirmary.
+        # Race and recreation turns are schedule-critical, so conditions don't override them.
+        if (_active_conditions
+                and pb_action.action_type in (ActionType.WAIT, ActionType.TRAIN, ActionType.REST)):
+            log(f"Negative condition {_active_conditions} on non-critical turn — going to Infirmary")
+            _scenario.on_non_race_action()
+            tap(*BTN_INFIRMARY)
+            return "rest"
         if pb_action.action_type == ActionType.GO_OUT:
             log(f"Playbook: Recreation — {pb_action.reason}")
             _scenario.on_non_race_action()
@@ -3229,11 +4112,16 @@ def _handle_career_home(img):
             return "recreation"
         elif pb_action.action_type == ActionType.RACE:
             log(f"Playbook: Racing — {pb_action.reason}")
-            # Pass target race name to selector for forced matching
+            # Pass target race name to selector for forced matching.
+            # Pair-tagged turns store the race name in `race` (clean); other
+            # turns put it in `note` (with extra annotation text).
             scheduled = _playbook_engine._get_scheduled_action(_current_turn)
-            if scheduled and scheduled.note:
-                _race_selector._target_race_name = scheduled.note
-                log(f"  Target race: {scheduled.note}")
+            target_name = ""
+            if scheduled:
+                target_name = scheduled.race or ""
+            if target_name:
+                _race_selector._target_race_name = target_name
+                log(f"  Target race: {target_name}")
             tap(*BTN_HOME_RACES)
             return "going_to_races"
         elif pb_action.action_type == ActionType.REST:
@@ -3241,10 +4129,19 @@ def _handle_career_home(img):
             _scenario.on_non_race_action()
             tap(*BTN_REST)
             return "rest"
+        elif pb_action.action_type == ActionType.INFIRMARY:
+            log(f"Playbook: Infirmary — {pb_action.reason}")
+            _scenario.on_non_race_action()
+            tap(*BTN_INFIRMARY)
+            return "rest"  # infirmary_confirm handled alongside rest_confirm
         elif pb_action.action_type == ActionType.TRAIN:
             log(f"Playbook: Training — {pb_action.reason}")
             _scenario.on_non_race_action()
             _use_megaphone_if_needed()
+            # The drink-or-not decision happens in handle_training after tiles
+            # are previewed — we need to see the best tile's score vs. failure
+            # rate to know whether a drink is worth spending.
+            _playbook_force_train = True
             tap(*BTN_TRAINING)
             return "going_to_training"
         # WAIT = fall through to existing dynamic logic
@@ -3295,8 +4192,8 @@ def _handle_career_home(img):
                 if has_mood and has_cure:
                     log(f"Racing (consecutive {consec}): prepared with mood+cure items")
                     log(f"Racing: {race_action.reason}")
-                    global _last_race_was_g1
                     _last_race_was_g1 = is_g1
+                    _g1_retried_this_race = False
                     tap(*BTN_HOME_RACES)
                     return "going_to_races"
                 else:
@@ -3310,6 +4207,7 @@ def _handle_career_home(img):
             else:
                 log(f"Racing: {race_action.reason}")
                 _last_race_was_g1 = is_g1
+                _g1_retried_this_race = False
                 tap(*BTN_HOME_RACES)
                 return "going_to_races"
     else:
@@ -3328,9 +4226,41 @@ def _handle_career_home(img):
     summer_camp = _scenario.get_event_turns("summer_camp")
     in_summer = _current_turn in summer_camp
     if energy < 30 and not in_summer:
-        log(f"Energy {energy}% too low — resting")
-        tap(*BTN_REST)
-        return "rest"
+        # For playbooks where training turns are rare (Sirius+Riko etc),
+        # burn a drink rather than waste a training turn on rest.
+        drink_before_rest = (
+            _playbook_engine is not None
+            and _playbook_engine.playbook.drink_before_rest
+        )
+        if drink_before_rest:
+            inventory = _shop_manager.inventory
+            drink_candidates = [("vita_20", 20), ("vita_40", 40), ("royal_kale", 50), ("vita_65", 65)]
+            drink_key = next((k for k, _ in drink_candidates if inventory.get(k, 0) > 0), None)
+            if drink_key:
+                log(f"Energy {energy}% low — playbook drink_before_rest: using {drink_key}")
+                if _use_training_items([drink_key]):
+                    if _shop_manager._inventory.get(drink_key, 0) > 0:
+                        _shop_manager._inventory[drink_key] -= 1
+                        if _shop_manager._inventory[drink_key] <= 0:
+                            del _shop_manager._inventory[drink_key]
+                    _shop_manager.save_inventory()
+                    time.sleep(1)
+                    img = screenshot(f"post_drink_{int(time.time())}")
+                    if detect_screen(img) == "career_home":
+                        energy = get_energy_level(img)
+                        log(f"Energy after {drink_key}: ~{energy}%")
+                else:
+                    log(f"Failed to use {drink_key} — falling back to rest")
+                    tap(*BTN_REST)
+                    return "rest"
+            else:
+                log(f"Energy {energy}% too low — resting (no drinks in inventory)")
+                tap(*BTN_REST)
+                return "rest"
+        else:
+            log(f"Energy {energy}% too low — resting")
+            tap(*BTN_REST)
+            return "rest"
 
     log(f"Training turn, energy {energy}%")
     _use_megaphone_if_needed()
@@ -3339,17 +4269,37 @@ def _handle_career_home(img):
 
 
 def _desired_strategy(turn=None, distance=None):
-    """Determine desired running strategy based on aptitude.
+    """Determine desired running strategy.
 
-    Picks whichever of 'front' or 'pace' has the better aptitude grade.
-    Falls back to 'pace' if aptitudes are equal or unavailable.
+    Phase logic:
+    - Turns 1-40 (Jr + early Classic through summer camp): run pace or front
+      (whichever has better aptitude) to minimize losses and secure early wins.
+    - Turns 41+ (post-Classic summer): switch to 'end' (End Closer) to farm
+      End aptitude sparks for progeny inheritance.
+    - Exception: mile races (1401-1800m) ALWAYS use pace/front regardless of
+      turn — End Closer underperforms at mile distances.
     """
+    if turn is None:
+        turn = _current_turn
+    if distance is None:
+        distance = _last_race_distance or 0
+
     GRADE_ORDER = {"s": 6, "a": 5, "b": 4, "c": 3, "d": 2, "e": 1, "f": 0, "g": 0}
     front = GRADE_ORDER.get((_cached_aptitudes or {}).get("front", "").lower(), 0)
     pace = GRADE_ORDER.get((_cached_aptitudes or {}).get("pace", "").lower(), 0)
-    if front > pace:
-        return "front"
-    return "pace"
+
+    def _pace_or_front():
+        return "front" if front > pace else "pace"
+
+    # Mile races always run pace/front
+    if 1401 <= distance <= 1800:
+        return _pace_or_front()
+
+    # Post-Classic summer: switch to End Closer for sparks
+    if turn > 40:
+        return "end"
+
+    return _pace_or_front()
 
 
 def _detect_current_strategy(img):
@@ -3378,6 +4328,9 @@ def _detect_current_strategy(img):
 
 def _set_race_strategy(img):
     """Check and change running strategy on the pre-race screen if needed."""
+    if _current_turn == 0 and _last_race_distance == 0:
+        log("Race strategy: no turn/distance info (retry?) — keeping current strategy")
+        return
     desired = _desired_strategy()
     current = _detect_current_strategy(img)
     log(f"Race strategy: desired={desired}, current={current}, turn={_current_turn}, dist={_last_race_distance}m")
@@ -3425,24 +4378,40 @@ _INTERMEDIATE_RESULTS = {
     "post_career_confirm", "career_finishing", "warning_ok",
     "rest", "recreation", "recreation_cancel", "recreation_select", "recreation_member_select", "rest_confirm", "race_back",
     "training_back_to_rest", "race_live_skip", "career_home_summer",
-    "photo_save_cancel", "race_photo_skip",
+    "photo_save_cancel", "race_photo_skip", "quick_mode_dismiss",
+    "retry_race", "try_again_confirmed", "log_close",
 }
 
-def run_one_turn(stop_before=None):
+def run_one_turn(stop_before=None, stop_on_turn_advance=True):
     """Execute one full game turn. Loops through intermediate screens.
 
     Args:
         stop_before: set of screen names. If detected, return immediately
                      WITHOUT acting (e.g. {"complete_career"} to stop at
                      end-of-career without opening skill shop).
+        stop_on_turn_advance: if True (default), return as soon as _current_turn
+                     advances past the turn we started on. Prevents one run_one
+                     call from cascading across multiple turns (e.g. race →
+                     forced rest → train). Set False for TS Climax/career end
+                     where turn numbers don't mean the same thing.
     """
-    global _last_result
+    global _last_result, _backed_out_to_home_this_turn
+    _backed_out_to_home_this_turn = False
     prev_result = None
     repeat_count = 0
+    start_turn = None  # Captured on first iteration where _current_turn > 0
     for _ in range(50):
         result = _run_one_turn_inner(stop_before=stop_before)
         _last_result = result
         log(f"Result: {result}")
+        # Capture starting turn on first successful state build
+        if stop_on_turn_advance and start_turn is None and _current_turn > 0:
+            start_turn = _current_turn
+            log(f"run_one_turn: tracking turn advance from turn {start_turn}")
+        # Stop if the turn has advanced past where we started
+        if stop_on_turn_advance and start_turn is not None and _current_turn > start_turn:
+            log(f"run_one_turn: turn advanced {start_turn} → {_current_turn}, stopping")
+            return f"turn_advanced:{result}"
         if result not in _INTERMEDIATE_RESULTS:
             return result
         # Stuck detection: if same result 15 times in a row, bail out
@@ -3461,7 +4430,7 @@ def run_one_turn(stop_before=None):
 
 def _run_one_turn_inner(stop_before=None):
     """Internal: execute one game action."""
-    global _last_result, _needs_shop_visit, _last_shop_turn, _inventory_checked, _skill_shop_done, _summer_whistle_used
+    global _last_result, _needs_shop_visit, _last_shop_turn, _inventory_checked, _skill_shop_done, _summer_whistle_used, _backed_out_to_home_this_turn
 
     img = screenshot(f"auto_{int(time.time())}")
     screen = detect_screen(img)
@@ -3505,14 +4474,27 @@ def _run_one_turn_inner(stop_before=None):
         # 2. Energy check — can we train?
         can_train = True
         if energy < 50:
-            # Try energy recovery items
+            # Pick best energy recovery: prefer kale+cupcake when energy is very
+            # low (kale gives +100 but drops mood by 1; cupcake restores it).
+            has_kale = inventory.get("royal_kale", 0) > 0
+            has_cupcake = (inventory.get("plain_cupcake", 0) > 0
+                          or inventory.get("berry_cupcake", 0) > 0)
             energy_item = None
-            energy_keys = ("vita_65", "vita_40", "vita_20", "royal_kale")
-            for key in energy_keys:
-                if inventory.get(key, 0) > 0:
-                    energy_item = key
-                    break
+            use_cupcake_after = False
+            if has_kale and has_cupcake and energy < 30:
+                energy_item = "royal_kale"
+                use_cupcake_after = True
+            elif has_kale and energy < 20:
+                # Kale without cupcake only if desperate (mood will drop)
+                energy_item = "royal_kale"
+            else:
+                # Fall back to vita drinks (biggest first)
+                for key in ("vita_65", "vita_40", "vita_20"):
+                    if inventory.get(key, 0) > 0:
+                        energy_item = key
+                        break
             has_charm = inventory.get("good_luck_charm", 0) > 0
+            energy_keys = ("vita_65", "vita_40", "vita_20", "royal_kale")
             log(f"SUMMER CAMP — Recovery check: energy_items={[(k, inventory.get(k, 0)) for k in energy_keys]}, charm={has_charm}")
 
             if energy_item:
@@ -3529,6 +4511,20 @@ def _run_one_turn_inner(stop_before=None):
                         return "recovering"
                     energy = get_energy_level(img)
                     log(f"SUMMER CAMP — Energy after item: ~{energy}%")
+                    # Use cupcake to restore mood if kale dropped it
+                    if use_cupcake_after:
+                        cupcake_key = "plain_cupcake" if inventory.get("plain_cupcake", 0) > 0 else "berry_cupcake"
+                        log(f"SUMMER CAMP — Using {cupcake_key} to restore mood after kale")
+                        if _use_training_items([cupcake_key]):
+                            if _shop_manager._inventory.get(cupcake_key, 0) > 0:
+                                _shop_manager._inventory[cupcake_key] -= 1
+                                if _shop_manager._inventory[cupcake_key] <= 0:
+                                    del _shop_manager._inventory[cupcake_key]
+                            _shop_manager.save_inventory()
+                            time.sleep(1)
+                            img = screenshot(f"summer_post_cupcake_{int(time.time())}")
+                            if detect_screen(img) != "career_home_summer":
+                                return "recovering"
                 else:
                     log(f"SUMMER CAMP — Failed to use {energy_item}")
             elif has_charm:
@@ -3597,6 +4593,23 @@ def _run_one_turn_inner(stop_before=None):
             active_mega = next(e for e in _shop_manager._active_effects if "mega" in e.item_key)
             log(f"SUMMER CAMP — Megaphone active: {active_mega.item_key} ({active_mega.turns_remaining} turns left)")
 
+        # 3.5. Good luck charm — 0% failure for 1 turn. Summer cap is 5%, and stacked
+        # summer tiles often read 7–9%. Burn a charm if we have one, saves an alarm clock
+        # later and enables training the highest-score tile without worry.
+        if inventory.get("good_luck_charm", 0) > 0:
+            log(f"SUMMER CAMP — Using good_luck_charm (0% failure this turn)")
+            if _use_training_items(["good_luck_charm"]):
+                if _shop_manager._inventory.get("good_luck_charm", 0) > 0:
+                    _shop_manager._inventory["good_luck_charm"] -= 1
+                    if _shop_manager._inventory["good_luck_charm"] <= 0:
+                        del _shop_manager._inventory["good_luck_charm"]
+                _shop_manager.save_inventory()
+                _shop_manager.activate_item("good_luck_charm")
+            time.sleep(1)
+            img = screenshot(f"summer_post_charm_{int(time.time())}")
+            if detect_screen(img) != "career_home_summer":
+                return "recovering"
+
         # 4. Ankle weights — stat-specific, used after scorer picks stat in handle_training()
         # (follows reset whistle pattern: back out → use item → re-enter training)
 
@@ -3647,7 +4660,32 @@ def _run_one_turn_inner(stop_before=None):
         energy = get_energy_level(img)
         log(f"TS CLIMAX training turn — Energy: ~{energy}%")
 
-        # 1. Megaphone first — maximise every training turn
+        # 1. Cupcake — bring mood to Great before training (stacking multiplier)
+        mood = detect_mood(img)
+        if mood in ("NORMAL", "BAD"):
+            inventory = _shop_manager.inventory
+            cupcake_key = None
+            if mood == "BAD" and inventory.get("berry_cupcake", 0) > 0:
+                cupcake_key = "berry_cupcake"
+            elif inventory.get("plain_cupcake", 0) > 0:
+                cupcake_key = "plain_cupcake"
+            elif inventory.get("berry_cupcake", 0) > 0:
+                cupcake_key = "berry_cupcake"
+            if cupcake_key:
+                log(f"TS CLIMAX mood {mood} — using {cupcake_key}")
+                _use_training_items([cupcake_key])
+                if _shop_manager._inventory.get(cupcake_key, 0) > 0:
+                    _shop_manager._inventory[cupcake_key] -= 1
+                    if _shop_manager._inventory[cupcake_key] <= 0:
+                        del _shop_manager._inventory[cupcake_key]
+                _shop_manager.save_inventory()
+                time.sleep(1)
+                img = screenshot(f"ts_post_cupcake_{int(time.time())}")
+                if detect_screen(img) != "ts_climax_home":
+                    return "recovering"
+                energy = get_energy_level(img)
+
+        # 2. Megaphone — maximise every training turn
         _use_megaphone_if_needed(is_ts_climax=True)
 
         # 2. Energy drink to top up without overcapping
@@ -3667,6 +4705,24 @@ def _run_one_turn_inner(stop_before=None):
                     energy = get_energy_level(img)
                     log(f"TS CLIMAX — energy after vita: ~{energy}%")
                 break
+
+        # 2.5. Good luck charm — 0% failure for 1 turn. TS Climax uses heavy stacking
+        # with 60%+ mood bonus, but failure rate can still be 5-15%. Always burn a
+        # charm if held (max_stock=4, cheap insurance on the biggest training gains).
+        inventory = _shop_manager.inventory
+        if inventory.get("good_luck_charm", 0) > 0:
+            log(f"TS CLIMAX — using good_luck_charm (0% failure this turn)")
+            if _use_training_items(["good_luck_charm"]):
+                if _shop_manager._inventory.get("good_luck_charm", 0) > 0:
+                    _shop_manager._inventory["good_luck_charm"] -= 1
+                    if _shop_manager._inventory["good_luck_charm"] <= 0:
+                        del _shop_manager._inventory["good_luck_charm"]
+                _shop_manager.save_inventory()
+                _shop_manager.activate_item("good_luck_charm")
+            time.sleep(1)
+            img = screenshot(f"ts_post_charm_{int(time.time())}")
+            if detect_screen(img) != "ts_climax_home":
+                return "recovering"
 
         # 3. Train
         tap(540, 1496)
@@ -3707,18 +4763,24 @@ def _run_one_turn_inner(stop_before=None):
     elif screen == "race_photo":
         log("Race photo screen — pressing Back to skip")
         press_back()
-        # Confirm "Return to previous screen?" dialog
-        ok = find_green_button(screenshot("race_photo_confirm"), (1400, 1600))
+        # Confirm "Return to previous screen?" dialog — OK is the green button
+        # in the lower-middle area of the dialog (~y=1250 on 1080x1920).
+        ok = find_green_button(screenshot("race_photo_confirm"), (1100, 1350), x_range=(500, 1000))
         if ok:
             tap(ok[0], ok[1])
         else:
-            tap(810, 1480)
+            tap(777, 1250)
         return "race_photo_skip"
 
     elif screen == "photo_save_popup":
         log("Photo save popup — tapping Cancel (storage full or unwanted)")
         tap(270, 1480)
         return "photo_save_cancel"
+
+    elif screen == "quick_mode_settings":
+        log("Quick Mode Settings dialog — tapping Confirm at (777, 1380)")
+        tap(777, 1380)
+        return "quick_mode_dismiss"
 
     elif screen == "warning_popup":
         # If we just came from race flow, this is a race energy warning
@@ -3758,9 +4820,12 @@ def _run_one_turn_inner(stop_before=None):
                 tap(540, tap_y)
                 return "recreation_select"  # Will loop back to detect recreation_confirm
             else:
-                log(f"  WARNING: Could not find '{source}' on recreation screen — tapping first card")
-                tap(540, 820)
-                return "recreation_select"
+                log(f"  WARNING: Could not find '{source}' on recreation screen — marking exhausted, cancelling")
+                # Mark this source as exhausted so playbook stops sending us here
+                if _playbook_engine:
+                    _playbook_engine.rec_tracker.uses_remaining[source] = 0
+                tap(540, 1450)
+                return "recreation_cancel"
         else:
             log("Recreation select — no playbook recreation, cancelling")
             tap(540, 1450)
@@ -3792,7 +4857,11 @@ def _run_one_turn_inner(stop_before=None):
             else:
                 tap(730, 1260)
             if _playbook_engine:
-                _playbook_engine.on_recreation_completed(turn=_current_turn)
+                # Pass the actual source from the schedule note so the
+                # tracker decrements the right counter (otherwise it always
+                # falls back to the priority head, e.g. team_sirius).
+                source = _get_recreation_source()
+                _playbook_engine.on_recreation_completed(source=source, turn=_current_turn)
             return "recreation"
         log("Recreation confirm detected — tapping Cancel (no playbook recreation)")
         tap(270, 1260)
@@ -3850,20 +4919,37 @@ def _run_one_turn_inner(stop_before=None):
         tap(540, 400)
         return "result_pts"
 
+    elif screen == "log_close":
+        log("Log screen — tapping Close")
+        tap(540, 1780)
+        return "log_close"
+
     elif screen == "post_race_standings":
-        # Check placement via OCR — look for "Nth" text
+        # Check placement via OCR — read the hero placement at top of screen first,
+        # then fall back to full-screen scan. The hero area (top 700px) renders our
+        # placement as a large stylized number; full-screen picks up list entries first.
         import re
         placement = 99
         is_climax = False
+        is_g1 = False
         try:
+            hero_results = ocr_region(img, 0, 0, 1080, 700)
+            for text, conf in hero_results:
+                t = text.strip().lower()
+                m = re.match(r"(\d+)(st|nd|rd|th)", t)
+                if m and placement == 99:
+                    placement = int(m.group(1))
             standings_results = ocr_full_screen(img)
             for text, conf, y_pos in standings_results:
                 t = text.strip().lower()
                 if "climax" in t:
                     is_climax = True
-                m = re.match(r"(\d+)(st|nd|rd|th)", t)
-                if m and placement == 99:
-                    placement = int(m.group(1))
+                if t == "g1":
+                    is_g1 = True
+                if placement == 99:
+                    m = re.match(r"(\d+)(st|nd|rd|th)", t)
+                    if m:
+                        placement = int(m.group(1))
         except Exception:
             pass
         global _last_race_placement
@@ -3877,8 +4963,23 @@ def _run_one_turn_inner(stop_before=None):
             return "retry_race"
         if is_climax and placement <= 3:
             _ts_climax_retries = 0  # Reset on success
+        # G1 race retry: use alarm clock if we didn't win (max 1 retry per race, 5 clocks per career)
+        global _g1_retries, _g1_retried_this_race
+        if not is_climax and is_g1 and placement > 1 and not _g1_retried_this_race and _g1_retries < 5:
+            _g1_retries += 1
+            _g1_retried_this_race = True
+            log(f"G1 race — placed {placement}, using Alarm Clock to Try Again ({_g1_retries}/5 used)")
+            tap(270, 1780)
+            return "retry_race"
+        elif not is_climax and is_g1 and placement > 1 and _g1_retried_this_race:
+            log(f"G1 race — placed {placement} on retry, accepting result (1 retry per race)")
+            _g1_retried_this_race = False
         if placement == 1:
             _needs_shop_visit = True
+            try:
+                _NEEDS_SHOP_FILE.write_text("1")
+            except Exception:
+                pass
             log(f"Won race! Will visit shop next career_home")
         log(f"Standings — placed {placement}, tapping Next")
         next_btn = find_green_button(img, (1700, 1850), (500, 1000))
@@ -3887,6 +4988,11 @@ def _run_one_turn_inner(stop_before=None):
         else:
             tap(750, 1780)
         return "standings_next"
+
+    elif screen == "try_again_confirm":
+        log("Try Again confirmation — tapping Try Again to confirm retry")
+        tap(810, 1810)  # Green "Try Again" button
+        return "try_again_confirmed"
 
     elif screen == "ts_climax_standings":
         log("TS Climax standings — tapping Next")
@@ -3981,12 +5087,25 @@ def _run_one_turn_inner(stop_before=None):
     elif screen == "event":
         return handle_event(img)
 
-    elif screen == "event_choice_dimmed":
-        log("Dimmed event choice — tapping choice box")
-        tap(540, 1200)
-        return "event_choice"
-
     elif screen == "training":
+        # Check playbook — if the scheduled action is NOT train/flex, back out
+        # to career home so the playbook can route to recreation/race/etc.
+        # But skip this check if:
+        # - the scheduled action already happened this turn (recreation completed
+        #   → game drops us on training screen)
+        # - we already backed out once this turn (prevents infinite loop when
+        #   recreation is done but turn hasn't advanced yet)
+        if _playbook_engine and _last_result not in ("recreation", "recreation_select",
+                                                      "recreation_member_select",
+                                                      "recreation_confirm",
+                                                      "training_back_to_home") \
+                            and not _backed_out_to_home_this_turn:
+            scheduled = _playbook_engine._get_scheduled_action(_current_turn)
+            if scheduled and scheduled.action in ("recreation", "race", "rest"):
+                log(f"On training screen but playbook says '{scheduled.action}' for turn {_current_turn} — backing out")
+                _backed_out_to_home_this_turn = True
+                tap(80, 1855)  # Back button
+                return "training_back_to_home"
         result = handle_training()
         # If training was interrupted by an event, process it now
         if result in ("event", "goal_complete", "tap_prompt", "cutscene"):
