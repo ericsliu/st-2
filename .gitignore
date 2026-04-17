@@ -29,13 +29,28 @@ models/*.bin
 !models/.gitkeep
 !models/README.md
 
-# Data
+# Data — databases
 data/uma_trainer.db
 data/uma_trainer.db-shm
 data/uma_trainer.db-wal
 data/llm_cache.db
 data/master.mdb
+
+# Data — large / generated / ephemeral
+data/emu_extract/
 data/gain_ocr_samples/
+data/bond_ocr_samples/
+data/race_plaques/
+data/race_plaque_index.json
+data/gametora_chunks.txt
+data/gametora_races.json
+data/run_current.md
+data/run*_full_log.md
+data/retro_*.md
+data/sim_harness_draft.md
+data/*.flag
+data/last_shop_turn.txt
+data/strategies/*.md
 
 # Sprite assets (large, extracted from APK)
 *.png
@@ -97,6 +112,35 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb
+
+# One-off dev/debug scripts (not part of the bot)
+scripts/analyze_*.py
+scripts/debug_*.py
+scripts/calc_*.py
+scripts/capture_*.py
+scripts/check_*.py
+scripts/clean_*.py
+scripts/compare_*.py
+scripts/crop_*.py
+scripts/cull_*.py
+scripts/download_*.py
+scripts/fetch_*.py
+scripts/find_*.py
+scripts/gen_*.py
+scripts/inspect_*.py
+scripts/read_*.py
+scripts/tap_*.py
+scripts/trim_*.py
+scripts/verify_*.py
+scripts/test_*.py
+scripts/run_few_turns.py
+scripts/run_until_home.py
+scripts/ocr_prerace.py
+scripts/extract_npc.py
+scripts/extract_portrait.py
+scripts/extract_riko.py
+scripts/extract_savedata.py
+scripts/sample_skip_color.py
 
 # Temp
 tmp/
