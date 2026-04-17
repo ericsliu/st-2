@@ -209,6 +209,12 @@ class RaceSelector:
         if self._target_race_name:
             target = self._target_race_name.lower()
             self._target_race_name = None  # Clear after use
+            # Known game abbreviations: OCR name → schedule name keywords
+            ABBREVS = {
+                "jcc": "jockey club cup",
+                "nhk": "nhk",
+                "qe": "queen elizabeth",
+            }
             best_match = None
             best_ratio = 0.0
             for race in state.available_races:
@@ -218,9 +224,18 @@ class RaceSelector:
                     best_match = race
                     best_ratio = 1.0
                     break
+                # Expand abbreviations in the OCR race name before matching
+                expanded = race_lower
+                for abbr, full in ABBREVS.items():
+                    if abbr in race_lower.split():
+                        expanded = race_lower.replace(abbr, full)
+                if target in expanded or expanded in target:
+                    best_match = race
+                    best_ratio = 1.0
+                    break
                 # Token overlap ratio
                 target_tokens = set(target.split())
-                race_tokens = set(race_lower.split())
+                race_tokens = set(expanded.split())
                 overlap = len(target_tokens & race_tokens)
                 ratio = overlap / max(len(target_tokens), 1)
                 if ratio > best_ratio:
@@ -240,9 +255,11 @@ class RaceSelector:
                     reason=f"Playbook: {best_match.name} ({best_match.grade})",
                     tier_used=1,
                 )
-            logger.warning(
-                "Race: playbook target '%s' not found in available races: %s",
-                target, [r.name for r in state.available_races],
+            # Playbook target missing — stop the bot so user can investigate.
+            raise RuntimeError(
+                f"STOP: Playbook target race '{target}' not found in available races "
+                f"{[r.name for r in state.available_races]}. "
+                f"Stopping bot — predetermined race must be found."
             )
 
         scored = self.score_races(state)

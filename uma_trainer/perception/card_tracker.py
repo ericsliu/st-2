@@ -24,10 +24,10 @@ BAR_Y_CENTERS = [424, 604, 784, 964, 1144, 1324]
 PORTRAIT_X1 = 900
 PORTRAIT_X2 = 1030
 PORTRAIT_Y_OFFSET = 132
-PORTRAIT_Y_BOTTOM = 4
+PORTRAIT_Y_BOTTOM = 26  # Was 4; bumped to strip the bond-gauge strip at portrait bottom (new templates are cropped to 106 tall)
 
 MATCH_THRESHOLD = 0.70
-NAMED_MATCH_THRESHOLD = 0.90  # High threshold to avoid cross-card false positives
+NAMED_MATCH_THRESHOLD = 0.80  # Lowered from 0.90: alpha-masked templates (Riko, Matikanefukukitaru) score 0.83–0.87 on real tiles while still leading 2nd place by >0.10
 
 # Named card templates directory (parallel to data/npc_templates/).
 _CARD_TEMPLATE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "card_templates"

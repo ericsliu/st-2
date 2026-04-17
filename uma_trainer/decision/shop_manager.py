@@ -83,6 +83,7 @@ class ShopItem:
     save_for: str = ""      # Context when to use (empty = use immediately)
     effect: str = ""
     use_immediately: bool = False  # Used on purchase, don't track in inventory
+    tier_extra: ItemTier | None = None  # Tier for 2nd+ copies (None = same as tier)
 
 
 # Complete item catalogue with purchase/usage strategy.
@@ -94,10 +95,10 @@ ITEM_CATALOGUE: dict[str, ShopItem] = {
     "scroll":               ShopItem("Scroll", 30, ItemTier.A, max_stock=99, effect="+15 stat", use_immediately=True),
 
     # -- Energy / Mood --
-    "vita_20":              ShopItem("Vita 20", 35, ItemTier.A, max_stock=3, effect="Energy +20"),
+    "vita_20":              ShopItem("Vita 20", 35, ItemTier.A, max_stock=5, effect="Energy +20"),
     "vita_40":              ShopItem("Vita 40", 55, ItemTier.A, max_stock=2, effect="Energy +40"),
     "vita_65":              ShopItem("Vita 65", 75, ItemTier.A, max_stock=1, effect="Energy +65"),
-    "royal_kale":           ShopItem("Royal Kale Juice", 70, ItemTier.B, max_stock=1, effect="Energy +100, Mood -1"),
+    "royal_kale":           ShopItem("Royal Kale Juice", 70, ItemTier.A, max_stock=1, effect="Energy +100, Mood -1"),
     "energy_drink_max":     ShopItem("Energy Drink MAX", 30, ItemTier.NEVER, max_stock=2, effect="Max Energy +4"),
     "energy_drink_max_ex":  ShopItem("Energy Drink MAX EX", 50, ItemTier.NEVER, max_stock=1, effect="Max Energy +8"),
     "plain_cupcake":        ShopItem("Plain Cupcake", 30, ItemTier.A, max_stock=1, effect="Mood +1"),
@@ -107,15 +108,15 @@ ITEM_CATALOGUE: dict[str, ShopItem] = {
     # Empowering (2-turn) is top priority until we have 2 stockpiled for summer
     "empowering_mega":      ShopItem("Empowering Megaphone", 70, ItemTier.SS, max_stock=2, effect="+60% training, 2 turns", save_for="summer_camp"),
     # Motivating (3-turn) useful for good random training days
-    "motivating_mega":      ShopItem("Motivating Megaphone", 55, ItemTier.S, max_stock=2, effect="+40% training, 3 turns"),
+    "motivating_mega":      ShopItem("Motivating Megaphone", 55, ItemTier.S, max_stock=2, effect="+40% training, 3 turns", tier_extra=ItemTier.B),
     "coaching_mega":        ShopItem("Coaching Megaphone", 40, ItemTier.NEVER, max_stock=0, effect="+20% training, 4 turns"),
     # Ankle weights: stat-specific, +50% gain for matching stat only
     "speed_ankle_weights":   ShopItem("Speed Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% speed / +20% energy, 1 turn", save_for="summer_camp"),
-    "stamina_ankle_weights": ShopItem("Stamina Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% stamina / +20% energy, 1 turn", save_for="summer_camp"),
+    "stamina_ankle_weights": ShopItem("Stamina Ankle Weights", 50, ItemTier.A, max_stock=1, effect="+50% stamina / +20% energy, 1 turn", save_for="summer_camp"),
     "power_ankle_weights":   ShopItem("Power Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% power / +20% energy, 1 turn", save_for="summer_camp"),
-    "guts_ankle_weights":    ShopItem("Guts Ankle Weights", 50, ItemTier.A, max_stock=2, effect="+50% guts / +20% energy, 1 turn", save_for="summer_camp"),
+    "guts_ankle_weights":    ShopItem("Guts Ankle Weights", 50, ItemTier.A, max_stock=1, effect="+50% guts / +20% energy, 1 turn", save_for="summer_camp"),
     "training_application": ShopItem("Training Application", 150, ItemTier.NEVER, max_stock=1, effect="Training level +1"),
-    "good_luck_charm":      ShopItem("Good-Luck Charm", 40, ItemTier.S, max_stock=2, effect="0% failure, 1 turn", save_for="exceptional_training"),
+    "good_luck_charm":      ShopItem("Good-Luck Charm", 40, ItemTier.S, max_stock=4, effect="0% failure, 1 turn", save_for="exceptional_training"),
     "reset_whistle":        ShopItem("Reset Whistle", 20, ItemTier.SS, max_stock=5, effect="Rearrange support cards", save_for="summer_no_rainbow"),
 
     # -- Race Items --
@@ -125,7 +126,7 @@ ITEM_CATALOGUE: dict[str, ShopItem] = {
     "glow_sticks":          ShopItem("Glow Sticks", 15, ItemTier.NEVER, effect="+50% fan gain"),
 
     # -- Condition Cures --
-    "rich_hand_cream":      ShopItem("Rich Hand Cream", 15, ItemTier.S, max_stock=1, effect="Cure Skin Outbreak"),
+    "rich_hand_cream":      ShopItem("Rich Hand Cream", 15, ItemTier.SS, max_stock=1, effect="Cure Skin Outbreak"),
     "miracle_cure":         ShopItem("Miracle Cure", 40, ItemTier.S, max_stock=1, effect="Cure all conditions"),
     "practice_dvd":         ShopItem("Practice Drills DVD", 15, ItemTier.B, max_stock=1, effect="Cure Practice Poor"),
     "pocket_planner":       ShopItem("Pocket Planner", 15, ItemTier.B, max_stock=1, effect="Cure Slacker"),
@@ -138,7 +139,7 @@ ITEM_CATALOGUE: dict[str, ShopItem] = {
     "cat_food":             ShopItem("Cat Food", 10, ItemTier.NEVER, effect="Director bond +5"),
     "practice_perfect":     ShopItem("Tips for Efficient Training", 150, ItemTier.B, max_stock=1, effect="Grants Practice Perfect"),
     "hot_topic":            ShopItem("Reporter's Binoculars", 150, ItemTier.NEVER, effect="Grants Hot Topic"),
-    "charming":             ShopItem("Pretty Mirror", 150, ItemTier.NEVER, max_stock=1, effect="Grants Charming"),
+    "pretty_mirror":        ShopItem("Pretty Mirror", 150, ItemTier.NEVER, max_stock=1, effect="Grants Charming", use_immediately=True),
     "scholar_hat":          ShopItem("Scholar's Hat", 280, ItemTier.NEVER, effect="10% skill cost reduction"),
 }
 
@@ -294,7 +295,14 @@ class ShopManager:
         # Context-aware adjustments
         adjusted: list[tuple[ShopItem, int]] = []
         for item in buyable:
-            priority = tier_order[item.tier]
+            # Use tier_extra for 2nd+ copies if defined
+            effective_tier = item.tier
+            if item.tier_extra is not None:
+                item_key = next((k for k, v in ITEM_CATALOGUE.items() if v is item), "")
+                owned = self._inventory.get(item_key, 0)
+                if owned >= 1:
+                    effective_tier = item.tier_extra
+            priority = tier_order[effective_tier]
 
             # Grilled Carrots: much higher priority in early game
             is_early = (

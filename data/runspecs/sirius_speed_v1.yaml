@@ -1,57 +1,58 @@
 # Team Sirius + Riko — Speed/Power Build
-# Speed primary (need 3000+ for rival races), power secondary.
+# Speed AND Power are co-primary targets at 1100+. Power deck (4 power cards)
+# means power should land naturally; speed needs explicit weighting.
 # Rest bonus >50% from deck means less training needed.
 
 id: sirius_speed_v1
 name: "Sirius Speed"
 run_type: parent_builder
-description: "Speed/power build for Team Sirius recreation strategy. High speed for rival races."
+description: "Speed/power dual-primary build for Team Sirius recreation strategy. Aiming for 1100+ in both speed and power."
 distance_target: medium
 style_target: leader
 
 stat_targets:
   speed:
-    minimum: 800
-    target: 1200
-    excellent: 1500
+    minimum: 900
+    target: 1100
+    excellent: 1300
     values: [1.4, 1.0, 0.8, 0.5]
   stamina:
     minimum: 300
     target: 500
     excellent: 700
     cap: 700
-    values: [0.8, 0.5, 0.2, 0.1]
+    values: [1.0, 0.8, 0.6, 0.5]
   power:
-    minimum: 600
-    target: 1000
-    excellent: 1200
-    values: [1.2, 0.9, 0.7, 0.4]
+    minimum: 900
+    target: 1100
+    excellent: 1300
+    values: [1.4, 1.0, 0.8, 0.5]
   guts:
     minimum: 300
     target: 500
     excellent: 700
     cap: 700
-    values: [0.8, 0.5, 0.2, 0.1]
+    values: [1.0, 0.8, 0.6, 0.5]
   wit:
     minimum: 300
     target: 500
     excellent: 700
-    values: [0.9, 0.7, 0.5, 0.2]
+    values: [1.3, 0.9, 0.75, 0.45]
 
 phase_weights:
   - condition: early_game
     weights:
-      speed: 1.4
-      stamina: 0.6
-      power: 1.0
-      guts: 0.6
-      wit: 1.0
+      speed: 1.3
+      stamina: 0.5
+      power: 1.3
+      guts: 0.5
+      wit: 0.9
   - condition: late_game
     weights:
-      speed: 2.0
-      stamina: 0.4
-      power: 1.2
-      guts: 0.4
+      speed: 1.6
+      stamina: 0.3
+      power: 1.6
+      guts: 0.3
       wit: 0.3
 
 policy:
@@ -63,12 +64,37 @@ policy:
   overshoot_penalty: 0.7
 
 deck:
-  speed: 1
-  power: 4
-  wit: 1
+  speed: 2
+  power: 2
+  pal: 1
+  group: 1
+
+# Pal/Group cards only need GREEN bond (60), not friendship (80).
+low_bond_threshold_cards:
+  - team_sirius
+  - riko
+
+# Named support cards (left-to-right, top-to-bottom on deck screen)
+deck_cards:
+  - team_sirius       # Group card (Special Week face)
+  - riko              # Pal card (Riko Kashimoto)
+  - nishino_flower    # Speed
+  - matikanefukukitaru # Speed
+  - marvelous_sunday  # Power
+  - kitasan_black     # Power
 
 constraints:
   must_complete_goal_races: true
   max_failure_rate: 0.12
   min_energy_for_training: 50
   rest_energy_threshold: 25
+
+# Per-build shop tier overrides. Merges on top of the default catalogue tiers.
+# For Sirius Speed: Pretty Mirror is SS (skill cost reduction), grilled carrots
+# boosted to SS for bond building. Scholar's Hat stays NEVER (default).
+shop_item_tiers:
+  pretty_mirror: SS
+  grilled_carrots: SS
+  manual: S
+  scroll: S
+  artisan_hammer: S

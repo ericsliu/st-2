@@ -63,6 +63,7 @@ _shop_manager = ShopManager(overrides=_overrides)
 # Load scenario and runspec so the scorer knows about summer camp, stat targets, etc.
 from uma_trainer.scenario import load_scenario
 from uma_trainer.decision.runspec import load_runspec
+from uma_trainer.decision.summer_planner import plan_summer_turn
 from uma_trainer.decision.lookahead import should_conserve_energy
 _scenario = load_scenario("trackblazer")
 _runspec = load_runspec("end_guts_v1")
@@ -90,12 +91,19 @@ def _get_plaque_matcher() -> PlaqueMatcher:
 # Playbook (optional — None means legacy behavior, no turn schedule)
 from uma_trainer.decision.playbook import load_playbook, PlaybookEngine
 _playbook_engine: PlaybookEngine | None = None
-_playbook_engine = load_playbook("sirius_riko_v1")
+_FALLBACK_FLAG = Path("data/sirius_fallback.flag")
+_strategy_name = "sirius_riko_v1_fallback" if _FALLBACK_FLAG.exists() else "sirius_riko_v1"
+print(f"[strategy] Loaded: {_strategy_name}{' (FALLBACK active)' if _FALLBACK_FLAG.exists() else ''}")
+_playbook_engine = load_playbook(_strategy_name)
 if _playbook_engine:
     # Playbook can override the default runspec (e.g. Sirius uses sirius_speed_v1)
     if _playbook_engine.playbook.runspec:
         _runspec = load_runspec(_playbook_engine.playbook.runspec)
         _scorer.runspec = _runspec
+        if _runspec.low_bond_threshold_cards:
+            _scorer.set_card_bond_thresholds(
+                {c: 60 for c in _runspec.low_bond_threshold_cards}
+            )
     _playbook_engine.scorer = _scorer
     _playbook_engine.race_selector = _race_selector
     _playbook_engine._scenario = _scenario
@@ -104,7 +112,29 @@ if _playbook_engine:
     if _playbook_engine.playbook.race:
         _race_selector.set_race_policy(_playbook_engine.playbook.race)
     if _playbook_engine.playbook.friendship and _playbook_engine.playbook.friendship.priority_order:
-        _scorer.set_friendship_priorities(_playbook_engine.playbook.friendship.priority_order)
+        priority_order = list(_playbook_engine.playbook.friendship.priority_order)
+        # Once Sirius bond is unlocked, drop team_sirius so the next card
+        # (Riko) becomes the top priority for bond-building.
+        if Path("data/sirius_bond_unlocked.flag").exists():
+            priority_order = [c for c in priority_order if c != "team_sirius"]
+            _scorer.mark_bond_complete("team_sirius")
+        if Path("data/riko_recreation_unlocked.flag").exists():
+            priority_order = [c for c in priority_order if c != "riko"]
+            _scorer.set_bond_override("riko", 80)
+            _scorer.mark_bond_complete("riko")
+        _scorer.set_friendship_priorities(priority_order)
+
+def _promote_post_sirius_priorities():
+    """After Sirius bond unlock, drop team_sirius from friendship priority so
+    the next card (Riko) becomes the top bond-building target."""
+    if not (_playbook_engine and _playbook_engine.playbook.friendship
+            and _playbook_engine.playbook.friendship.priority_order):
+        return
+    new_order = [c for c in _playbook_engine.playbook.friendship.priority_order
+                 if c != "team_sirius"]
+    _scorer.set_friendship_priorities(new_order)
+    log(f"Post-Sirius bond: friendship priority promoted to {new_order}")
+
 
 BTN_RECREATION = (378, 1750)
 
@@ -136,6 +166,11 @@ _prev_stats = None                # Previous turn's stats for suspicious jump de
 # deadline check doesn't false-alarm every turn after Junior Nov.
 _SIRIUS_BOND_FILE = Path("data/sirius_bond_unlocked.flag")
 _sirius_bond_unlocked = _SIRIUS_BOND_FILE.exists()
+
+# Persisted flag: set True when Riko's "Unexpected Side" event fires (gates
+# her recreation chain). Survives run_one.py restarts.
+_RIKO_REC_FILE = Path("data/riko_recreation_unlocked.flag")
+_riko_recreation_unlocked = _RIKO_REC_FILE.exists()
 
 # Map negative conditions to their cure items in the shop catalogue
 CONDITION_CURES = {
@@ -351,6 +386,7 @@ def read_fullstats():
         _SIRIUS_BOND_FILE.touch()
         log("Pure Passion detected — Sirius bond unlocked (from Full Stats)")
         _scorer.mark_bond_complete("team_sirius")
+        _promote_post_sirius_priorities()
 
     if aptitudes:
         log(f"Aptitudes: {aptitudes}")
@@ -605,7 +641,7 @@ def swipe(x1, y1, x2, y2, duration_ms=300, settle=3.0):
 def scroll_down(distance="normal", settle=3.0):
     """Scroll down (drag finger upward). Conservative distance with jitter."""
     if distance == "short":
-        swipe(540, 1050, 540, 750, settle=settle)
+        swipe(540, 1000, 540, 800, settle=settle)
     else:
         swipe(540, 1350, 540, 750, settle=settle)
 
@@ -1453,6 +1489,7 @@ def _read_game_log():
         log("Sirius bond event detected — bond unlocked!")
         _scorer.set_bond_override("team_sirius", 60)
         _scorer.mark_bond_complete("team_sirius")
+        _promote_post_sirius_priorities()
 
     # Close the log — press back
     press_back()
@@ -1816,6 +1853,16 @@ def handle_event(img):
         full_text = event_name
     log(f"Event full text: '{full_text[:200]}'")
 
+    # Riko's "Unexpected Side" event = recreation chain unlocked.
+    global _riko_recreation_unlocked
+    if not _riko_recreation_unlocked and "unexpected side" in full_text.lower():
+        _riko_recreation_unlocked = True
+        _RIKO_REC_FILE.touch()
+        log("Unexpected Side detected — Riko recreation unlocked!")
+        # Treat Riko's bond as maxed so the scorer stops chasing bond on her tiles.
+        _scorer.set_bond_override("riko", 80)
+        _scorer.mark_bond_complete("riko")
+
     # If Skip is toggled off, event shows dialogue instead of choices.
     # Re-enable skip so events auto-advance to the choice screen.
     # Check if Skip is toggled off by sampling the button color.
@@ -2131,12 +2178,13 @@ def handle_skill_shop(img, force_recovery=False):
         return "skill_back"
 
     # Phase 2: Sort by priority (highest first), then by cost (cheapest first for ties)
-    # Boost recovery skills to top priority when forcing
+    # In force_recovery mode, ONLY consider recovery skills — nothing else.
     if force_recovery:
+        before = len(all_skills)
+        all_skills = [s for s in all_skills if s.name.lower() in _RECOVERY_SKILL_NAMES]
+        log(f"  force_recovery: filtered {before} → {len(all_skills)} skills (recovery only)")
         for s in all_skills:
-            if s.name.lower() in _RECOVERY_SKILL_NAMES:
-                s.priority = max(s.priority, 20)  # Ensure they sort first
-                log(f"  Boosting recovery skill: {s.name} (prio → {s.priority})")
+            s.priority = max(s.priority, 20)
     all_skills.sort(key=lambda s: (-s.priority, s.cost))
 
     is_end_game = _last_result in ("complete_career",)
@@ -2641,7 +2689,7 @@ def handle_shop(img, dry=False):
         press_back()
         return "shop_back"
 
-    log(f"Want list: {want_keys[:8]}")
+    log(f"Want list: {want_keys}")
 
     # Coins to hold back for unbought SS items that might appear later in the
     # shelf scan. Prevents buying lower-tier items that starve out an SS
@@ -2667,7 +2715,7 @@ def handle_shop(img, dry=False):
     dry_available = []  # (dry mode) every matched item seen on shelf
     dry_seen_keys = set()
 
-    for scroll in range(5):
+    for scroll in range(8):
         if scroll > 0:
             scroll_down("short")
             time.sleep(3.0)
@@ -2740,22 +2788,25 @@ def handle_shop(img, dry=False):
                 coin_reserve = 50
             else:
                 coin_reserve = 0  # B-tier: no reserve
-            # Hold back coins for any unbought SS-tier want items, so we don't
-            # blow coins on lower-tier purchases before reaching an SS item
-            # further down the shelf.
+            # Hold back coins for up to 2 cheapest unbought SS-tier items.
+            # (Don't reserve for ALL ss_want — most aren't on this shelf.)
             if effective_tier != ItemTier.SS:
-                ss_reserve = sum(
+                ss_remaining = sorted(
                     c for c, k in ss_want
                     if k != item_key and k not in selected_keys
                 )
+                ss_reserve = sum(ss_remaining[:2])
                 coin_reserve = max(coin_reserve, ss_reserve)
             if coins is not None and (spent + item.cost + coin_reserve) > coins:
+                log(f"  Skip {item.name} ({item.cost}c): spent={spent} + cost={item.cost} + reserve={coin_reserve} > coins={coins}")
                 y += 150
                 continue
 
-            # Deduplicate (don't tap same position twice)
+            # Deduplicate (don't tap same position twice across scrolls).
+            # Threshold must be < row spacing (150px) so adjacent rows with the
+            # same item_key (e.g. Wit Manual + Guts Manual) are both buyable.
             abs_y = y + scroll * 350
-            if any(abs(abs_y - py) < 200 and pk == item_key for pk, py in tapped_positions):
+            if any(abs(abs_y - py) < 100 and pk == item_key for pk, py in tapped_positions):
                 y += 150
                 continue
 
@@ -3624,6 +3675,15 @@ def handle_training():
         if _playbook_force_train and not _train_drink_used:
             if _try_drink_and_retry_training(best_score, scored_tiles):
                 return "training_back_to_rest"
+            # Drink attempt may have navigated away from the training screen
+            # (Training Items bag, etc.) and failed to return. Verify we're
+            # still on training before picking tiles; otherwise just rest.
+            post_drink_img = screenshot(f"post_drink_check_{int(time.time())}")
+            if detect_screen(post_drink_img) != "training":
+                log("Playbook TRAIN: drink failed and training screen lost — resting")
+                _scenario.on_non_race_action()
+                tap(*BTN_REST)
+                return "rest"
             # No drink available or no worthwhile tile — pick lowest-failure tile
             log("Playbook TRAIN: no drink worth it, picking lowest-failure tile")
             wit_tile = next((t for t in tiles if t.stat_type.value == "wit"), None)
@@ -3722,12 +3782,16 @@ def handle_training():
     return "training"
 
 
-def _wait_for_career_home(tag=""):
-    """Screenshot + detect in a loop until we're back on career_home. Max 5 attempts."""
+def _wait_for_career_home(tag="", accept=("career_home",)):
+    """Screenshot + detect in a loop until we're back on career_home. Max 5 attempts.
+
+    `accept` is the set of screens that count as "home" — defaults to just
+    career_home, but summer paths pass ("career_home", "career_home_summer").
+    """
     for attempt in range(5):
         img = screenshot(f"career_home_wait_{tag}_{int(time.time())}")
         s = detect_screen(img)
-        if s == "career_home":
+        if s in accept:
             return img
         # Try dismissing popups/dialogs
         if s == "warning_popup":
@@ -3750,8 +3814,11 @@ def _wait_for_career_home(tag=""):
     return None
 
 
-def _do_fast_path_shop():
-    """Visit shop on fast-path turns (race/recreation) so coins don't pile up."""
+def _do_fast_path_shop(from_summer=False):
+    """Visit shop on fast-path turns (race/recreation) so coins don't pile up.
+
+    When `from_summer=True`, we're on career_home_summer and should return there.
+    """
     global _needs_shop_visit, _last_shop_turn
     is_pre_debut = _current_turn < 6
     if is_pre_debut:
@@ -3760,6 +3827,8 @@ def _do_fast_path_shop():
     if not should_shop:
         return
     reason = "flagged" if _needs_shop_visit else f"per-turn ({_current_turn})"
+    if from_summer:
+        reason = "summer-forced"
     log(f"Visiting shop — {reason}")
     _last_shop_turn = _current_turn
     _SHOP_TURN_FILE.write_text(str(_current_turn))
@@ -3768,6 +3837,7 @@ def _do_fast_path_shop():
         _NEEDS_SHOP_FILE.unlink(missing_ok=True)
     except Exception:
         pass
+    accept = ("career_home", "career_home_summer") if from_summer else ("career_home",)
     tap(*BTN_SHOP, delay=2.5)
     img3 = screenshot(f"shop_visit_{int(time.time())}")
     screen3 = detect_screen(img3)
@@ -3777,7 +3847,7 @@ def _do_fast_path_shop():
             time.sleep(2)
             img3 = screenshot(f"shop_exit_{int(time.time())}")
             s3 = detect_screen(img3)
-            if s3 == "career_home":
+            if s3 in accept:
                 break
             elif s3 == "shop":
                 handle_shop(img3)
@@ -3787,7 +3857,7 @@ def _do_fast_path_shop():
                     tap(btn[0], btn[1])
                 else:
                     tap(540, 960)
-        _wait_for_career_home("post_shop_fast")
+        _wait_for_career_home("post_shop_fast", accept=accept)
 
 
 def _handle_career_home(img):
@@ -3882,6 +3952,20 @@ def _handle_career_home(img):
                     return "recreation"
                 else:
                     log(f"Playbook: Racing — {pb_action.reason} (fast-path)")
+                    # Force-buy recovery skills before Kikuka Sho even on race turns.
+                    if (
+                        _current_turn in (43, 44)
+                        and _recovery_skills_bought < 2
+                        and not _skill_shop_done
+                        and _skill_pts >= 400
+                    ):
+                        log(f"Forcing skill shop for recovery skills before Kikuka Sho (have {_recovery_skills_bought}/2, SP={_skill_pts})")
+                        tap(*BTN_HOME_SKILLS)
+                        time.sleep(2.5)
+                        img_sk = screenshot(f"force_skill_shop_{int(time.time())}")
+                        if detect_screen(img_sk) == "skill_shop":
+                            handle_skill_shop(img_sk, force_recovery=True)
+                            _wait_for_career_home("post_force_skill_shop")
                     scheduled = _playbook_engine._get_scheduled_action(_current_turn)
                     target_name = ""
                     if scheduled:
@@ -4368,7 +4452,7 @@ def _set_race_strategy(img):
 
 
 _INTERMEDIATE_RESULTS = {
-    "going_to_races", "going_to_training", "race_confirm", "pre_race",
+    "going_to_races", "going_to_training", "going_to_training_summer", "going_to_training_ts_climax", "race_confirm", "pre_race",
     "race_enter", "result_pts", "standings_next", "tap_prompt",
     "cutscene_skip", "tutorial_slide", "goal_complete", "fan_class",
     "unlock_popup", "trophy_won", "race_lineup", "post_race_next",
@@ -4452,6 +4536,9 @@ def _run_one_turn_inner(stop_before=None):
                 return "recovering"
 
         energy = get_energy_level(img)
+        # Refresh _current_turn from period OCR — otherwise playbook lookups
+        # stay stuck on the pre-summer turn number across intermediate loops.
+        build_game_state(img, "career_home", energy=energy)
         _detect_active_effects()
         # Re-screenshot after popup close
         img = screenshot(f"summer_post_effects_{int(time.time())}")
@@ -4464,6 +4551,16 @@ def _run_one_turn_inner(stop_before=None):
         mega_info = f"{active_megas[0].item_key} ({active_megas[0].turns_remaining} left)" if active_megas else "none"
         log(f"SUMMER CAMP — Energy: ~{energy}%, Mood: {mood}, Megaphone: {mega_info}")
 
+        # Per-turn shop visit during summer — drinks and charms are critical here.
+        if _last_shop_turn != _current_turn:
+            _do_fast_path_shop(from_summer=True)
+            img = screenshot(f"summer_post_shop_{int(time.time())}")
+            if detect_screen(img) != "career_home_summer":
+                return "recovering"
+            energy = get_energy_level(img)
+            mood = detect_mood(img)
+            inventory = _shop_manager.inventory
+
         # 1. Mood check — AWFUL/BAD must be fixed first via Recreation
         #    Do NOT use megaphone — it would waste a turn of the buff
         if mood in ("AWFUL", "BAD"):
@@ -4471,79 +4568,82 @@ def _run_one_turn_inner(stop_before=None):
             tap(210, 1460)
             return "recreation"
 
-        # 2. Energy check — can we train?
-        can_train = True
-        if energy < 50:
-            # Pick best energy recovery: prefer kale+cupcake when energy is very
-            # low (kale gives +100 but drops mood by 1; cupcake restores it).
-            has_kale = inventory.get("royal_kale", 0) > 0
-            has_cupcake = (inventory.get("plain_cupcake", 0) > 0
-                          or inventory.get("berry_cupcake", 0) > 0)
-            energy_item = None
-            use_cupcake_after = False
-            if has_kale and has_cupcake and energy < 30:
-                energy_item = "royal_kale"
-                use_cupcake_after = True
-            elif has_kale and energy < 20:
-                # Kale without cupcake only if desperate (mood will drop)
-                energy_item = "royal_kale"
-            else:
-                # Fall back to vita drinks (biggest first)
-                for key in ("vita_65", "vita_40", "vita_20"):
-                    if inventory.get(key, 0) > 0:
-                        energy_item = key
-                        break
-            has_charm = inventory.get("good_luck_charm", 0) > 0
-            energy_keys = ("vita_65", "vita_40", "vita_20", "royal_kale")
-            log(f"SUMMER CAMP — Recovery check: energy_items={[(k, inventory.get(k, 0)) for k in energy_keys]}, charm={has_charm}")
+        # 1b. Boost GOOD/NORMAL to GREAT with a cupcake — summer stacks favor GREAT.
+        if mood != "GREAT":
+            cupcake_key = None
+            if inventory.get("plain_cupcake", 0) > 0:
+                cupcake_key = "plain_cupcake"
+            elif inventory.get("berry_cupcake", 0) > 0:
+                cupcake_key = "berry_cupcake"
+            if cupcake_key:
+                log(f"SUMMER CAMP — Mood {mood}, using {cupcake_key} to reach GREAT")
+                if _use_training_items([cupcake_key]):
+                    if _shop_manager._inventory.get(cupcake_key, 0) > 0:
+                        _shop_manager._inventory[cupcake_key] -= 1
+                        if _shop_manager._inventory[cupcake_key] <= 0:
+                            del _shop_manager._inventory[cupcake_key]
+                    _shop_manager.save_inventory()
+                time.sleep(1)
+                img = screenshot(f"summer_post_cupcake_{int(time.time())}")
+                if detect_screen(img) != "career_home_summer":
+                    return "recovering"
+                mood = detect_mood(img)
 
-            if energy_item:
-                log(f"SUMMER CAMP — Low energy, using {energy_item}")
-                if _use_training_items([energy_item]):
-                    if _shop_manager._inventory.get(energy_item, 0) > 0:
-                        _shop_manager._inventory[energy_item] -= 1
-                        if _shop_manager._inventory[energy_item] <= 0:
-                            del _shop_manager._inventory[energy_item]
-                    _shop_manager.save_inventory()
-                    time.sleep(1)
-                    img = screenshot(f"summer_post_item_{int(time.time())}")
-                    if detect_screen(img) != "career_home_summer":
+        # 2. Energy + failure-insurance plan — delegated to SummerPlanner.
+        summer_turns_all = _scenario.get_event_turns("summer_camp") or set()
+        turns_remaining = sum(1 for t in summer_turns_all if t >= _current_turn) or 1
+        plan = plan_summer_turn(
+            energy=energy,
+            turns_remaining=turns_remaining,
+            inventory=inventory,
+        )
+        log(f"SUMMER CAMP — Plan: {plan.kind}"
+            f"{' (' + plan.item_key + ')' if plan.item_key else ''}"
+            f" — {plan.reason}")
+
+        can_train = plan.kind != "none" or energy >= 50
+
+        def _consume_and_screenshot(item_key: str, tag: str) -> tuple[bool, "Image"]:
+            if not _use_training_items([item_key]):
+                log(f"SUMMER CAMP — Failed to use {item_key}")
+                return False, None
+            if _shop_manager._inventory.get(item_key, 0) > 0:
+                _shop_manager._inventory[item_key] -= 1
+                if _shop_manager._inventory[item_key] <= 0:
+                    del _shop_manager._inventory[item_key]
+            _shop_manager.save_inventory()
+            time.sleep(1)
+            new_img = screenshot(f"summer_post_{tag}_{int(time.time())}")
+            return True, new_img
+
+        if plan.kind == "drink":
+            ok, new_img = _consume_and_screenshot(plan.item_key, "drink")
+            if ok:
+                if detect_screen(new_img) != "career_home_summer":
+                    return "recovering"
+                energy = get_energy_level(new_img)
+                log(f"SUMMER CAMP — Energy after drink: ~{energy}%")
+        elif plan.kind in ("kale", "kale_cupcake"):
+            ok, new_img = _consume_and_screenshot("royal_kale", "kale")
+            if ok:
+                if detect_screen(new_img) != "career_home_summer":
+                    return "recovering"
+                energy = get_energy_level(new_img)
+                log(f"SUMMER CAMP — Energy after kale: ~{energy}%")
+                if plan.kind == "kale_cupcake":
+                    cupcake_key = ("plain_cupcake"
+                                   if inventory.get("plain_cupcake", 0) > 0
+                                   else "berry_cupcake")
+                    log(f"SUMMER CAMP — Using {cupcake_key} to restore mood after kale")
+                    ok2, new_img2 = _consume_and_screenshot(cupcake_key, "cupcake")
+                    if ok2 and detect_screen(new_img2) != "career_home_summer":
                         return "recovering"
-                    energy = get_energy_level(img)
-                    log(f"SUMMER CAMP — Energy after item: ~{energy}%")
-                    # Use cupcake to restore mood if kale dropped it
-                    if use_cupcake_after:
-                        cupcake_key = "plain_cupcake" if inventory.get("plain_cupcake", 0) > 0 else "berry_cupcake"
-                        log(f"SUMMER CAMP — Using {cupcake_key} to restore mood after kale")
-                        if _use_training_items([cupcake_key]):
-                            if _shop_manager._inventory.get(cupcake_key, 0) > 0:
-                                _shop_manager._inventory[cupcake_key] -= 1
-                                if _shop_manager._inventory[cupcake_key] <= 0:
-                                    del _shop_manager._inventory[cupcake_key]
-                            _shop_manager.save_inventory()
-                            time.sleep(1)
-                            img = screenshot(f"summer_post_cupcake_{int(time.time())}")
-                            if detect_screen(img) != "career_home_summer":
-                                return "recovering"
-                else:
-                    log(f"SUMMER CAMP — Failed to use {energy_item}")
-            elif has_charm:
-                log(f"SUMMER CAMP — Low energy, using Good-Luck Charm (0%% failure)")
-                if _use_training_items(["good_luck_charm"]):
-                    if _shop_manager._inventory.get("good_luck_charm", 0) > 0:
-                        _shop_manager._inventory["good_luck_charm"] -= 1
-                        if _shop_manager._inventory["good_luck_charm"] <= 0:
-                            del _shop_manager._inventory["good_luck_charm"]
-                    _shop_manager.save_inventory()
-                    time.sleep(1)
-                    img = screenshot(f"summer_post_charm_{int(time.time())}")
-                    if detect_screen(img) != "career_home_summer":
-                        return "recovering"
-                    log(f"SUMMER CAMP — Good-Luck Charm active, safe to train")
-                else:
-                    log(f"SUMMER CAMP — Failed to use Good-Luck Charm")
-            else:
-                can_train = False
+        elif plan.kind == "charm":
+            ok, new_img = _consume_and_screenshot("good_luck_charm", "charm")
+            if ok:
+                _shop_manager.activate_item("good_luck_charm")
+                if detect_screen(new_img) != "career_home_summer":
+                    return "recovering"
 
         if not can_train:
             log(f"SUMMER CAMP — Energy ~{energy}%, no recovery items — resting")
@@ -4593,29 +4693,14 @@ def _run_one_turn_inner(stop_before=None):
             active_mega = next(e for e in _shop_manager._active_effects if "mega" in e.item_key)
             log(f"SUMMER CAMP — Megaphone active: {active_mega.item_key} ({active_mega.turns_remaining} turns left)")
 
-        # 3.5. Good luck charm — 0% failure for 1 turn. Summer cap is 5%, and stacked
-        # summer tiles often read 7–9%. Burn a charm if we have one, saves an alarm clock
-        # later and enables training the highest-score tile without worry.
-        if inventory.get("good_luck_charm", 0) > 0:
-            log(f"SUMMER CAMP — Using good_luck_charm (0% failure this turn)")
-            if _use_training_items(["good_luck_charm"]):
-                if _shop_manager._inventory.get("good_luck_charm", 0) > 0:
-                    _shop_manager._inventory["good_luck_charm"] -= 1
-                    if _shop_manager._inventory["good_luck_charm"] <= 0:
-                        del _shop_manager._inventory["good_luck_charm"]
-                _shop_manager.save_inventory()
-                _shop_manager.activate_item("good_luck_charm")
-            time.sleep(1)
-            img = screenshot(f"summer_post_charm_{int(time.time())}")
-            if detect_screen(img) != "career_home_summer":
-                return "recovering"
+        # (Charm usage is now handled in the energy/insurance plan above — see §2.)
 
         # 4. Ankle weights — stat-specific, used after scorer picks stat in handle_training()
         # (follows reset whistle pattern: back out → use item → re-enter training)
 
         log(f"SUMMER CAMP — Energy ~{energy}% OK — going to Training")
         tap(*BTN_TRAINING)
-        return "going_to_training"
+        return "going_to_training_summer"
 
     if screen == "race_day":
         log("Race Day — tapping Race!")
@@ -4662,7 +4747,7 @@ def _run_one_turn_inner(stop_before=None):
 
         # 1. Cupcake — bring mood to Great before training (stacking multiplier)
         mood = detect_mood(img)
-        if mood in ("NORMAL", "BAD"):
+        if mood != "GREAT":
             inventory = _shop_manager.inventory
             cupcake_key = None
             if mood == "BAD" and inventory.get("berry_cupcake", 0) > 0:
@@ -4726,7 +4811,7 @@ def _run_one_turn_inner(stop_before=None):
 
         # 3. Train
         tap(540, 1496)
-        return "going_to_training"
+        return "going_to_training_ts_climax"
 
     if screen == "career_home":
         return _handle_career_home(img)
@@ -4820,10 +4905,38 @@ def _run_one_turn_inner(stop_before=None):
                 tap(540, tap_y)
                 return "recreation_select"  # Will loop back to detect recreation_confirm
             else:
+                # Turn 18 = first scheduled Sirius recreation. If Sirius isn't on
+                # the recreation screen, unlock RNG failed → switch to fallback.
+                if (source == "team_sirius" and _current_turn == 18
+                        and _strategy_name == "sirius_riko_v1"):
+                    riko_y = _find_recreation_card(img, "riko")
+                    if riko_y is None:
+                        log("  ABORT: Neither Sirius nor Riko available at turn 18 — run is ruined")
+                        tap(540, 1450)
+                        raise SystemExit("Run ruined: no recreation source available at turn 18")
+                    log("  Sirius not unlocked at turn 18 — activating fallback schedule (restart required)")
+                    _FALLBACK_FLAG.write_text(f"activated turn {_current_turn}\n")
+                    # Tap Riko for this turn, then exit so next process uses fallback
+                    log(f"  Tapping Riko at y={riko_y} for this turn")
+                    tap(540, riko_y)
+                    return "recreation_select"
+                # Sirius still missing later in fallback mode — substitute Riko
+                # for this turn so we don't loop. Schedule stays the same;
+                # Sirius rec_tracker entry remains 0 so future Sirius turns will
+                # also substitute cleanly.
+                if source == "team_sirius":
+                    riko_y = _find_recreation_card(img, "riko")
+                    if riko_y is not None:
+                        log(f"  Sirius missing — substituting Riko at y={riko_y}")
+                        _playbook_engine.rec_tracker.uses_remaining["team_sirius"] = 0
+                        tap(540, riko_y)
+                        return "recreation_select"
                 log(f"  WARNING: Could not find '{source}' on recreation screen — marking exhausted, cancelling")
                 # Mark this source as exhausted so playbook stops sending us here
                 if _playbook_engine:
                     _playbook_engine.rec_tracker.uses_remaining[source] = 0
+                    # Skip recreation for this turn so we don't loop
+                    _playbook_engine.skipped_recreation_turns.add(_current_turn)
                 tap(540, 1450)
                 return "recreation_cancel"
         else:
@@ -4940,12 +5053,15 @@ def _run_one_turn_inner(stop_before=None):
                 if m and placement == 99:
                     placement = int(m.group(1))
             standings_results = ocr_full_screen(img)
+            is_make_debut = False
             for text, conf, y_pos in standings_results:
                 t = text.strip().lower()
                 if "climax" in t:
                     is_climax = True
                 if t == "g1":
                     is_g1 = True
+                if "make debut" in t:
+                    is_make_debut = True
                 if placement == 99:
                     m = re.match(r"(\d+)(st|nd|rd|th)", t)
                     if m:
@@ -4963,16 +5079,19 @@ def _run_one_turn_inner(stop_before=None):
             return "retry_race"
         if is_climax and placement <= 3:
             _ts_climax_retries = 0  # Reset on success
-        # G1 race retry: use alarm clock if we didn't win (max 1 retry per race, 5 clocks per career)
+        # G1 / Make Debut race retry: use alarm clock if we didn't win
+        # (max 1 retry per race, 5 clocks per career)
         global _g1_retries, _g1_retried_this_race
-        if not is_climax and is_g1 and placement > 1 and not _g1_retried_this_race and _g1_retries < 5:
+        retry_eligible = is_g1 or is_make_debut
+        race_label = "G1" if is_g1 else "Make Debut"
+        if not is_climax and retry_eligible and placement > 1 and not _g1_retried_this_race and _g1_retries < 5:
             _g1_retries += 1
             _g1_retried_this_race = True
-            log(f"G1 race — placed {placement}, using Alarm Clock to Try Again ({_g1_retries}/5 used)")
+            log(f"{race_label} race — placed {placement}, using Alarm Clock to Try Again ({_g1_retries}/5 used)")
             tap(270, 1780)
             return "retry_race"
-        elif not is_climax and is_g1 and placement > 1 and _g1_retried_this_race:
-            log(f"G1 race — placed {placement} on retry, accepting result (1 retry per race)")
+        elif not is_climax and retry_eligible and placement > 1 and _g1_retried_this_race:
+            log(f"{race_label} race — placed {placement} on retry, accepting result (1 retry per race)")
             _g1_retried_this_race = False
         if placement == 1:
             _needs_shop_visit = True
@@ -5095,13 +5214,24 @@ def _run_one_turn_inner(stop_before=None):
         #   → game drops us on training screen)
         # - we already backed out once this turn (prevents infinite loop when
         #   recreation is done but turn hasn't advanced yet)
-        if _playbook_engine and _last_result not in ("recreation", "recreation_select",
+        # If we came from summer camp home, the game doesn't allow racing/rec —
+        # don't back out even if the schedule says race.
+        came_from_summer = _last_result == "going_to_training_summer"
+        came_from_ts_climax = _last_result == "going_to_training_ts_climax"
+        if _playbook_engine and not came_from_summer and not came_from_ts_climax and _last_result not in ("recreation", "recreation_select",
                                                       "recreation_member_select",
                                                       "recreation_confirm",
                                                       "training_back_to_home") \
                             and not _backed_out_to_home_this_turn:
             scheduled = _playbook_engine._get_scheduled_action(_current_turn)
-            if scheduled and scheduled.action in ("recreation", "race", "rest"):
+            # Don't back out if this turn's recreation already failed — decide_turn
+            # has already been redirected to TRAIN and we're intentionally here.
+            rec_skipped = (
+                scheduled is not None
+                and scheduled.action == "recreation"
+                and _current_turn in _playbook_engine.skipped_recreation_turns
+            )
+            if scheduled and scheduled.action in ("recreation", "race", "rest") and not rec_skipped:
                 log(f"On training screen but playbook says '{scheduled.action}' for turn {_current_turn} — backing out")
                 _backed_out_to_home_this_turn = True
                 tap(80, 1855)  # Back button

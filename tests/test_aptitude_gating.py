@@ -139,7 +139,7 @@ def test_sprint_beats_mile():
 def test_no_aptitudes_allows_all():
     """Without aptitudes or highlight data, all races should be allowed."""
     sel = _make_selector()
-    race = RaceOption(name="Long Dirt", grade="G1", distance=3000, surface="dirt")
+    race = RaceOption(name="Long Turf", grade="G1", distance=3000, surface="turf")
     score = sel._score_race(race, _state())
     assert score > 0, f"Without aptitude data, races should not be blocked"
 

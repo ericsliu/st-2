@@ -46,11 +46,13 @@ data/gametora_chunks.txt
 data/gametora_races.json
 data/run_current.md
 data/run*_full_log.md
+data/run*_session_notes.md
 data/retro_*.md
 data/sim_harness_draft.md
 data/*.flag
 data/last_shop_turn.txt
 data/strategies/*.md
+data/strategies/*_fallback.yaml
 
 # Sprite assets (large, extracted from APK)
 *.png
@@ -141,6 +143,10 @@ scripts/extract_portrait.py
 scripts/extract_riko.py
 scripts/extract_savedata.py
 scripts/sample_skip_color.py
+
+# Misc
+*.bak
+sirius_strategy_transcript.txt
 
 # Temp
 tmp/

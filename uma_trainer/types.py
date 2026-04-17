@@ -166,6 +166,10 @@ class RaceOption:
     # indicating B or better aptitude. White text = C or worse.
     is_aptitude_ok: bool = True
     is_rival_race: bool = False  # Trackblazer "VS" rival race
+    # Banner id from the plaque matcher. Multiple races may share a banner
+    # (e.g. same race across Classic/Senior year), so this alone is not a
+    # unique race id -- combine with current-turn context to disambiguate.
+    banner_id: int | None = None
 
 
 @dataclass

@@ -13,8 +13,10 @@ When no playbook is loaded, the bot behaves exactly as before.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,6 +31,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 STRATEGIES_DIR = str(Path(__file__).resolve().parent.parent.parent / "data" / "strategies")
+PAIR_COMMITMENTS_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "pair_commitments.json"
 
 # ---------------------------------------------------------------------------
 # Config dataclasses (parsed from YAML)
@@ -39,6 +42,7 @@ ACTION_MAP = {
     "race": ActionType.RACE,
     "train": ActionType.TRAIN,
     "rest": ActionType.REST,
+    "infirmary": ActionType.INFIRMARY,
     "flex": ActionType.WAIT,  # WAIT = fall through to dynamic logic
 }
 
@@ -50,6 +54,15 @@ class TurnAction:
     conditions: list[str] = field(default_factory=list)  # e.g. ["unless_double_friendship"]
     fallback: str = "flex"        # what to do if conditions block
     note: str = ""
+    # Pair commitment fields. When `pair` is set, the engine resolves the
+    # action via _decide_pair_turn instead of the normal scheduled-action path.
+    # The lead role evaluates branches and writes a commitment; the follow
+    # role reads it. This guarantees the pair always resolves to either
+    # (race+Riko) or (train+train), never a mixed combination.
+    pair: str = ""              # pair name, e.g. "sr_kyoto_kinen"
+    role: str = ""              # "lead" | "follow"
+    partner_turn: int = 0       # turn number of the pair partner
+    race: str = ""              # explicit race name for the race branch (lead only)
 
     @property
     def action_type(self) -> ActionType:
@@ -138,6 +151,12 @@ class PlaybookConfig:
     skills: SkillPolicy = field(default_factory=SkillPolicy)
     friendship: FriendshipPolicy = field(default_factory=FriendshipPolicy)
     item_priorities: list[str] = field(default_factory=list)
+
+    # Resource policy: for strategies where training turns are rare (e.g.
+    # Sirius+Riko where most turns are race/recreation), we want to burn
+    # energy drinks on low-energy training turns rather than waste them by
+    # resting. Default False keeps legacy behavior for race-lighter strategies.
+    drink_before_rest: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -271,12 +290,252 @@ class PlaybookEngine:
         scorer: TrainingScorer | None = None,
         race_selector: RaceSelector | None = None,
         scenario=None,
+        commitments_path: Path | str | None = None,
     ) -> None:
         self.playbook = playbook
         self.scorer = scorer
         self.race_selector = race_selector
         self._scenario = scenario
         self.rec_tracker = RecreationTracker.from_policy(playbook.recreation)
+        self._commitments_path = (
+            Path(commitments_path) if commitments_path else PAIR_COMMITMENTS_PATH
+        )
+        # Turns where the recreation_select handler already tried and failed
+        # (no valid card on screen). Prevents infinite cancel-retry loops.
+        self.skipped_recreation_turns: set[int] = set()
+
+    # ------------------------------------------------------------------
+    # Pair commitment persistence
+    # ------------------------------------------------------------------
+
+    def _load_commitments(self) -> dict:
+        if not self._commitments_path.exists():
+            return {}
+        try:
+            return json.loads(self._commitments_path.read_text())
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Failed to read pair commitments file: %s", exc)
+            return {}
+
+    def _save_commitments(self, commitments: dict) -> None:
+        self._commitments_path.parent.mkdir(parents=True, exist_ok=True)
+        self._commitments_path.write_text(json.dumps(commitments, indent=2))
+
+    def clear_pair_commitments(self) -> None:
+        if self._commitments_path.exists():
+            self._commitments_path.unlink()
+            logger.info("Cleared pair commitments file at %s", self._commitments_path)
+
+    def _record_commitment(self, pair: str, choice: str, lead_turn: int) -> None:
+        commitments = self._load_commitments()
+        commitments[pair] = {
+            "choice": choice,
+            "lead_turn": lead_turn,
+            "decided_at": datetime.now().isoformat(),
+        }
+        self._save_commitments(commitments)
+        logger.info(
+            "Pair commitment recorded: %s = %s (lead turn %d)",
+            pair, choice, lead_turn,
+        )
+
+    def _get_commitment(self, pair: str) -> dict | None:
+        return self._load_commitments().get(pair)
+
+    def _maybe_clear_stale_commitments(self, current_turn: int) -> None:
+        """Auto-clear commitments that reference future turns — those are
+        leftovers from a prior career run."""
+        commitments = self._load_commitments()
+        if not commitments:
+            return
+        earliest = min(c.get("lead_turn", 0) for c in commitments.values())
+        if current_turn < earliest:
+            logger.info(
+                "Current turn %d precedes earliest commitment lead_turn %d — "
+                "clearing stale pair commitments file",
+                current_turn, earliest,
+            )
+            self.clear_pair_commitments()
+
+    # ------------------------------------------------------------------
+    # Pair branch evaluation
+    # ------------------------------------------------------------------
+
+    # Threshold for the train+train branch: best tile must show at least
+    # this much total stat gain (sum across all stats on the tile) to beat
+    # a race+Riko slot. Tuned for the Sirius+Riko strategy where race+Riko
+    # is the default value floor.
+    PAIR_TRAIN_TILE_THRESHOLD = 40
+
+    def _evaluate_pair_branches(self, state: GameState, scheduled: TurnAction) -> str:
+        """Decide whether a flex pair commits to the race+Riko branch or
+        the train+train branch.
+
+        Default bias is race + Riko (per the Sirius+Riko strategy notes).
+        Forced overrides:
+        - If Riko has no remaining recreation uses, must train.
+        Tile-based override:
+        - If the best training tile total stat gain ≥ PAIR_TRAIN_TILE_THRESHOLD,
+          commit to train+train (the training side is clearly stronger).
+          Tile data must already be populated on `state` — see
+          needs_tile_preview() for the entry-point signal.
+        """
+        riko_remaining = self.rec_tracker.remaining_for("riko")
+        if riko_remaining <= 0:
+            logger.info(
+                "Pair %s lead turn %d: Riko exhausted, committing to train+train branch",
+                scheduled.pair, state.current_turn,
+            )
+            return "train"
+
+        if state.training_tiles:
+            best_total = max(
+                (t.total_stat_gain for t in state.training_tiles),
+                default=0,
+            )
+            if best_total >= self.PAIR_TRAIN_TILE_THRESHOLD:
+                logger.info(
+                    "Pair %s lead turn %d: best tile total=%d ≥ %d, committing to train+train",
+                    scheduled.pair, state.current_turn,
+                    best_total, self.PAIR_TRAIN_TILE_THRESHOLD,
+                )
+                return "train"
+            logger.info(
+                "Pair %s lead turn %d: best tile total=%d < %d, committing to race+Riko",
+                scheduled.pair, state.current_turn,
+                best_total, self.PAIR_TRAIN_TILE_THRESHOLD,
+            )
+        else:
+            logger.info(
+                "Pair %s lead turn %d: no tile data, defaulting to race+Riko (Riko has %d uses)",
+                scheduled.pair, state.current_turn, riko_remaining,
+            )
+        return "race"
+
+    def needs_tile_preview(self, state: GameState) -> bool:
+        """Return True if the current turn is a pair lead with no commitment
+        yet — the caller should populate state.training_tiles before calling
+        decide_turn() so the branch evaluator can use real tile data."""
+        scheduled = self._get_scheduled_action(state.current_turn)
+        if not scheduled or not scheduled.pair or scheduled.role != "lead":
+            return False
+        existing = self._get_commitment(scheduled.pair)
+        if existing and existing.get("lead_turn") == state.current_turn:
+            return False  # Already committed, no need to peek
+        return True
+
+    def commit_pair_after_tiles(self, state: GameState) -> str | None:
+        """Called from handle_training after tiles are scanned. If the
+        current turn is a pair lead waiting for tile data, evaluate and
+        commit. Returns the chosen branch ('race' or 'train'), or None if
+        the current turn isn't a pair-lead-needing-commit.
+        """
+        scheduled = self._get_scheduled_action(state.current_turn)
+        if not scheduled or not scheduled.pair or scheduled.role != "lead":
+            return None
+        existing = self._get_commitment(scheduled.pair)
+        if existing and existing.get("lead_turn") == state.current_turn:
+            return existing["choice"]
+        choice = self._evaluate_pair_branches(state, scheduled)
+        self._record_commitment(scheduled.pair, choice, lead_turn=state.current_turn)
+        return choice
+
+    def _decide_pair_turn(self, state: GameState, scheduled: TurnAction) -> BotAction:
+        """Resolve a turn that's part of a flex pair (lead or follow)."""
+        turn = state.current_turn
+        pair = scheduled.pair
+        role = scheduled.role
+
+        if role == "lead":
+            # Re-use any existing commitment for this pair (e.g. if the lead
+            # turn re-runs after a crash partway through).
+            existing = self._get_commitment(pair)
+            if existing and existing.get("lead_turn") == turn:
+                choice = existing["choice"]
+                logger.info(
+                    "Pair %s lead turn %d: reusing existing commitment '%s'",
+                    pair, turn, choice,
+                )
+            elif state.training_tiles:
+                # Tiles already populated (e.g. test path or post-peek
+                # commit) — evaluate immediately.
+                choice = self._evaluate_pair_branches(state, scheduled)
+                self._record_commitment(pair, choice, lead_turn=turn)
+            elif self.rec_tracker.remaining_for("riko") <= 0:
+                # No tiles needed — Riko exhausted means train+train regardless.
+                choice = "train"
+                self._record_commitment(pair, choice, lead_turn=turn)
+                logger.info(
+                    "Pair %s lead turn %d: Riko exhausted, committing to train without tile peek",
+                    pair, turn,
+                )
+            else:
+                # No commitment and no tile data — return TRAIN so the caller
+                # enters the training screen and scans tiles. handle_training
+                # then calls commit_pair_after_tiles() to make the real
+                # decision and either back out (race branch) or proceed
+                # (train branch).
+                logger.info(
+                    "Pair %s lead turn %d: no tiles yet, peeking training screen",
+                    pair, turn,
+                )
+                return BotAction(
+                    action_type=ActionType.TRAIN,
+                    reason=f"playbook pair {pair} lead: peeking tiles before commit",
+                )
+
+            if choice == "race":
+                race_label = scheduled.race or scheduled.note or pair
+                return BotAction(
+                    action_type=ActionType.RACE,
+                    reason=f"playbook pair {pair} lead: race {race_label}",
+                )
+            return BotAction(
+                action_type=ActionType.TRAIN,
+                reason=f"playbook pair {pair} lead: train (train+train branch)",
+            )
+
+        if role == "follow":
+            commitment = self._get_commitment(pair)
+            if not commitment:
+                raise RuntimeError(
+                    f"Pair commitment missing for '{pair}' on follow turn {turn}. "
+                    f"Expected lead turn {scheduled.partner_turn} to have committed first. "
+                    f"Check {self._commitments_path}. If the lead turn ran in a prior "
+                    f"process, the file may have been deleted or never written."
+                )
+            if commitment.get("lead_turn") != scheduled.partner_turn:
+                raise RuntimeError(
+                    f"Pair commitment for '{pair}' has lead_turn="
+                    f"{commitment.get('lead_turn')} but YAML says partner_turn="
+                    f"{scheduled.partner_turn}. Stale or mismatched commitment — "
+                    f"clear {self._commitments_path} and re-run the lead turn."
+                )
+            choice = commitment["choice"]
+            if choice == "race":
+                riko_left = self.rec_tracker.remaining_for("riko")
+                if riko_left > 0:
+                    return BotAction(
+                        action_type=ActionType.GO_OUT,
+                        reason=f"playbook pair {pair} follow: Riko (lead turn {scheduled.partner_turn} raced)",
+                    )
+                return BotAction(
+                    action_type=ActionType.REST,
+                    reason=f"playbook pair {pair} follow: Riko exhausted ({riko_left} left), resting",
+                )
+            return BotAction(
+                action_type=ActionType.TRAIN,
+                reason=f"playbook pair {pair} follow: train (lead turn {scheduled.partner_turn} trained)",
+            )
+
+        raise RuntimeError(
+            f"Unknown pair role '{role}' for pair '{pair}' on turn {turn}. "
+            f"Expected 'lead' or 'follow'."
+        )
+
+    # ------------------------------------------------------------------
+    # decide_turn
+    # ------------------------------------------------------------------
 
     def decide_turn(self, state: GameState) -> BotAction:
         """Main entry point. Returns the action for this turn.
@@ -284,7 +543,13 @@ class PlaybookEngine:
         Returns WAIT action_type to signal "fall through to dynamic logic".
         """
         turn = state.current_turn
+        self._maybe_clear_stale_commitments(turn)
         scheduled = self._get_scheduled_action(turn)
+
+        # Pair-tagged turns resolve through the commitment path before any
+        # other condition logic, so a flex pair always commits collectively.
+        if scheduled is not None and scheduled.pair:
+            return self._decide_pair_turn(state, scheduled)
 
         if scheduled is None or scheduled.action == "flex":
             return BotAction(action_type=ActionType.WAIT, reason="playbook: flex turn")
@@ -317,6 +582,20 @@ class PlaybookEngine:
                             reason=f"playbook: {scheduled.fallback} (condition: {cond} not met)",
                         )
 
+        # If recreation is scheduled but the source is exhausted, fall back to rest
+        if scheduled.action == "recreation" and not self.rec_tracker.any_remaining:
+            return BotAction(
+                action_type=ActionType.REST,
+                reason=f"playbook: recreation exhausted, resting",
+            )
+        # If this turn's recreation already failed on screen (no valid card),
+        # don't re-enter the recreation flow — train instead.
+        if scheduled.action == "recreation" and turn in self.skipped_recreation_turns:
+            return BotAction(
+                action_type=ActionType.TRAIN,
+                reason=f"playbook: recreation unavailable this turn, training",
+            )
+
         reason = f"playbook: {scheduled.action}"
         if scheduled.note:
             reason += f" ({scheduled.note})"
@@ -327,9 +606,21 @@ class PlaybookEngine:
         """Check if the playbook wants recreation confirmed this turn."""
         if not self.playbook.recreation.enabled:
             return False
+        if not self.rec_tracker.any_remaining:
+            return False
+        if turn in self.skipped_recreation_turns:
+            return False
         scheduled = self._get_scheduled_action(turn)
-        if scheduled and scheduled.action == "recreation":
+        if not scheduled:
+            return False
+        if scheduled.action == "recreation":
             return True
+        # Pair follow turn: if the lead committed to the race+Riko branch,
+        # this turn is a Riko recreation.
+        if scheduled.pair and scheduled.role == "follow":
+            commitment = self._get_commitment(scheduled.pair)
+            if commitment and commitment.get("choice") == "race":
+                return True
         return False
 
     def on_recreation_completed(self, source: str | None = None, turn: int = 0) -> None:
@@ -426,6 +717,10 @@ def _parse_turn_action(raw: dict | str) -> TurnAction:
         conditions=raw.get("conditions", []),
         fallback=raw.get("fallback", "flex"),
         note=raw.get("note", ""),
+        pair=raw.get("pair", ""),
+        role=raw.get("role", ""),
+        partner_turn=raw.get("partner_turn", 0),
+        race=raw.get("race", ""),
     )
 
 
@@ -517,6 +812,7 @@ def load_playbook(
         skills=_parse_skill_policy(raw.get("skills", {})),
         friendship=_parse_friendship_policy(raw.get("friendship", {})),
         item_priorities=raw.get("item_priorities", []),
+        drink_before_rest=raw.get("drink_before_rest", False),
     )
 
     logger.info("Loaded playbook '%s' (%s)", config.name, config.id)

@@ -30,15 +30,23 @@ TARGET_W, TARGET_H = 1080, 1920
 
 def screenshot(name: str) -> Image.Image:
     path = SCREENSHOTS_DIR / f"{name}.png"
-    subprocess.run(
-        ["adb", "-s", DEVICE, "exec-out", "screencap", "-p"],
-        stdout=open(path, "wb"), timeout=10,
-    )
-    img = Image.open(path)
-    if img.size != (TARGET_W, TARGET_H):
-        img = img.resize((TARGET_W, TARGET_H), Image.LANCZOS)
-        img.save(path)
-    return img
+    for attempt in range(3):
+        subprocess.run(
+            ["adb", "-s", DEVICE, "exec-out", "screencap", "-p"],
+            stdout=open(path, "wb"), timeout=10,
+        )
+        try:
+            img = Image.open(path)
+            img.load()
+            if img.size != (TARGET_W, TARGET_H):
+                img = img.resize((TARGET_W, TARGET_H), Image.LANCZOS)
+                img.save(path)
+            return img
+        except Exception:
+            if attempt < 2:
+                import time
+                time.sleep(0.5)
+    raise RuntimeError(f"Failed to capture screenshot after 3 attempts: {name}")
 
 
 def detect_screen(img: Image.Image) -> str:

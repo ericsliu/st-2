@@ -72,7 +72,9 @@ class StatTarget:
                 break
             if pos >= ceiling:
                 continue
-            chunk = min(remaining, ceiling - pos)
+            chunk = min(remaining, max(0, ceiling - pos))
+            if chunk <= 0:
+                continue
             total += chunk * value
             pos += chunk
             remaining -= chunk
@@ -114,6 +116,10 @@ class RunSpec:
     policy: PolicyWeights = field(default_factory=PolicyWeights)
     constraints: HardConstraints = field(default_factory=HardConstraints)
     deck: dict[str, int] = field(default_factory=dict)  # e.g. {"guts": 3, "speed": 1, "wit": 2}
+    shop_item_tiers: dict[str, str] = field(default_factory=dict)
+    # Cards whose bond goal is GREEN (60) instead of FRIENDSHIP (80).
+    # Pals/Group cards typically only need green bond to be useful.
+    low_bond_threshold_cards: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         # Ensure all 5 stats have targets
@@ -166,6 +172,9 @@ class RunSpec:
         target = self.stat_targets.get(stat)
         if target is None:
             return gain * 0.5  # Unknown stat, half value
+        # Hard cap: zero utility once stat has reached its cap
+        if target.cap is not None and current >= target.cap:
+            return 0.0
         return target.utility(current, gain)
 
     def compute_deficits(self, stats: TraineeStats) -> dict[str, dict[str, float]]:
@@ -218,6 +227,7 @@ class RunSpec:
                 "min_energy_for_training": self.constraints.min_energy_for_training,
                 "rest_energy_threshold": self.constraints.rest_energy_threshold,
             },
+            "shop_item_tiers": self.shop_item_tiers,
         }
 
 
@@ -262,6 +272,8 @@ def load_runspec(name: str, runspecs_dir: str = RUNSPECS_DIR) -> RunSpec:
     policy_raw = raw.get("policy", {})
     constraints_raw = raw.get("constraints", {})
     deck_raw = raw.get("deck", {})
+    shop_item_tiers_raw = raw.get("shop_item_tiers", {}) or {}
+    shop_item_tiers = {str(k): str(v).upper() for k, v in shop_item_tiers_raw.items()}
 
     return RunSpec(
         id=raw.get("id", name),
@@ -275,6 +287,8 @@ def load_runspec(name: str, runspecs_dir: str = RUNSPECS_DIR) -> RunSpec:
         policy=PolicyWeights(**{k: v for k, v in policy_raw.items() if hasattr(PolicyWeights, k)}),
         constraints=HardConstraints(**{k: v for k, v in constraints_raw.items() if hasattr(HardConstraints, k)}),
         deck={k: int(v) for k, v in deck_raw.items()},
+        shop_item_tiers=shop_item_tiers,
+        low_bond_threshold_cards=[str(c) for c in raw.get("low_bond_threshold_cards", []) or []],
     )
 
 

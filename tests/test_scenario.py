@@ -80,21 +80,23 @@ class TestYearCalculations:
 class TestEventCalendar:
     def test_get_event_turns(self, trackblazer):
         summer = trackblazer.get_event_turns("summer_camp")
-        assert 12 in summer
-        assert 15 in summer
-        assert 36 in summer
-        assert 11 not in summer
-        assert 16 not in summer
+        assert 37 in summer
+        assert 40 in summer
+        assert 61 in summer
+        assert 64 in summer
+        assert 36 not in summer
+        assert 41 not in summer
+        assert 12 not in summer
 
     def test_event_start(self, trackblazer):
-        assert trackblazer.is_event_start("summer_camp", 12) is True
-        assert trackblazer.is_event_start("summer_camp", 13) is False
-        assert trackblazer.is_event_start("summer_camp", 36) is True
+        assert trackblazer.is_event_start("summer_camp", 37) is True
+        assert trackblazer.is_event_start("summer_camp", 38) is False
+        assert trackblazer.is_event_start("summer_camp", 61) is True
 
     def test_turns_until_event(self, trackblazer):
-        assert trackblazer.turns_until_event("summer_camp", 8) == 4
-        assert trackblazer.turns_until_event("summer_camp", 12) == 24
-        assert trackblazer.turns_until_event("summer_camp", 64) is None
+        assert trackblazer.turns_until_event("summer_camp", 8) == 29
+        assert trackblazer.turns_until_event("summer_camp", 37) == 24
+        assert trackblazer.turns_until_event("summer_camp", 65) is None
 
     def test_nonexistent_event(self, trackblazer):
         assert trackblazer.get_event_turns("nonexistent") == set()
@@ -206,13 +208,13 @@ class TestTrackblazerHandler:
         assert action is None
 
     def test_megaphone_at_summer_camp_start(self, trackblazer):
-        state = GameState(current_turn=12, scenario="trackblazer")
+        state = GameState(current_turn=37, scenario="trackblazer")
         action = trackblazer.get_item_to_use(state, {"empowering_mega": 1})
         assert action is not None
         assert action.target == "empowering_mega"
 
     def test_megaphone_mid_camp(self, trackblazer):
-        state = GameState(current_turn=13, scenario="trackblazer")
+        state = GameState(current_turn=38, scenario="trackblazer")
         action = trackblazer.get_item_to_use(state, {"empowering_mega": 1})
         # Megaphone used any turn during summer camp
         assert action is not None

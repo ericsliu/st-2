@@ -26,9 +26,8 @@ available_actions:
 
 event_calendar:
   summer_camp:
-    - { start_turn: 12, end_turn: 15 }
-    - { start_turn: 36, end_turn: 39 }
-    - { start_turn: 60, end_turn: 63 }
+    - { start_turn: 37, end_turn: 40 }
+    - { start_turn: 61, end_turn: 64 }
 
 rest_threshold: 20
 

@@ -60,6 +60,9 @@ class TrainingScorer:
         self._friendship_priorities: list[str] = []
         self._bond_overrides: dict[str, int] = {}  # card_id -> minimum bond level
         self._bond_completed: set[str] = set()  # cards whose bond goal is done
+        # Per-card bond goal threshold; cards not listed default to 80 (friendship).
+        # Pals/Group cards typically use 60 (green).
+        self._card_bond_thresholds: dict[str, int] = {}
 
     def set_bond_override(self, card_name: str, min_bond: int) -> None:
         """Set a minimum bond level override for a card.
@@ -79,6 +82,16 @@ class TrainingScorer:
         """
         self._bond_completed.add(card_name)
         logger.info("Bond complete for %s — priority bonus suppressed", card_name)
+
+    def set_card_bond_thresholds(self, thresholds: dict[str, int]) -> None:
+        """Set per-card bond goal thresholds (default 80). Cards listed here
+        stop counting as 'low bond' once their bond reaches the given value."""
+        self._card_bond_thresholds = dict(thresholds)
+        if thresholds:
+            logger.info("Per-card bond thresholds set: %s", thresholds)
+
+    def _bond_threshold_for(self, card_id: str) -> int:
+        return self._card_bond_thresholds.get(card_id, 80)
 
     def set_friendship_priorities(self, card_names: list[str]) -> None:
         """Set priority card names for bond building (from playbook friendship policy).
@@ -375,21 +388,27 @@ class TrainingScorer:
         #    any stat difference between tiles.
         #    After deadline: reduced but still significant bonus.
         bond_deadline = self._get_friendship_deadline(state)
-        if tile.bond_levels:
-            card_bonds = tile.bond_levels
+        if tile.bond_levels and len(tile.bond_levels) == len(tile.support_cards):
+            bonds_with_cards = list(zip(tile.support_cards, tile.bond_levels))
+        elif tile.bond_levels:
+            # Card identities unknown; fall back to default threshold for all.
+            bonds_with_cards = [("", b) for b in tile.bond_levels]
         else:
-            card_bonds = [
-                self._get_card_bond(c, state)
+            bonds_with_cards = [
+                (c, self._get_card_bond(c, state))
                 for c in tile.support_cards
             ]
-        low_bond_values = [b for b in card_bonds if b < 80]
-        if low_bond_values and not self._is_summer_camp(state):
+        low_bond_pairs = [
+            (c, b) for c, b in bonds_with_cards
+            if b < self._bond_threshold_for(c)
+        ]
+        if low_bond_pairs and not self._is_summer_camp(state):
             turn = state.current_turn
-            n = len(low_bond_values)
+            n = len(low_bond_pairs)
             # Small tiebreaker: prefer lower-bond cards (more room to grow)
             bond_tiebreaker = sum(
-                (80 - b) / 80.0 * 0.5
-                for b in low_bond_values
+                (self._bond_threshold_for(c) - b) / 80.0 * 0.5
+                for c, b in low_bond_pairs
             )
             if turn < bond_deadline:
                 # Pre-deadline: 50 per card makes bond the dominant factor.
@@ -399,7 +418,7 @@ class TrainingScorer:
             else:
                 bond_score = n * 6.0 + bond_tiebreaker
 
-            if tile.has_hint and low_bond_values:
+            if tile.has_hint and low_bond_pairs:
                 bond_score *= 1.5
 
             score += bond_score
@@ -418,7 +437,8 @@ class TrainingScorer:
                     continue
                 if pcard in tile.support_cards:
                     bond = self._get_card_bond(pcard, state)
-                    if bond < 80:
+                    threshold = self._bond_threshold_for(pcard)
+                    if bond < threshold:
                         if turn < bond_deadline:
                             # Pre-deadline: #1 priority card is THE deciding factor.
                             # Below green bond (<60): 150 boost — nothing else matters.
@@ -473,12 +493,17 @@ class TrainingScorer:
         building is critical (hint tiles with low-bond cards present).
         """
         for tile in state.training_tiles:
-            if tile.bond_levels:
+            if tile.bond_levels and len(tile.bond_levels) == len(tile.support_cards):
+                low_bond_count = sum(
+                    1 for c, b in zip(tile.support_cards, tile.bond_levels)
+                    if b < self._bond_threshold_for(c)
+                )
+            elif tile.bond_levels:
                 low_bond_count = sum(1 for b in tile.bond_levels if b < 80)
             else:
                 low_bond_count = sum(
                     1 for c in tile.support_cards
-                    if self._get_card_bond(c, state) < 80
+                    if self._get_card_bond(c, state) < self._bond_threshold_for(c)
                 )
             if low_bond_count == 0:
                 continue

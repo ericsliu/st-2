@@ -449,16 +449,11 @@ class TestLoadPlaybook:
         assert pb.race.g2_policy == "skip_for_training"
 
         # Check skill policy
-        assert pb.skills.defer_until_sp == 2500
+        assert pb.skills.defer_until_sp == 1200
 
         # Check friendship policy
         assert pb.friendship.priority_order == ["team_sirius", "riko"]
         assert pb.friendship.deadlines["team_sirius"].on_miss == "restart"
-
-        # Check item priorities — Scholar's Hat is first
-        assert pb.item_priorities[0] == "scholar_hat"
-        assert "charming" in pb.item_priorities
-        assert "master_hammer" in pb.item_priorities
 
     def test_load_nonexistent_raises(self):
         with pytest.raises(FileNotFoundError):
@@ -577,3 +572,203 @@ class TestPlaybookEngineRecreation:
         engine.on_recreation_completed(source="riko", turn=40)
         assert engine.rec_tracker.remaining_for("team_sirius") == 7
         assert engine.rec_tracker.remaining_for("riko") == 12
+
+
+# ---------------------------------------------------------------------------
+# Pair commitment
+# ---------------------------------------------------------------------------
+
+def _pair_config(commitments_path):
+    """Build a playbook config with one flex pair (turns 42/43)."""
+    return PlaybookConfig(
+        schedule={
+            42: TurnAction(
+                action="flex",
+                pair="cl_all_comers",
+                role="lead",
+                partner_turn=43,
+                race="All Comers",
+                note="Cl Late Sep flex pair lead",
+            ),
+            43: TurnAction(
+                action="flex",
+                pair="cl_all_comers",
+                role="follow",
+                partner_turn=42,
+                note="Cl Early Oct flex pair follow Riko if raced",
+            ),
+        },
+        recreation=RecreationPolicy(
+            enabled=True,
+            sources={
+                "team_sirius": RecreationSource(total=7),
+                "riko": RecreationSource(total=13),
+            },
+        ),
+    )
+
+
+class TestPairCommitment:
+    """Pair commitment guarantees flex pairs resolve as race+Riko or train+train."""
+
+    def test_lead_commits_to_race_when_riko_available(self, tmp_path):
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        # Provide a weak tile (gain < 40) so the evaluator picks race
+        weak_tile = _make_tile(stat_type="speed", total_gain=20)
+        result = engine.decide_turn(_make_state(turn=42, tiles=[weak_tile]))
+        assert result.action_type == ActionType.RACE
+        assert "cl_all_comers" in result.reason
+        # Commitment persisted
+        commitment = engine._get_commitment("cl_all_comers")
+        assert commitment is not None
+        assert commitment["choice"] == "race"
+        assert commitment["lead_turn"] == 42
+
+    def test_follow_returns_riko_when_lead_raced(self, tmp_path):
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        weak_tile = _make_tile(stat_type="speed", total_gain=20)
+        engine.decide_turn(_make_state(turn=42, tiles=[weak_tile]))  # commits race
+        result = engine.decide_turn(_make_state(turn=43))
+        assert result.action_type == ActionType.GO_OUT
+        assert "follow" in result.reason
+
+    def test_lead_commits_to_train_when_riko_exhausted(self, tmp_path):
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        # Burn all 13 Riko uses
+        for _ in range(13):
+            engine.rec_tracker.on_recreation_used("riko")
+        assert engine.rec_tracker.remaining_for("riko") == 0
+
+        result = engine.decide_turn(_make_state(turn=42))
+        assert result.action_type == ActionType.TRAIN
+        assert engine._get_commitment("cl_all_comers")["choice"] == "train"
+
+    def test_follow_returns_train_when_lead_trained(self, tmp_path):
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        for _ in range(13):
+            engine.rec_tracker.on_recreation_used("riko")
+        engine.decide_turn(_make_state(turn=42))  # commits train
+        result = engine.decide_turn(_make_state(turn=43))
+        assert result.action_type == ActionType.TRAIN
+
+    def test_follow_without_commitment_raises(self, tmp_path):
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        # Run follow turn directly with no lead commitment
+        with pytest.raises(RuntimeError, match="Pair commitment missing"):
+            engine.decide_turn(_make_state(turn=43))
+
+    def test_follow_with_mismatched_lead_turn_raises(self, tmp_path):
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        # Manually inject a commitment with wrong lead_turn (in the past, so
+        # the stale-clear heuristic doesn't fire — current_turn must be > min)
+        engine._record_commitment("cl_all_comers", "race", lead_turn=10)
+        with pytest.raises(RuntimeError, match="lead_turn"):
+            engine.decide_turn(_make_state(turn=43))
+
+    def test_lead_reuses_existing_commitment_on_replay(self, tmp_path):
+        """If the lead turn re-runs (e.g. after a crash), reuse the prior commitment."""
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        engine._record_commitment("cl_all_comers", "train", lead_turn=42)
+        result = engine.decide_turn(_make_state(turn=42))
+        # Even though Riko has uses remaining, the existing commitment wins
+        assert result.action_type == ActionType.TRAIN
+
+    def test_wants_recreation_on_pair_follow_with_race_choice(self, tmp_path):
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        engine._record_commitment("cl_all_comers", "race", lead_turn=42)
+        assert engine.wants_recreation(43) is True
+
+    def test_wants_recreation_false_on_pair_follow_with_train_choice(self, tmp_path):
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        engine._record_commitment("cl_all_comers", "train", lead_turn=42)
+        assert engine.wants_recreation(43) is False
+
+    def test_stale_commitments_cleared_on_early_turn(self, tmp_path):
+        """Commitments referencing future turns are cleared when current turn precedes them."""
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        # Inject a commitment from a "prior career"
+        engine._record_commitment("cl_all_comers", "race", lead_turn=42)
+        assert engine._get_commitment("cl_all_comers") is not None
+        # Now run decide_turn at turn 1 (start of fresh career)
+        engine.decide_turn(_make_state(turn=1))
+        assert engine._get_commitment("cl_all_comers") is None
+
+    def test_lead_peeks_when_no_tiles_and_riko_available(self, tmp_path):
+        """Without tile data and Riko available, lead returns TRAIN/peek mode."""
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        result = engine.decide_turn(_make_state(turn=42))
+        assert result.action_type == ActionType.TRAIN
+        assert "peeking" in result.reason
+        # No commitment recorded yet — caller must peek tiles and call commit_pair_after_tiles
+        assert engine._get_commitment("cl_all_comers") is None
+
+    def test_commit_pair_after_tiles_strong_tile_picks_train(self, tmp_path):
+        """A strong tile (≥40 total gain) commits the pair to train+train."""
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        strong_tile = _make_tile(stat_type="speed", total_gain=45)
+        state = _make_state(turn=42, tiles=[strong_tile])
+        choice = engine.commit_pair_after_tiles(state)
+        assert choice == "train"
+        assert engine._get_commitment("cl_all_comers")["choice"] == "train"
+
+    def test_commit_pair_after_tiles_weak_tile_picks_race(self, tmp_path):
+        """A weak tile (<40 total gain) commits the pair to race+Riko."""
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        weak_tile = _make_tile(stat_type="speed", total_gain=25)
+        state = _make_state(turn=42, tiles=[weak_tile])
+        choice = engine.commit_pair_after_tiles(state)
+        assert choice == "race"
+        assert engine._get_commitment("cl_all_comers")["choice"] == "race"
+
+    def test_commit_pair_after_tiles_returns_none_off_pair_turn(self, tmp_path):
+        """Non-pair turns return None so handle_training falls through normally."""
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        state = _make_state(turn=44, tiles=[_make_tile(total_gain=50)])
+        assert engine.commit_pair_after_tiles(state) is None
+
+    def test_clear_pair_commitments(self, tmp_path):
+        path = tmp_path / "commitments.json"
+        engine = PlaybookEngine(_pair_config(path), commitments_path=path)
+        engine._record_commitment("cl_all_comers", "race", lead_turn=42)
+        assert path.exists()
+        engine.clear_pair_commitments()
+        assert not path.exists()
+
+    def test_load_sirius_riko_pair_fields(self):
+        """The shipped strategy YAML should have pair fields tagged on flex pairs."""
+        engine = load_playbook("sirius_riko_v1")
+        sched = engine.playbook.schedule
+
+        # Classic All Comers pair
+        assert sched[42].pair == "cl_all_comers"
+        assert sched[42].role == "lead"
+        assert sched[42].partner_turn == 43
+        assert sched[42].race == "All Comers"
+        assert sched[43].pair == "cl_all_comers"
+        assert sched[43].role == "follow"
+        assert sched[43].partner_turn == 42
+
+        # Senior Kyoto Kinen pair
+        assert sched[51].pair == "sr_kyoto_kinen"
+        assert sched[51].role == "lead"
+        assert sched[51].race == "Kyoto Kinen"
+        assert sched[52].role == "follow"
+
+        # Senior All Comers pair
+        assert sched[66].pair == "sr_all_comers"
+        assert sched[66].role == "lead"
+        assert sched[67].role == "follow"
