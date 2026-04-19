@@ -1,5 +1,7 @@
 # Packet Interception: Riru-CarrotJuicer vs. Hachimi Edge
 
+> **2026-04-18 reading order:** this spec is the original design. The Hachimi Edge plugin path (recommendation below) is superseded by `PACKET_INTERCEPTION_SPEC_ADDENDUM.md` (Frida-server pivot), which is itself partially superseded by `PACKET_INTERCEPTION_SPEC_ADDENDUM_2.md` (IL2CPP hook pivot after the libnative LZ4 hook was found to trip the shield). Read all three in order.
+
 ## Executive Summary
 
 We have two viable paths for intercepting decrypted game packets from Uma Musume: Pretty Derby on Android. Both achieve the same end result — structured msgpack game state data delivered to our bot process — but through fundamentally different injection mechanisms with different tradeoff profiles.
