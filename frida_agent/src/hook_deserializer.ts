@@ -227,6 +227,13 @@ const FOLLOW_EXACT = new Set<string>([
 const FOLLOW_PACKAGE_PREFIXES = [
     "com.cygames.um",
     "com.cygames.uma",
+    // Linux comm truncates to 15 chars. For "com.cygames.umamusume" the kernel
+    // can surface the trailing 15 chars as "games.umamusume" on child threads
+    // spawned without explicit prctl(PR_SET_NAME). Multiple such tids appear
+    // in Uma's process and any of them may host libnative.so libcurl/mbedTLS
+    // I/O workers — follow them.
+    "games.umamusu",
+    "games.umamusume",
 ];
 const FOLLOW_PREFIXES = [
     "Job.Worker",
@@ -293,6 +300,51 @@ function classifyComm(tid: number, comm: string | null, selfTid: number, mainPid
 }
 
 let _followPlanEmitted = false;
+let _broadFollowPlanEmitted = false;
+
+/**
+ * Broad variant: follow EVERY thread except hard-skips (self, frida, render,
+ * gc/io). No whitelist — useful when investigating which thread actually
+ * executes a specific library, or when the library has no identifiable
+ * caller thread name.
+ */
+function classifyCommBroad(tid: number, comm: string | null, selfTid: number): { keep: boolean; reason: string } {
+    if (tid === selfTid) return { keep: false, reason: "self" };
+    if (!comm) return { keep: true, reason: "comm_unreadable_kept" };
+    if (comm.startsWith(SKIP_FRIDA_PREFIX)) return { keep: false, reason: "renamed_frida" };
+    if (SKIP_FRIDA_REGEX.test(comm)) return { keep: false, reason: "frida_unrenamed" };
+    if (SKIP_RENDER_EXACT.has(comm)) return { keep: false, reason: "render" };
+    for (const p of SKIP_RENDER_PREFIXES) if (comm.startsWith(p)) return { keep: false, reason: "render_prefix" };
+    if (SKIP_GC_IO_EXACT.has(comm)) return { keep: false, reason: "gc_io" };
+    for (const p of SKIP_GC_IO_PREFIXES) if (comm.startsWith(p)) return { keep: false, reason: "gc_io_prefix" };
+    return { keep: true, reason: "broad_keep" };
+}
+
+export function enumerateBroadFollowTargets(): { tid: number; comm: string }[] {
+    const tids = enumerateTaskTids();
+    const selfTid = Process.getCurrentThreadId();
+    const kept: { tid: number; comm: string }[] = [];
+    const skipped: { tid: number; comm: string; reason: string }[] = [];
+    for (const tid of tids) {
+        const comm = readCommForTid(tid);
+        const v = classifyCommBroad(tid, comm, selfTid);
+        if (v.keep) kept.push({ tid, comm: comm ?? "" });
+        else skipped.push({ tid, comm: comm ?? "", reason: v.reason });
+    }
+    if (!_broadFollowPlanEmitted) {
+        _broadFollowPlanEmitted = true;
+        send({
+            type: "stalker_broad_follow_plan",
+            selfTid,
+            total: tids.length,
+            keptCount: kept.length,
+            skippedCount: skipped.length,
+            kept,
+            skipped,
+        });
+    }
+    return kept;
+}
 
 /**
  * Enumerate /proc/self/task, classify each thread via the whitelist above,
@@ -2387,6 +2439,700 @@ export function enumerateGallopHttpHelper(): void {
             }
         }
         send({ type: "gallop_phase", phase: "enum_done" });
+    }, "main");
+}
+
+/**
+ * LibNative.LZ4 discovery — Cygames' custom C# wrapper around their native
+ * LZ4 plugin. The `LibNative.Runtime` assembly contains these classes:
+ *   - LibNative.LZ4.Plugin — P/Invoke declarations (extern static) that BLR
+ *     into libnative.so's LZ4_decompress_safe_ext / LZ4_compress_default_ext
+ *   - LibNative.LZ4.SimpleLZ4Frame — higher-level frame codec; DecompressLZ4Bytes
+ *     takes a byte[] frame and returns plaintext byte[]. Prime hook target.
+ *   - LibNative.LZ4.StreamedLZ4FrameDecoder / StreamedLZ4Util — stream variants.
+ *
+ * Why hook here (libil2cpp.so) and NOT libnative.so:
+ *   1. Shield path #3 hashes libnative.so export prologue bytes. Interceptor.attach
+ *      on LZ4_decompress_safe_ext at skip=0 and skip=0x20 both trip it.
+ *   2. Interceptor.attach in libil2cpp.so (shield path #2, a .text hash) has
+ *      historically been tolerated — verified by 4-minute survival of the
+ *      task_deserialize_intercept probe with 397 attached VAs.
+ *   3. Stalker was the alternative but verified DEAD in this gadget (2026-04-21).
+ *
+ * This function ONLY enumerates — no hooks installed. Dump class/method list
+ * with VAs so we pick the right overload.
+ */
+export function enumerateLibNativeLz4(): void {
+    send({ type: "libnative_lz4_phase", phase: "enum_start" });
+    Il2Cpp.perform(() => {
+        // Try both plausible assembly names. Cygames might ship it as
+        // "LibNative.Runtime" or just "LibNative".
+        const tryAssemblies = ["LibNative.Runtime", "LibNative", "Assembly-CSharp"];
+        let image: any = null;
+        let chosen = "";
+        for (const name of tryAssemblies) {
+            try {
+                image = Il2Cpp.domain.assembly(name).image;
+                chosen = name;
+                break;
+            } catch (_) { /* next */ }
+        }
+        if (!image) {
+            // Last resort: scan all assemblies for a class in LibNative.LZ4 namespace.
+            let assemblies: any[] = [];
+            try { assemblies = Il2Cpp.domain.assemblies ?? []; } catch (_) { /* */ }
+            for (const a of assemblies) {
+                let img: any = null;
+                try { img = a.image; } catch (_) { continue; }
+                let classes: any[] = [];
+                try { classes = img.classes ?? []; } catch (_) { continue; }
+                for (const k of classes) {
+                    let kn = "";
+                    try { kn = k.fullName ?? ""; } catch (_) { /* */ }
+                    if (kn.startsWith("LibNative.LZ4.")) {
+                        image = img;
+                        chosen = a.name ?? "<unknown>";
+                        break;
+                    }
+                }
+                if (image) break;
+            }
+        }
+        if (!image) {
+            send({ type: "libnative_lz4_err", step: "no_assembly_found" });
+            return;
+        }
+        send({ type: "libnative_lz4_image", assembly: chosen });
+
+        let classes: any[] = [];
+        try { classes = image.classes ?? []; } catch (_) { /* */ }
+        let emitted = 0;
+        for (const k of classes) {
+            let kName = "";
+            try { kName = k.fullName ?? k.name ?? ""; } catch (_) { continue; }
+            if (!kName.startsWith("LibNative.LZ4")) continue;
+            let methods: any[] = [];
+            try { methods = k.methods ?? []; } catch (_) { continue; }
+            for (const m of methods) {
+                let paramsDesc: string[] = [];
+                try {
+                    paramsDesc = (m.parameters ?? []).map((p: any) => {
+                        try { return `${p.type?.name ?? "?"} ${p.name ?? "?"}`; } catch (_) { return "?"; }
+                    });
+                } catch (_) { /* */ }
+                let retType = "?";
+                try { retType = m.returnType?.name ?? "?"; } catch (_) { /* */ }
+                let vaStr = "?";
+                try { vaStr = m.virtualAddress?.toString() ?? "?"; } catch (_) { /* */ }
+                send({
+                    type: "libnative_lz4_method",
+                    klass: kName,
+                    name: m.name,
+                    isStatic: !!m.isStatic,
+                    isGeneric: !!m.isGeneric,
+                    params: paramsDesc,
+                    returnType: retType,
+                    va: vaStr,
+                });
+                emitted++;
+            }
+        }
+        send({ type: "libnative_lz4_phase", phase: "enum_done", methodsEmitted: emitted });
+    }, "main");
+}
+
+/**
+ * Definitive Interceptor.attach-on-libil2cpp sanity test.
+ *
+ * We've seen repeated 0-hit results on libil2cpp.so VA attaches (397-VA task
+ * deserialize probe, 3-VA LibNative.LZ4 probe). Can't tell from that whether
+ * (a) Interceptor.attach is silently no-oping on libil2cpp VAs, or (b) we
+ * just picked wrong methods.
+ *
+ * Test: hook `System.Object.ToString` (always callable), then immediately
+ * invoke `new System.Object().ToString()` from the same agent. If the hook
+ * fires, Interceptor.attach works — method-choice is the issue and we pivot
+ * hook surface. If it doesn't, attach is dead on libil2cpp VAs and we need
+ * a completely different approach (e.g., method.implementation table swap).
+ *
+ * Also tries `method.implementation = fn` as a second leg — tells us if
+ * the table-swap path works even when Interceptor.attach doesn't.
+ */
+let _il2cppAttachSanityBooted = false;
+export function il2cppAttachSanity(): void {
+    if (_il2cppAttachSanityBooted) {
+        send({ type: "il2cpp_sanity_err", step: "already_booted" });
+        return;
+    }
+    _il2cppAttachSanityBooted = true;
+    send({ type: "il2cpp_sanity_phase", phase: "start" });
+    Il2Cpp.perform(() => {
+        // Pick a simple method on a universally-available class.
+        let mscorlib: any;
+        try { mscorlib = Il2Cpp.domain.assembly("mscorlib").image; } catch (e: any) {
+            send({ type: "il2cpp_sanity_err", step: "mscorlib", err: String(e?.message ?? e) });
+            return;
+        }
+        let objClass: any;
+        try { objClass = mscorlib.class("System.Object"); } catch (e: any) {
+            send({ type: "il2cpp_sanity_err", step: "object_class", err: String(e?.message ?? e) });
+            return;
+        }
+        // Find a parameterless ToString method.
+        const methods = objClass.methods ?? [];
+        const target = methods.find((m: any) => m.name === "ToString" && (m.parameters?.length ?? 0) === 0);
+        if (!target) {
+            send({ type: "il2cpp_sanity_err", step: "find_tostring" });
+            return;
+        }
+        const va = target.virtualAddress;
+        send({
+            type: "il2cpp_sanity_resolved",
+            klass: "System.Object",
+            method: "ToString",
+            va: va.toString(),
+            isStatic: !!target.isStatic,
+        });
+
+        // LEG 1: Interceptor.attach.
+        let interceptorHits = 0;
+        try {
+            Interceptor.attach(va, {
+                onEnter() { interceptorHits++; },
+            });
+            send({ type: "il2cpp_sanity_attach", result: "ok" });
+        } catch (e: any) {
+            send({ type: "il2cpp_sanity_attach", result: "err", err: String(e?.message ?? e) });
+        }
+
+        // LEG 2: method.implementation swap.
+        let implHits = 0;
+        const originalImpl = target.implementation;
+        try {
+            target.implementation = function (this: any) {
+                implHits++;
+                // Delegate to original to keep semantics intact.
+                try { return (originalImpl as any).call(this); } catch (_) { return null; }
+            };
+            send({ type: "il2cpp_sanity_impl", result: "ok" });
+        } catch (e: any) {
+            send({ type: "il2cpp_sanity_impl", result: "err", err: String(e?.message ?? e) });
+        }
+
+        // Self-invoke: call ToString on a fresh Object from within the agent.
+        // If either leg works, one of the counters above ticks up.
+        let selfCallOk = false;
+        let selfCallResult = "";
+        try {
+            const inst = objClass.new();
+            const r = inst.method("ToString").invoke();
+            selfCallOk = true;
+            try { selfCallResult = String(r); } catch (_) { selfCallResult = "<unstringifiable>"; }
+        } catch (e: any) {
+            send({ type: "il2cpp_sanity_err", step: "self_invoke", err: String(e?.message ?? e) });
+        }
+
+        // Brief delay then read counters. setImmediate-style via setTimeout(0).
+        setTimeout(() => {
+            send({
+                type: "il2cpp_sanity_result",
+                interceptorHits,
+                implHits,
+                selfCallOk,
+                selfCallResult,
+                verdict:
+                    interceptorHits > 0 && implHits > 0 ? "BOTH_WORK" :
+                    interceptorHits > 0 ? "ONLY_INTERCEPTOR_WORKS" :
+                    implHits > 0 ? "ONLY_IMPL_SWAP_WORKS" :
+                    "NEITHER_WORKS__CRACKPROOF_BLOCKS_IL2CPP_HOOKS",
+            });
+        }, 50);
+    }, "main");
+}
+
+/**
+ * Interceptor.attach on every LibNative.LZ4.* method whose name matches
+ * /Decompress/ AND takes/returns byte[]. On enter: snapshot first N bytes of
+ * the byte[] arg (the LZ4 frame). On leave: if return is a byte[], snapshot
+ * the first N bytes (plaintext msgpack head).
+ *
+ * IL2CPP byte[] layout on arm64:
+ *   offset 0x00: klass*
+ *   offset 0x08: monitor*
+ *   offset 0x10: bounds (or zero for 1D)
+ *   offset 0x18: length (u32)
+ *   offset 0x20: data...
+ * For STATIC methods: args[0] = first user param (the byte[] ptr).
+ * For INSTANCE methods: args[0] = this, args[1] = first user param.
+ * Return value: same byte[] object pointer in x0.
+ */
+let _libNativeLz4HookBooted = false;
+export function installLibNativeLz4Hooks(opts?: { maxSnapshot?: number }): void {
+    if (_libNativeLz4HookBooted) {
+        send({ type: "libnative_lz4_hook_err", step: "already_booted" });
+        return;
+    }
+    _libNativeLz4HookBooted = true;
+    const maxSnap = Math.max(16, Math.min(256, opts?.maxSnapshot ?? 64));
+
+    send({ type: "libnative_lz4_phase", phase: "hook_start", maxSnap });
+    Il2Cpp.perform(() => {
+        const tryAssemblies = ["LibNative.Runtime", "LibNative", "Assembly-CSharp"];
+        let image: any = null;
+        for (const name of tryAssemblies) {
+            try { image = Il2Cpp.domain.assembly(name).image; break; } catch (_) { /* */ }
+        }
+        if (!image) {
+            // Scan for LibNative.LZ4.* namespace in any assembly.
+            let assemblies: any[] = [];
+            try { assemblies = Il2Cpp.domain.assemblies ?? []; } catch (_) { /* */ }
+            outer: for (const a of assemblies) {
+                let img: any = null;
+                try { img = a.image; } catch (_) { continue; }
+                let classes: any[] = [];
+                try { classes = img.classes ?? []; } catch (_) { continue; }
+                for (const k of classes) {
+                    let kn = "";
+                    try { kn = k.fullName ?? ""; } catch (_) { /* */ }
+                    if (kn.startsWith("LibNative.LZ4.")) { image = img; break outer; }
+                }
+            }
+        }
+        if (!image) {
+            send({ type: "libnative_lz4_hook_err", step: "no_assembly" });
+            return;
+        }
+
+        type Entry = {
+            va: NativePointer;
+            klass: string;
+            method: string;
+            isStatic: boolean;
+            kind: "byteArray" | "intPtr";
+            byteArrayArgIdx: number;  // index into args[] (-1 if kind !== byteArray)
+            returnsByteArray: boolean;
+            // For intPtr kind: layout src/dst/size args so onEnter can read them.
+            srcArgIdx: number;
+            dstArgIdx: number;
+            srcSizeArgIdx: number;
+            dstCapArgIdx: number;
+        };
+        const entries: Entry[] = [];
+        let classes: any[] = [];
+        try { classes = image.classes ?? []; } catch (_) { /* */ }
+        for (const k of classes) {
+            let kName = "";
+            try { kName = k.fullName ?? ""; } catch (_) { continue; }
+            if (!kName.startsWith("LibNative.LZ4")) continue;
+            let methods: any[] = [];
+            try { methods = k.methods ?? []; } catch (_) { continue; }
+            for (const m of methods) {
+                if (m.isGeneric) continue;
+                let params: any[] = [];
+                try { params = m.parameters ?? []; } catch (_) { continue; }
+                let va: NativePointer;
+                try { va = m.virtualAddress; } catch (_) { continue; }
+                if (va.isNull()) continue;
+                const isStatic = !!m.isStatic;
+                const argsSlotOffset = isStatic ? 0 : 1;
+
+                // Kind A: byte[]-in (high-level SimpleLZ4Frame / StreamedLZ4Util).
+                if (/Decompress|Compress/i.test(m.name)) {
+                    let byteArgIdx = -1;
+                    for (let i = 0; i < params.length; i++) {
+                        try {
+                            if ((params[i].type?.name ?? "") === "System.Byte[]") { byteArgIdx = i; break; }
+                        } catch (_) { /* */ }
+                    }
+                    let returnsByteArray = false;
+                    try { returnsByteArray = (m.returnType?.name ?? "") === "System.Byte[]"; } catch (_) { /* */ }
+                    if (byteArgIdx >= 0) {
+                        entries.push({
+                            va,
+                            klass: kName,
+                            method: m.name,
+                            isStatic,
+                            kind: "byteArray",
+                            byteArrayArgIdx: byteArgIdx + argsSlotOffset,
+                            returnsByteArray,
+                            srcArgIdx: -1, dstArgIdx: -1, srcSizeArgIdx: -1, dstCapArgIdx: -1,
+                        });
+                        continue;
+                    }
+                }
+
+                // Kind B: Plugin P/Invoke stubs — LZ4_decompress_safe_ext etc.
+                // Signature: (IntPtr src, IntPtr dst, Int32 srcSize, Int32 dstCap) → Int32
+                // Hooking these catches every managed caller before the BLR into
+                // libnative.so — if no managed code calls them, decompression is
+                // pure-native (shield-protected territory).
+                if (kName === "LibNative.LZ4.Plugin" && /LZ4_decompress_safe_ext|LZ4_compress_default_ext|LZ4_decompress_safe_continue/.test(m.name)) {
+                    // Find argument indices by type name.
+                    const paramTypes: string[] = [];
+                    for (const p of params) {
+                        try { paramTypes.push(p.type?.name ?? ""); } catch (_) { paramTypes.push(""); }
+                    }
+                    // Determine layout: last two Int32 = srcSize, dstCap; first two IntPtr = src, dst.
+                    let srcIdx = -1, dstIdx = -1, srcSizeIdx = -1, dstCapIdx = -1;
+                    for (let i = 0; i < paramTypes.length; i++) {
+                        if (paramTypes[i] === "System.IntPtr") {
+                            if (srcIdx < 0) srcIdx = i;
+                            else if (dstIdx < 0) dstIdx = i;
+                        } else if (paramTypes[i] === "System.Int32") {
+                            if (srcSizeIdx < 0) srcSizeIdx = i;
+                            else if (dstCapIdx < 0) dstCapIdx = i;
+                        }
+                    }
+                    entries.push({
+                        va,
+                        klass: kName,
+                        method: m.name,
+                        isStatic,
+                        kind: "intPtr",
+                        byteArrayArgIdx: -1,
+                        returnsByteArray: false,
+                        srcArgIdx: srcIdx >= 0 ? srcIdx + argsSlotOffset : -1,
+                        dstArgIdx: dstIdx >= 0 ? dstIdx + argsSlotOffset : -1,
+                        srcSizeArgIdx: srcSizeIdx >= 0 ? srcSizeIdx + argsSlotOffset : -1,
+                        dstCapArgIdx: dstCapIdx >= 0 ? dstCapIdx + argsSlotOffset : -1,
+                    });
+                }
+            }
+        }
+
+        send({
+            type: "libnative_lz4_hook_resolved",
+            count: entries.length,
+            sample: entries.slice(0, 10).map((e) => ({
+                klass: e.klass, method: e.method, va: e.va.toString(),
+                isStatic: e.isStatic, kind: e.kind,
+                byteArgIdx: e.byteArrayArgIdx, returnsByteArray: e.returnsByteArray,
+                srcArgIdx: e.srcArgIdx, dstArgIdx: e.dstArgIdx, srcSizeArgIdx: e.srcSizeArgIdx, dstCapArgIdx: e.dstCapArgIdx,
+            })),
+        });
+
+        if (entries.length === 0) {
+            send({ type: "libnative_lz4_hook_err", step: "no_candidates" });
+            return;
+        }
+
+        const readByteArrayHead = (arrPtr: NativePointer): { len: number; head: string } => {
+            if (arrPtr.isNull()) return { len: -1, head: "" };
+            let len = -1;
+            try { len = arrPtr.add(0x18).readU32(); } catch (_) { return { len: -1, head: "" }; }
+            const n = Math.max(0, Math.min(len, maxSnap));
+            if (n === 0) return { len, head: "" };
+            let head = "";
+            try {
+                const bytes = arrPtr.add(0x20).readByteArray(n);
+                if (bytes) {
+                    const u8 = new Uint8Array(bytes);
+                    for (let i = 0; i < u8.length; i++) {
+                        const b = u8[i].toString(16);
+                        head += b.length === 1 ? "0" + b : b;
+                    }
+                }
+            } catch (_) { /* */ }
+            return { len, head };
+        };
+
+        const perMethodCounts = new Map<string, number>();
+        let totalHits = 0;
+        let attachOk = 0;
+        let attachErr = 0;
+        for (const e of entries) {
+            const tag = `${e.klass}|${e.method}`;
+            try {
+                Interceptor.attach(e.va, {
+                    onEnter(args) {
+                        totalHits++;
+                        perMethodCounts.set(tag, (perMethodCounts.get(tag) ?? 0) + 1);
+                        const nth = perMethodCounts.get(tag)!;
+                        if (nth > 5) return;
+                        (this as any)._libnativeLz4Tag = tag;
+                        (this as any)._libnativeLz4Seq = nth;
+                        if (e.kind === "byteArray") {
+                            const arrPtr = args[e.byteArrayArgIdx];
+                            const { len, head } = readByteArrayHead(arrPtr);
+                            send({ type: "libnative_lz4_hit", tag, seq: nth, kind: "byteArray", inLen: len, inHead: head });
+                        } else {
+                            // IntPtr kind — read src/dst pointers + sizes, snapshot src bytes.
+                            let srcPtr: NativePointer | null = null;
+                            let srcSize = -1, dstCap = -1;
+                            try { if (e.srcArgIdx >= 0) srcPtr = args[e.srcArgIdx] as NativePointer; } catch (_) { /* */ }
+                            try { if (e.srcSizeArgIdx >= 0) srcSize = (args[e.srcSizeArgIdx] as NativePointer).toInt32(); } catch (_) { /* */ }
+                            try { if (e.dstCapArgIdx >= 0) dstCap = (args[e.dstCapArgIdx] as NativePointer).toInt32(); } catch (_) { /* */ }
+                            let srcHead = "";
+                            if (srcPtr && !srcPtr.isNull() && srcSize > 0) {
+                                const n = Math.min(srcSize, maxSnap);
+                                try {
+                                    const bytes = srcPtr.readByteArray(n);
+                                    if (bytes) {
+                                        const u8 = new Uint8Array(bytes);
+                                        for (let i = 0; i < u8.length; i++) {
+                                            const b = u8[i].toString(16);
+                                            srcHead += b.length === 1 ? "0" + b : b;
+                                        }
+                                    }
+                                } catch (_) { /* */ }
+                            }
+                            // Stash dst ptr so onLeave can snapshot the plaintext.
+                            try { (this as any)._libnativeLz4Dst = e.dstArgIdx >= 0 ? args[e.dstArgIdx] : null; } catch (_) { (this as any)._libnativeLz4Dst = null; }
+                            send({
+                                type: "libnative_lz4_hit",
+                                tag, seq: nth, kind: "intPtr",
+                                inLen: srcSize, inHead: srcHead, dstCap,
+                            });
+                        }
+                    },
+                    onLeave(retval) {
+                        const tag2 = (this as any)._libnativeLz4Tag;
+                        const seq = (this as any)._libnativeLz4Seq;
+                        if (!tag2 || !seq || seq > 5) return;
+                        if (e.kind === "byteArray" && e.returnsByteArray) {
+                            const { len, head } = readByteArrayHead(retval as any);
+                            send({ type: "libnative_lz4_out", tag: tag2, seq, kind: "byteArray", outLen: len, outHead: head });
+                        } else if (e.kind === "intPtr") {
+                            // retval is the Int32 decompressed size. Read that many bytes from dst.
+                            let decompressedSize = -1;
+                            try { decompressedSize = (retval as NativePointer).toInt32(); } catch (_) { /* */ }
+                            let plaintextHead = "";
+                            const dstPtr = (this as any)._libnativeLz4Dst as NativePointer | null;
+                            if (dstPtr && !dstPtr.isNull() && decompressedSize > 0) {
+                                const n = Math.min(decompressedSize, maxSnap);
+                                try {
+                                    const bytes = dstPtr.readByteArray(n);
+                                    if (bytes) {
+                                        const u8 = new Uint8Array(bytes);
+                                        for (let i = 0; i < u8.length; i++) {
+                                            const b = u8[i].toString(16);
+                                            plaintextHead += b.length === 1 ? "0" + b : b;
+                                        }
+                                    }
+                                } catch (_) { /* */ }
+                            }
+                            send({ type: "libnative_lz4_out", tag: tag2, seq, kind: "intPtr", outLen: decompressedSize, outHead: plaintextHead });
+                        }
+                    },
+                });
+                attachOk++;
+            } catch (err: any) {
+                attachErr++;
+                send({ type: "libnative_lz4_attach_err", tag, err: String(err?.message ?? err) });
+            }
+        }
+        send({ type: "libnative_lz4_hook_installed", attachOk, attachErr, totalMethods: entries.length });
+
+        setInterval(() => {
+            const top = Array.from(perMethodCounts.entries())
+                .sort((a, b) => b[1] - a[1]).slice(0, 8)
+                .map(([tag, n]) => ({ tag, n }));
+            send({ type: "libnative_lz4_stats", totalHits, topMethods: top });
+        }, 2000);
+    }, "main");
+}
+
+/**
+ * Step 5: hook `Cute.Http.HttpManager.set_DecompressFunc(Func<byte[], byte[]>)`
+ * and `set_CompressFunc(...)` to capture the managed delegate slots at the
+ * moment Uma installs them. When captured, read the delegate's method pointer
+ * (managed VA of the real de/compress routine) and hook it with snapshots.
+ *
+ * Also, because the delegate may have already been installed by the time this
+ * RPC fires, read `HttpManager.Instance.DecompressFunc` / `.CompressFunc`
+ * directly via the getter and handle that case too.
+ *
+ * All hooks are on libil2cpp.so — Interceptor.attach known shield-safe there.
+ */
+let _cuteHttpBooted = false;
+const _cuteHttpHooked = new Set<string>();
+export function captureCuteHttpDelegates(maxSnap: number = 256): void {
+    if (_cuteHttpBooted) {
+        send({ type: "cute_http_err", step: "already_booted" });
+        return;
+    }
+    _cuteHttpBooted = true;
+    send({ type: "cute_http_phase", phase: "start", maxSnap });
+
+    Il2Cpp.perform(() => {
+        let asm: any;
+        try { asm = Il2Cpp.domain.assembly("Cute.Http.Assembly"); } catch (e: any) {
+            send({ type: "cute_http_err", step: "assembly", err: String(e?.message ?? e) });
+            return;
+        }
+        let httpMgr: any;
+        try { httpMgr = asm.image.class("Cute.Http.HttpManager"); } catch (e: any) {
+            send({ type: "cute_http_err", step: "class", err: String(e?.message ?? e) });
+            return;
+        }
+
+        const methods: any[] = (() => { try { return httpMgr.methods ?? []; } catch (_) { return []; } })();
+        const setDecomp = methods.find((m: any) => m.name === "set_DecompressFunc");
+        const setComp = methods.find((m: any) => m.name === "set_CompressFunc");
+        const getInst = methods.find((m: any) => m.name === "get_Instance");
+        const getDecomp = methods.find((m: any) => m.name === "get_DecompressFunc");
+        const getComp = methods.find((m: any) => m.name === "get_CompressFunc");
+
+        send({
+            type: "cute_http_resolved",
+            setDecompVA: setDecomp ? setDecomp.virtualAddress.toString() : null,
+            setCompVA: setComp ? setComp.virtualAddress.toString() : null,
+            getInstVA: getInst ? getInst.virtualAddress.toString() : null,
+            getDecompVA: getDecomp ? getDecomp.virtualAddress.toString() : null,
+            getCompVA: getComp ? getComp.virtualAddress.toString() : null,
+        });
+
+        // Helper: read a Func<byte[],byte[]> delegate pointer's method_ptr and hook it.
+        function introspectAndHook(delegatePtr: NativePointer, slot: string): void {
+            if (!delegatePtr || delegatePtr.isNull()) {
+                send({ type: "cute_http_delegate", slot, status: "null" });
+                return;
+            }
+            let methodPtr: NativePointer | null = null;
+            let methodFieldPtr: NativePointer | null = null;
+            let targetPtr: NativePointer | null = null;
+            try {
+                // IL2CPP Il2CppDelegate layout (Il2CppObject header then fields):
+                //   +0x00 Il2CppObject (klass, monitor)     = 16 bytes on arm64
+                //   +0x10 Il2CppMethodPointer method_ptr    = fn pointer
+                //   +0x18 MethodInfo* method
+                //   +0x20 Il2CppObject* m_target
+                //   +0x28 invoke_impl etc
+                methodPtr = delegatePtr.add(0x10).readPointer();
+                methodFieldPtr = delegatePtr.add(0x18).readPointer();
+                targetPtr = delegatePtr.add(0x20).readPointer();
+            } catch (e: any) {
+                send({ type: "cute_http_err", slot, step: "read_delegate", err: String(e?.message ?? e) });
+                return;
+            }
+            send({
+                type: "cute_http_delegate",
+                slot,
+                status: "captured",
+                delegatePtr: delegatePtr.toString(),
+                methodPtr: methodPtr ? methodPtr.toString() : null,
+                methodInfo: methodFieldPtr ? methodFieldPtr.toString() : null,
+                target: targetPtr ? targetPtr.toString() : null,
+            });
+
+            if (!methodPtr || methodPtr.isNull()) return;
+            const key = `${slot}@${methodPtr.toString()}`;
+            if (_cuteHttpHooked.has(key)) return;
+            _cuteHttpHooked.add(key);
+            try {
+                Interceptor.attach(methodPtr, {
+                    onEnter(args) {
+                        // Func<byte[],byte[]>.Invoke — arg[0] is the input managed byte[].
+                        (this as any)._inBytes = args[0];
+                        try {
+                            const arrPtr = args[0] as NativePointer;
+                            // Il2CppArray<byte> layout:
+                            //   +0x00 Il2CppObject      = 16 bytes
+                            //   +0x10 bounds*           = 8 bytes
+                            //   +0x18 max_length        = uintptr (8 bytes on arm64)
+                            //   +0x20 vector[0]         = start of byte data
+                            if (!arrPtr.isNull()) {
+                                const len = arrPtr.add(0x18).readU64().valueOf() as any;
+                                const n = Math.min(Number(len), maxSnap);
+                                const data = arrPtr.add(0x20);
+                                const bytes = data.readByteArray(n);
+                                let hex = "";
+                                if (bytes) {
+                                    const u8 = new Uint8Array(bytes);
+                                    for (let i = 0; i < u8.length; i++) {
+                                        const b = u8[i].toString(16);
+                                        hex += b.length === 1 ? "0" + b : b;
+                                    }
+                                }
+                                send({ type: "cute_http_codec_in", slot, inLen: Number(len), inHead: hex });
+                            }
+                        } catch (e: any) {
+                            send({ type: "cute_http_err", slot, step: "read_in", err: String(e?.message ?? e) });
+                        }
+                    },
+                    onLeave(retval) {
+                        try {
+                            const arrPtr = retval as NativePointer;
+                            if (arrPtr.isNull()) {
+                                send({ type: "cute_http_codec_out", slot, outLen: 0, outHead: "" });
+                                return;
+                            }
+                            const len = arrPtr.add(0x18).readU64().valueOf() as any;
+                            const n = Math.min(Number(len), maxSnap);
+                            const data = arrPtr.add(0x20);
+                            const bytes = data.readByteArray(n);
+                            let hex = "";
+                            if (bytes) {
+                                const u8 = new Uint8Array(bytes);
+                                for (let i = 0; i < u8.length; i++) {
+                                    const b = u8[i].toString(16);
+                                    hex += b.length === 1 ? "0" + b : b;
+                                }
+                            }
+                            send({ type: "cute_http_codec_out", slot, outLen: Number(len), outHead: hex });
+                        } catch (e: any) {
+                            send({ type: "cute_http_err", slot, step: "read_out", err: String(e?.message ?? e) });
+                        }
+                    },
+                });
+                send({ type: "cute_http_codec_hooked", slot, methodPtr: methodPtr.toString() });
+            } catch (e: any) {
+                send({ type: "cute_http_err", slot, step: "attach_codec", err: String(e?.message ?? e) });
+            }
+        }
+
+        // Leg 1: hook the setters so we catch re-installs / late installs.
+        for (const [setter, slot] of [[setDecomp, "decompress"], [setComp, "compress"]] as any) {
+            if (!setter) {
+                send({ type: "cute_http_err", step: "setter_missing", slot });
+                continue;
+            }
+            try {
+                Interceptor.attach(setter.virtualAddress, {
+                    onEnter(args) {
+                        // instance method: args[0]=this, args[1]=value (Func delegate pointer)
+                        try {
+                            introspectAndHook(args[1] as NativePointer, slot);
+                        } catch (e: any) {
+                            send({ type: "cute_http_err", slot, step: "setter_onEnter", err: String(e?.message ?? e) });
+                        }
+                    },
+                });
+                send({ type: "cute_http_setter_hooked", slot, va: setter.virtualAddress.toString() });
+            } catch (e: any) {
+                send({ type: "cute_http_err", slot, step: "attach_setter", err: String(e?.message ?? e) });
+            }
+        }
+
+        // Leg 2: call get_Instance().DecompressFunc / .CompressFunc now, in case
+        // the delegate is already installed by the time this RPC fires.
+        if (getInst && getDecomp && getComp) {
+            try {
+                const inst = httpMgr.method("get_Instance").invoke();
+                if (inst && !inst.isNull?.()) {
+                    try {
+                        const d = inst.method("get_DecompressFunc").invoke();
+                        const ptr = (d && d.handle) ? d.handle : (d as any);
+                        introspectAndHook(ptr, "decompress_initial");
+                    } catch (e: any) {
+                        send({ type: "cute_http_err", step: "get_decomp", err: String(e?.message ?? e) });
+                    }
+                    try {
+                        const c = inst.method("get_CompressFunc").invoke();
+                        const ptr = (c && c.handle) ? c.handle : (c as any);
+                        introspectAndHook(ptr, "compress_initial");
+                    } catch (e: any) {
+                        send({ type: "cute_http_err", step: "get_comp", err: String(e?.message ?? e) });
+                    }
+                } else {
+                    send({ type: "cute_http_delegate", slot: "initial", status: "no_instance" });
+                }
+            } catch (e: any) {
+                send({ type: "cute_http_err", step: "get_instance", err: String(e?.message ?? e) });
+            }
+        }
+
+        send({ type: "cute_http_phase", phase: "installed" });
     }, "main");
 }
 

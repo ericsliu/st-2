@@ -9,7 +9,7 @@
  */
 
 import { installPtraceBypass } from "./antidebug";
-import { installLz4Hook } from "./hook_lz4";
+import { installLz4Hook, probeStalkerOnNativeLz4, probeStalkerHealth, probeStalkerHealthEvents } from "./hook_lz4";
 import { installExitTraps } from "./trap_exit";
 import { installJavaExitTraps } from "./trap_java_exit";
 import {
@@ -34,6 +34,10 @@ import {
     enumerateClassWithAncestors,
     probeStalkerTransformOnTaskDeserialize,
     interceptAttachOnTaskDeserialize,
+    enumerateLibNativeLz4,
+    installLibNativeLz4Hooks,
+    il2cppAttachSanity,
+    captureCuteHttpDelegates,
 } from "./hook_deserializer";
 import { enumerateSslModules, installSslReadProbe, installBoringSslProbes, installConscryptEngineProbes, scanAllSslSymbols, installAllSslHooks, installFixedSslHooks } from "./hook_ssl";
 
@@ -79,15 +83,25 @@ type StringHit = { module: string; address: string; offset: string; text: string
  * sit in .rodata near the decompress function. Cross-reference with nearby
  * function symbols to identify the LZ4_decompress_safe entry point.
  */
+function asciiToHexPattern(s: string): string {
+    const out: string[] = [];
+    for (let i = 0; i < s.length; i++) {
+        out.push(s.charCodeAt(i).toString(16).padStart(2, "0"));
+    }
+    return out.join(" ");
+}
+
 function scanStrings(moduleName: string, needles: string[]): StringHit[] {
     const mod = Process.findModuleByName(moduleName);
     if (!mod) return [];
     const hits: StringHit[] = [];
-    const ranges = mod.enumerateRanges("r--");
+    // Scan BOTH r-- (normal rodata) AND r-x (code + embedded rodata) since
+    // packed/shielded libs often fold rodata into the code section.
+    const ranges = [...mod.enumerateRanges("r--"), ...mod.enumerateRanges("r-x")];
     for (const r of ranges) {
         for (const needle of needles) {
             try {
-                const matches = Memory.scanSync(r.base, r.size, needle);
+                const matches = Memory.scanSync(r.base, r.size, asciiToHexPattern(needle));
                 for (const m of matches) {
                     try {
                         const text = m.address.readUtf8String(
@@ -238,8 +252,17 @@ rpc.exports = {
     findSymbols: (moduleName: string, pattern: string) => {
         return findSymbols(moduleName, pattern);
     },
-    installLz4Hook: (maxSnapshot?: number): boolean => {
-        return installLz4Hook({ maxSnapshot });
+    installLz4Hook: (maxSnapshot?: number, prologueSkip?: number): boolean => {
+        return installLz4Hook({ maxSnapshot, prologueSkip });
+    },
+    probeStalkerOnNativeLz4: (excludeLibnative?: boolean, broadFollow?: boolean): void => {
+        probeStalkerOnNativeLz4(excludeLibnative ?? true, broadFollow ?? false);
+    },
+    probeStalkerHealth: (durationMs?: number): void => {
+        probeStalkerHealth(durationMs ?? 3000);
+    },
+    probeStalkerHealthEvents: (durationMs?: number): void => {
+        probeStalkerHealthEvents(durationMs ?? 3000);
     },
     installExitTraps: (): void => {
         installExitTraps();
@@ -274,6 +297,10 @@ rpc.exports = {
     enumerateClassWithAncestors: (fullName: string): void => { enumerateClassWithAncestors(fullName); },
     probeStalkerTransformOnTaskDeserialize: (): void => { probeStalkerTransformOnTaskDeserialize(); },
     interceptAttachOnTaskDeserialize: (maxAttach?: number): void => { interceptAttachOnTaskDeserialize(maxAttach); },
+    enumerateLibNativeLz4: (): void => { enumerateLibNativeLz4(); },
+    installLibNativeLz4Hooks: (maxSnapshot?: number): void => { installLibNativeLz4Hooks({ maxSnapshot }); },
+    il2cppAttachSanity: (): void => { il2cppAttachSanity(); },
+    captureCuteHttpDelegates: (maxSnap?: number): void => { captureCuteHttpDelegates(maxSnap); },
     installPtraceBypass: (): void => { installPtraceBypass(); },
     installDlopenWatcher: (): void => { installDlopenWatcher(); },
     enumerateSslModules: (): void => { enumerateSslModules(); },

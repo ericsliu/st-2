@@ -63,6 +63,21 @@ def main() -> int:
     ap.add_argument("--task-deserialize-transform", action="store_true", help="Stalker.transform across every Gallop.*Task.Deserialize(byte[]) method in umamusume.Http — plaintext MessagePack response boundary for every API endpoint at once")
     ap.add_argument("--task-deserialize-intercept", type=int, nargs='?', const=50, default=None, help="Sanity probe: Interceptor.attach directly on N (default 50) resolved Gallop.*Task.Deserialize VAs to check whether Stalker has a gating bug")
     ap.add_argument("--lz4-native", action="store_true", help="Hook libnative.so exported LZ4_decompress_safe_ext — Uma's wire format is TLS(LZ4(msgpack)) so this is the plaintext msgpack boundary (CarrotJuicer-style)")
+    ap.add_argument("--lz4-skip", type=int, default=0, help="Bytes past LZ4 function entry to hook (evade shield prologue-byte integrity check). 0x20 = past all prologue register saves before first arg use.")
+    ap.add_argument("--lz4-stalker", action="store_true", help="Stalker-based LZ4 trace — instruments BL-to-LZ4 call sites in IL2CPP threads instead of patching libnative.so. Evades shield prologue-byte check.")
+    ap.add_argument("--lz4-stalker-no-exclude", action="store_true", help="With --lz4-stalker: do NOT Stalker.exclude libnative.so (debug / explicit follow into LZ4 body). Slow.")
+    ap.add_argument("--lz4-stalker-broad", action="store_true", help="With --lz4-stalker: follow EVERY thread except explicit frida/render/gc excludes. Useful when whitelist misses the HTTP worker.")
+    ap.add_argument("--il2cpp-sanity", action="store_true", help="Definitive diagnostic: hook System.Object.ToString (Interceptor.attach AND method.implementation swap), then self-invoke from agent. Tells us if libil2cpp hooks work at all.")
+    ap.add_argument("--libnative-lz4-enum", action="store_true", help="Enumerate LibNative.LZ4.* classes/methods with VAs (no hooks). Cygames' C# wrapper around their native LZ4 plugin — prime interception target in libil2cpp.")
+    ap.add_argument("--libnative-lz4-hook", action="store_true", help="Interceptor.attach on every LibNative.LZ4.* Decompress* method with byte[] in/out. Captures LZ4 plaintext at managed layer, avoiding libnative.so prologue hash.")
+    ap.add_argument("--libnative-lz4-snap", type=int, default=64, help="Bytes to snapshot per hit (in+out), clamped 16..256")
+    ap.add_argument("--stalker-health", action="store_true", help="Minimal Stalker health check: self-stalk the RPC thread and count block compiles. If 0, Stalker is broken in this gadget env.")
+    ap.add_argument("--stalker-health-events", action="store_true", help="Stalker health check via the `events` API (onReceive callbacks) instead of `transform`")
+    ap.add_argument("--stalker-health-ms", type=int, default=3000, help="Duration of --stalker-health self-stalk in ms")
+    ap.add_argument("--libnative-strings", action="store_true", help="Scan libnative.so read-only memory for LZ4/mbedtls/curl strings (pure-read, no hooks)")
+    ap.add_argument("--libnative-symbols", action="store_true", help="Enumerate libnative.so symbols matching LZ4/mbedtls/curl/ssl patterns (no hooks)")
+    ap.add_argument("--capture-cute-http", action="store_true", help="Hook Cute.Http.HttpManager set_DecompressFunc/set_CompressFunc + read current Instance delegates; when captured, hook the Func<byte[],byte[]>.Invoke method_ptr with snapshots.")
+    ap.add_argument("--capture-cute-http-snap", type=int, default=256, help="Bytes to snapshot per hit on captured Func<byte[],byte[]> invocations")
     ap.add_argument("--duration", type=float, default=30.0, help="Watch seconds after attach")
     ap.add_argument("--startup-wait", type=float, default=8.0, help="Seconds to wait for main pid")
     ap.add_argument("--no-launch", action="store_true", help="Skip launch; attach to already-running Uma")
@@ -142,8 +157,15 @@ def main() -> int:
                     print(f"[*] cold recovery succeeded; gadget now in main pid={main_pid}", flush=True)
                     break
         if not match:
-            print(f"[!] gadget not in main pid; main={main_pid}, gadget in={[p.pid for p in procs]}", file=sys.stderr)
-            return 6
+            # With --no-launch we may have picked a stale/ephemeral pid from
+            # pidof. If exactly one process is gadget-registered, fall back
+            # to it rather than bailing.
+            if args.no_launch and len(procs) == 1:
+                print(f"[*] main_pid {main_pid} stale; falling back to sole gadget-registered pid {procs[0].pid} ({procs[0].name!r})", flush=True)
+                match = [procs[0]]
+            else:
+                print(f"[!] gadget not in main pid; main={main_pid}, gadget in={[(p.pid, p.name) for p in procs]}", file=sys.stderr)
+                return 6
 
     session = dev.attach(match[0].pid)
     attach_t = time.time()
@@ -272,7 +294,7 @@ send({
         print("[!] session died before discover call", file=sys.stderr)
         return 5
 
-    ssl_only = args.ssl_enum or args.ssl_probe or args.boringssl_probe or args.conscrypt_engine or args.wide_ssl or args.fixed_ssl or args.gallop_enum or args.gallop_transform or args.gallop_scan or args.cryptaes_transform or args.enum_assemblies or args.scan_all_crypto or bool(args.enum_asm_classes) or bool(args.enum_class) or args.task_deserialize_transform or (args.task_deserialize_intercept is not None) or args.lz4_native
+    ssl_only = args.ssl_enum or args.ssl_probe or args.boringssl_probe or args.conscrypt_engine or args.wide_ssl or args.fixed_ssl or args.gallop_enum or args.gallop_transform or args.gallop_scan or args.cryptaes_transform or args.enum_assemblies or args.scan_all_crypto or bool(args.enum_asm_classes) or bool(args.enum_class) or args.task_deserialize_transform or (args.task_deserialize_intercept is not None) or args.lz4_native or args.lz4_stalker or args.stalker_health or args.stalker_health_events or args.libnative_lz4_enum or args.libnative_lz4_hook or args.il2cpp_sanity or args.libnative_strings or args.libnative_symbols or args.capture_cute_http
     if not ssl_only:
         try:
             print(f"[{time.time()-attach_t:.1f}s] -> discoverDeserializers()", flush=True)
@@ -430,11 +452,113 @@ send({
 
     if args.lz4_native and not died["v"]:
         try:
-            print(f"[{time.time()-attach_t:.1f}s] -> installLz4Hook()", flush=True)
-            result = script.exports_sync.install_lz4_hook(256)
+            print(f"[{time.time()-attach_t:.1f}s] -> installLz4Hook(prologueSkip=0x{args.lz4_skip:x})", flush=True)
+            result = script.exports_sync.install_lz4_hook(256, args.lz4_skip)
             print(f"[{time.time()-attach_t:.1f}s] lz4-native installed: {result}", flush=True)
         except Exception as e:
             print(f"[{time.time()-attach_t:.1f}s] lz4-native RPC err: {e}", flush=True)
+
+    if args.lz4_stalker and not died["v"]:
+        try:
+            exclude = not args.lz4_stalker_no_exclude
+            broad = args.lz4_stalker_broad
+            print(f"[{time.time()-attach_t:.1f}s] -> probeStalkerOnNativeLz4(exclude={exclude}, broad={broad})", flush=True)
+            script.exports_sync.probe_stalker_on_native_lz4(exclude, broad)
+            print(f"[{time.time()-attach_t:.1f}s] lz4-stalker boot triggered", flush=True)
+        except Exception as e:
+            print(f"[{time.time()-attach_t:.1f}s] lz4-stalker RPC err: {e}", flush=True)
+
+    if args.il2cpp_sanity and not died["v"]:
+        try:
+            print(f"[{time.time()-attach_t:.1f}s] -> il2cppAttachSanity()", flush=True)
+            script.exports_sync.il2cpp_attach_sanity()
+        except Exception as e:
+            print(f"[{time.time()-attach_t:.1f}s] il2cpp-sanity RPC err: {e}", flush=True)
+
+    if args.libnative_lz4_enum and not died["v"]:
+        try:
+            print(f"[{time.time()-attach_t:.1f}s] -> enumerateLibNativeLz4()", flush=True)
+            script.exports_sync.enumerate_lib_native_lz4()
+        except Exception as e:
+            print(f"[{time.time()-attach_t:.1f}s] libnative-lz4-enum RPC err: {e}", flush=True)
+
+    if args.libnative_lz4_hook and not died["v"]:
+        try:
+            print(f"[{time.time()-attach_t:.1f}s] -> installLibNativeLz4Hooks(snap={args.libnative_lz4_snap})", flush=True)
+            script.exports_sync.install_lib_native_lz4_hooks(args.libnative_lz4_snap)
+        except Exception as e:
+            print(f"[{time.time()-attach_t:.1f}s] libnative-lz4-hook RPC err: {e}", flush=True)
+
+    if args.libnative_strings and not died["v"]:
+        try:
+            needles = [
+                "LZ4_decompress_safe_ext",
+                "LZ4_compress_default_ext",
+                "LZ4_decompress_safe",
+                "LZ4_compress",
+                "LZ4_decompress",
+                "mbedtls_ssl_read",
+                "mbedtls_ssl_write",
+                "mbedtls_ssl_init",
+                "mbedtls_ssl_handshake",
+                "ssl_decrypt_buf",
+                "ssl_get_record",
+                "curl_easy_perform",
+                "curl_easy_setopt",
+                "CURLE_",
+                "libcurl",
+                "CURLOPT_",
+                "Error decompressing",
+                "Error compressing",
+            ]
+            print(f"[{time.time()-attach_t:.1f}s] -> scanStrings(libnative.so, {len(needles)} needles)", flush=True)
+            hits = script.exports_sync.scan_strings("libnative.so", needles)
+            # Group hits by which needle matched
+            by_needle: dict[str, list] = {}
+            for h in hits:
+                key = h.get("text", "")[:60]
+                by_needle.setdefault(key, []).append(h)
+            print(f"[{time.time()-attach_t:.1f}s] libnative_strings: {len(hits)} hits across {len(by_needle)} unique strings", flush=True)
+            for text, rows in sorted(by_needle.items()):
+                first = rows[0]
+                print(f"    {first.get('offset')} ({len(rows)}x) {text!r}", flush=True)
+        except Exception as e:
+            print(f"[{time.time()-attach_t:.1f}s] libnative-strings RPC err: {e}", flush=True)
+
+    if args.libnative_symbols and not died["v"]:
+        try:
+            pattern = r"LZ4|mbedtls|ssl_|curl_|CURL|decrypt|decompress|_read|_write"
+            print(f"[{time.time()-attach_t:.1f}s] -> findSymbols(libnative.so, /{pattern}/)", flush=True)
+            syms = script.exports_sync.find_symbols("libnative.so", pattern)
+            print(f"[{time.time()-attach_t:.1f}s] libnative_symbols: {len(syms)} matches", flush=True)
+            for s in syms[:60]:
+                print(f"    [{s.get('type')}] {s.get('address')} {s.get('name')}", flush=True)
+            if len(syms) > 60:
+                print(f"    ... +{len(syms)-60} more", flush=True)
+        except Exception as e:
+            print(f"[{time.time()-attach_t:.1f}s] libnative-symbols RPC err: {e}", flush=True)
+
+    if args.capture_cute_http and not died["v"]:
+        try:
+            snap = max(16, min(4096, int(args.capture_cute_http_snap)))
+            print(f"[{time.time()-attach_t:.1f}s] -> captureCuteHttpDelegates(maxSnap={snap})", flush=True)
+            script.exports_sync.capture_cute_http_delegates(snap)
+        except Exception as e:
+            print(f"[{time.time()-attach_t:.1f}s] capture-cute-http RPC err: {e}", flush=True)
+
+    if args.stalker_health and not died["v"]:
+        try:
+            print(f"[{time.time()-attach_t:.1f}s] -> probeStalkerHealth(ms={args.stalker_health_ms})", flush=True)
+            script.exports_sync.probe_stalker_health(args.stalker_health_ms)
+        except Exception as e:
+            print(f"[{time.time()-attach_t:.1f}s] stalker-health RPC err: {e}", flush=True)
+
+    if args.stalker_health_events and not died["v"]:
+        try:
+            print(f"[{time.time()-attach_t:.1f}s] -> probeStalkerHealthEvents(ms={args.stalker_health_ms})", flush=True)
+            script.exports_sync.probe_stalker_health_events(args.stalker_health_ms)
+        except Exception as e:
+            print(f"[{time.time()-attach_t:.1f}s] stalker-health-events RPC err: {e}", flush=True)
 
     if args.catalog and not died["v"]:
         time.sleep(0.5)

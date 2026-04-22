@@ -370,3 +370,96 @@ Rewrite as a Zygisk module that hooks libnative.so at load time, before the shie
 - `.claude/.../memory/project_uma_tls_stack.md` — new, documents the libcurl+mbedTLS-in-libnative.so discovery and the LZ4 shortcut.
 
 Next concrete commit: apply the +0x20 offset shift in `hook_lz4.ts` and rerun `--lz4-native`. If Uma survives past 10s, the plaintext msgpack stream starts showing up in `lz4_call` events.
+
+---
+
+## 2026-04-21 session update (later): SOLVED via Cute.Http delegate capture
+
+The `+0x20` native-LZ4 shift turned out to be a dead end, and the whole libnative-hooking branch became moot after a correct pivot to the IL2CPP managed layer. Packet interception is now **working end-to-end** — plaintext msgpack captured both directions on the first successful run.
+
+### What actually worked
+
+**Hook surface**: `Cute.Http.HttpManager.set_DecompressFunc(Func<byte[],byte[]>)` and `set_CompressFunc(...)` in `Cute.Http.Assembly` (shipped in libil2cpp.so — shield-safe path). The codec is plugged in as managed `Func<byte[],byte[]>` delegates at HttpManager construction time, so the delegate's `method_ptr` is the managed VA of the real de/compress routine. Hook that address directly with `Interceptor.attach` and read the `byte[]` argument and return value as Il2CppArray snapshots.
+
+**Why this worked where prior attempts failed**:
+- `Gallop.HttpHelper` / `Gallop.*Task.Deserialize` / `MessagePack.LZ4MessagePackSerializer` (all tried earlier in this addendum) are **not the runtime HTTP stack on Uma Global**. They're compiled-in IL2CPP methods that the shipping build never dispatches through. The real HTTP client is `Cute.Http.*` wrapping the native `tempest_*` client exported from libnative.so.
+- Serialization is **MsgPack-CLI** (`MsgPack.ObjectPacker`, `MsgPack.MsgPackWriter`, `MsgPack.MsgPackReader`), not MessagePack-CSharp. Prior assumptions about `[M|L]MessagePackSerializer` namespaces were from the wrong library.
+- The native LZ4 exports in `libnative.so` trip shield path #3 at entry and at `+0x20` (assumed; not re-tested after the pivot). Moot once the managed boundary works.
+
+### Implementation
+
+- Added `captureCuteHttpDelegates(maxSnap)` in `frida_agent/src/hook_deserializer.ts`. Resolves `Cute.Http.Assembly` → `Cute.Http.HttpManager` → `set_DecompressFunc`, `set_CompressFunc`, `get_Instance`, `get_DecompressFunc`, `get_CompressFunc`. Installs `Interceptor.attach` on both setters (captures re-installs / late installs). Also calls `get_Instance().DecompressFunc` / `.CompressFunc` immediately to grab already-installed delegates (the common case — Uma installs them before our hook fires).
+- For each captured delegate, reads `delegatePtr + 0x10` (Il2CppDelegate.`method_ptr`) and `+0x18` (`method` / Il2CppMethodInfo*) and `+0x20` (`m_target`). Static methods have `target=0x0`. Hooks `method_ptr` with `Interceptor.attach`.
+- In the hook's `onEnter` / `onLeave`, reads the argument and return value as Il2CppArray<byte>:
+  ```
+  +0x00  Il2CppObject header  (16 bytes arm64)
+  +0x10  bounds*              (8 bytes)
+  +0x18  max_length           (uintptr)
+  +0x20  vector[0]            (raw byte data)
+  ```
+  Snapshots up to `maxSnap` bytes to the host as hex.
+- RPC export `captureCuteHttpDelegates` wired in `agent.ts`; `--capture-cute-http` and `--capture-cute-http-snap` flags added to `scripts/frida_c1_probe.py` and plumbed into the `ssl_only` gate.
+
+### Observed results on first successful run
+
+- Both initial delegates captured at t=2.1s post-attach:
+  - decompress: `method_ptr = 0x7bc8997f6c`, static
+  - compress: `method_ptr = 0x7bc8997d08`, static
+- Setter hooks also installed successfully (redundant failsafe for re-installs).
+- First real HTTP call at t≈172s produced the full round-trip:
+  - `compress_in` (356 bytes PLAINTEXT msgpack): fixmap(15) with `attestation_type`, `device_token`, `viewer_id`, `device_id`, `device_name: "samsung SM-G998B"`, `ip_address: "10.0.2.15"`, `platform_os_version`, etc.
+  - `compress_out` (760 bytes Base64 ASCII): Cygames wraps AES + Base64 on top of LZ4 on the wire.
+  - `decompress_in` (704 bytes Base64 ciphertext response).
+  - `decompress_out` (486 bytes PLAINTEXT msgpack): `{response_code: 1, data_header: {viewer_id, sid, servertime, result_code: 1, server_list: {...akamaized.net...}}}`.
+- Second decompress hit (63,980 → 47,932 bytes) was the startup state dump: notifications, common_define, change_date_hour, etc. Full plaintext.
+
+### Updated shield detection table (authoritative as of 2026-04-21)
+
+| # | Trigger | Mechanism | Signature | Status |
+|---|---------|-----------|-----------|--------|
+| 1 | Frida thread names (`gum-js-loop`, `gmain`, `gdbus`, `pool-frida`, `frida-gadget`) | `/proc/self/task/<tid>/comm` scan | SIGSEGV with PC==fault addr (PAC corruption); tombstone | Bypassed via rename at t=0/200ms/1s/3s |
+| 2 | `Interceptor.attach` byte write into libil2cpp.so `.text` | Code/checksum scan of libil2cpp | Clean `exit(0)` ~0.3s | **STALE** — `Interceptor.attach` on concrete libil2cpp VAs in Cute.Http.* survives indefinitely. Either path #2 is scoped narrower than previously believed, or detection only fires on specific hot regions (MessagePack.dll etc). Needs re-test with a systematic VA sweep but current working theory: libil2cpp attach is FINE for most method bodies |
+| 3 | `Interceptor.attach` into libnative.so exported-symbol entry points (at entry and at +0x20 assumed) | Prologue hash of libnative exports | SESSION DETACHED 'connection-terminated' ~1.5s | Avoided — use libil2cpp-side delegate capture instead |
+| 4 | Wide `enumerateSymbols` walk over libil2cpp / libnative / packed shield lib | SEGV_MAPERR tripwire on guarded pages | SIGSEGV in JS thread | Bypassed via allow-list enumeration |
+
+Path #2 in particular needs revision — the new working hypothesis is that `Interceptor.attach` is broadly safe on libil2cpp method bodies as long as the specific targets don't fall in shield-protected subranges. The earlier "clean exit(0) on any libil2cpp attach" observation was against the generic-dispatch sentinel VA on `MessagePack.LZ4MessagePackSerializer` — which is in a metadata region, not a real method body. Revised table entry is provisional; do not rely on libil2cpp being universally attachable without confirming survival for each new hook.
+
+### Closed: prior "next step" options from this addendum
+
+- **§4f / Option 1 (Stalker transform on LZ4Codec.Decode)** — obsolete. The managed layer is accessible via simpler Interceptor.attach; no need for Stalker gymnastics.
+- **§4i / Option 2 (SSL_read in libssl)** — confirmed dead (§4m): Uma bypasses every system TLS library. libnative.so bundles libcurl 7.73.0 + mbedTLS statically. Irrelevant now — interception happens above TLS at the codec delegate boundary.
+- **§5 / Option 3 (A4 shield-scanner neutralization)** — deferred. Not needed for packet interception; would still be useful for any future libnative-side hook.
+- **§2026-04-21 earlier / LZ4 native +0x20 shift** — abandoned without re-test. Moot.
+- **§2026-04-21 earlier / Zygisk/Dobby port** — unneeded. Frida-side managed hook is sufficient.
+
+### Revised next steps (post-breakthrough)
+
+**1. Persist captures to disk (1-2 hours, high value).**
+Drop the 256-byte per-hit snapshot cap and stream full buffers host-side. Add a seq counter + timestamp + slot tag, write to `data/packet_captures/session_<ts>/{seq}_{slot}.bin`. The `send()` path in Frida can already carry arbitrary byte arrays; the driver side (`frida_c1_probe.py`) just needs to branch on message type and write to disk.
+
+**2. Host-side msgpack decoder (0.5-1 hour, high value).**
+Python `msgpack` package already in repo context. Write `scripts/decode_uma_capture.py` that loads a session directory, pairs compress_in/decompress_out (plaintext) into request/response JSON, leaves compress_out/decompress_in (ciphertext) untouched. Produces human-readable JSONL of every API round-trip.
+
+**3. Steady-state replay validation (0.5 hour).**
+Run a full 5-10 minute career session through the bot while the capture hook is live. Confirm: (a) no session detaches, (b) capture rate matches HTTP call rate, (c) all Gallop endpoints appear in the decoded JSONL. Validates that the hook is stable under real workload, not just startup.
+
+**4. Derive API schema (optional, days-scale).**
+With a pile of captured request/response pairs, build a schema for every endpoint (URL → request msgpack keys → response msgpack keys). Foundation for any downstream tooling: replay attacks, offline simulation of game state, turn analysis without running the bot live.
+
+### Files touched this session (delegate-capture subset)
+
+- `frida_agent/src/hook_deserializer.ts` — added `captureCuteHttpDelegates(maxSnap)` (setter hooks + initial delegate introspection via get_Instance + Il2CppArray<byte> snapshot in onEnter/onLeave).
+- `frida_agent/src/agent.ts` — import + RPC export.
+- `scripts/frida_c1_probe.py` — `--capture-cute-http` / `--capture-cute-http-snap` flags + ssl_only gate.
+- Memory: `project_cute_http_capture_working.md` (new), `project_uma_cute_http.md` (prior-session finding that informed this), `project_libnative_native_surface.md` (prior-session VAs), MEMORY.md index updated.
+
+### Key VAs (this boot — VA = il2cppBase + offset; il2cppBase varies per process)
+
+Offsets from `il2cppBase = 0x7bc3152000`:
+- `HttpManager.set_DecompressFunc` = il2cppBase + 0x3dd4a0
+- `HttpManager.set_CompressFunc` = il2cppBase + 0x3dd490
+- `HttpManager.get_Instance` = il2cppBase + 0x3dd170
+- `HttpManager.get_DecompressFunc` = il2cppBase + 0x3dd498
+- `HttpManager.get_CompressFunc` = il2cppBase + 0x3dd488
+
+Delegate method_ptr targets are per-process managed addresses and must be resolved at runtime via the delegate layout (`delegatePtr + 0x10`).
