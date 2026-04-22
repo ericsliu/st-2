@@ -81,6 +81,8 @@ def main() -> int:
     ap.add_argument("--libnative-symbols", action="store_true", help="Enumerate libnative.so symbols matching LZ4/mbedtls/curl/ssl patterns (no hooks)")
     ap.add_argument("--capture-cute-http", action="store_true", help="Hook Cute.Http.HttpManager set_DecompressFunc/set_CompressFunc + read current Instance delegates; when captured, hook the Func<byte[],byte[]>.Invoke method_ptr with snapshots.")
     ap.add_argument("--capture-cute-http-snap", type=int, default=0, help="Per-hit byte cap (0 = full buffer; >0 truncates each byte[] to this many bytes)")
+    ap.add_argument("--capture-auto", action="store_true", help="(Hardening override) Install cute-http capture hooks immediately on attach. Default is to wait until manually triggered (ENTER on stdin or touching the trigger file) so the process spends login/auth WITHOUT any managed-layer trampolines in memory.")
+    ap.add_argument("--capture-trigger-file", type=Path, default=Path("/tmp/uma_capture_go"), help="Flag file that, if created, fires the capture hook (polled once/sec). Default /tmp/uma_capture_go")
     ap.add_argument("--duration", type=float, default=30.0, help="Watch seconds after attach")
     ap.add_argument("--startup-wait", type=float, default=8.0, help="Seconds to wait for main pid")
     ap.add_argument("--no-launch", action="store_true", help="Skip launch; attach to already-running Uma")
@@ -569,15 +571,62 @@ send({
         except Exception as e:
             print(f"[{time.time()-attach_t:.1f}s] libnative-symbols RPC err: {e}", flush=True)
 
-    if args.capture_cute_http and not died["v"]:
+    capture_fired = {"v": False}
+    def fire_capture() -> None:
+        if capture_fired["v"] or died["v"]:
+            return
+        capture_fired["v"] = True
         try:
             snap = int(args.capture_cute_http_snap)
             if snap < 0:
                 snap = 0
-            print(f"[{time.time()-attach_t:.1f}s] -> captureCuteHttpDelegates(maxSnap={snap})", flush=True)
+            print(f"[{time.time()-attach_t:.1f}s] -> captureCuteHttpDelegates(maxSnap={snap}) [manual trigger]", flush=True)
             script.exports_sync.capture_cute_http_delegates(snap)
         except Exception as e:
             print(f"[{time.time()-attach_t:.1f}s] capture-cute-http RPC err: {e}", flush=True)
+
+    if args.capture_cute_http and not died["v"]:
+        if args.capture_auto:
+            fire_capture()
+        else:
+            import threading
+            trigger_file = args.capture_trigger_file
+            # Clear stale trigger so a leftover file can't auto-fire.
+            try:
+                if trigger_file.exists():
+                    trigger_file.unlink()
+            except Exception:
+                pass
+            print(
+                f"[{time.time()-attach_t:.1f}s] capture-cute-http ARMED but NOT yet installed.\n"
+                f"     Trigger when you are past login/title and in the home screen:\n"
+                f"       - press ENTER in this terminal, OR\n"
+                f"       - touch {trigger_file}\n",
+                flush=True,
+            )
+            def stdin_waiter() -> None:
+                # Only honor stdin if it's a real tty — otherwise readline
+                # returns "" at EOF immediately and would auto-fire.
+                if not sys.stdin.isatty():
+                    return
+                try:
+                    line = sys.stdin.readline()
+                except Exception:
+                    return
+                if line == "":
+                    return
+                fire_capture()
+            def file_waiter() -> None:
+                while not capture_fired["v"] and not died["v"]:
+                    try:
+                        if trigger_file.exists():
+                            break
+                    except Exception:
+                        pass
+                    time.sleep(1.0)
+                fire_capture()
+            threading.Thread(target=stdin_waiter, daemon=True).start()
+            threading.Thread(target=file_waiter, daemon=True).start()
 
     if args.stalker_health and not died["v"]:
         try:
@@ -673,9 +722,27 @@ send({
         except Exception as e:
             print(f"[{time.time()-attach_t:.1f}s] hook RPC err: {e}", flush=True)
 
-    end = time.time() + args.duration
-    while time.time() < end and not died["v"]:
-        time.sleep(0.2)
+    deferred = args.capture_cute_http and not args.capture_auto
+    if deferred:
+        # Wait until capture fires (or session dies); then run --duration more.
+        # Ctrl-C still breaks out cleanly.
+        try:
+            while not capture_fired["v"] and not died["v"]:
+                time.sleep(0.2)
+            if capture_fired["v"]:
+                print(f"[{time.time()-attach_t:.1f}s] capture live; running for {args.duration}s more (Ctrl-C to stop early)", flush=True)
+                end = time.time() + args.duration
+                while time.time() < end and not died["v"]:
+                    time.sleep(0.2)
+        except KeyboardInterrupt:
+            print(f"[{time.time()-attach_t:.1f}s] Ctrl-C; detaching", flush=True)
+    else:
+        end = time.time() + args.duration
+        try:
+            while time.time() < end and not died["v"]:
+                time.sleep(0.2)
+        except KeyboardInterrupt:
+            print(f"[{time.time()-attach_t:.1f}s] Ctrl-C; detaching", flush=True)
     time.sleep(0.5)
     print(f"\n[summary] messages={msgs['n']} died_early={died['v']}")
     try:
