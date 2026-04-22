@@ -14,6 +14,8 @@ gadget listener, attach to the gadget proc matching the main pid.
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
+import json
 import subprocess
 import sys
 import time
@@ -25,6 +27,7 @@ DEVICE = "127.0.0.1:5555"
 PACKAGE = "com.cygames.umamusume"
 GADGET_HOST = "127.0.0.1:27042"
 AGENT_JS = Path(__file__).resolve().parents[1] / "frida_agent" / "dist" / "agent.js"
+CAPTURE_ROOT = Path(__file__).resolve().parents[1] / "data" / "packet_captures"
 
 
 def adb(*args: str, check: bool = True) -> str:
@@ -77,7 +80,7 @@ def main() -> int:
     ap.add_argument("--libnative-strings", action="store_true", help="Scan libnative.so read-only memory for LZ4/mbedtls/curl strings (pure-read, no hooks)")
     ap.add_argument("--libnative-symbols", action="store_true", help="Enumerate libnative.so symbols matching LZ4/mbedtls/curl/ssl patterns (no hooks)")
     ap.add_argument("--capture-cute-http", action="store_true", help="Hook Cute.Http.HttpManager set_DecompressFunc/set_CompressFunc + read current Instance delegates; when captured, hook the Func<byte[],byte[]>.Invoke method_ptr with snapshots.")
-    ap.add_argument("--capture-cute-http-snap", type=int, default=256, help="Bytes to snapshot per hit on captured Func<byte[],byte[]> invocations")
+    ap.add_argument("--capture-cute-http-snap", type=int, default=0, help="Per-hit byte cap (0 = full buffer; >0 truncates each byte[] to this many bytes)")
     ap.add_argument("--duration", type=float, default=30.0, help="Watch seconds after attach")
     ap.add_argument("--startup-wait", type=float, default=8.0, help="Seconds to wait for main pid")
     ap.add_argument("--no-launch", action="store_true", help="Skip launch; attach to already-running Uma")
@@ -177,12 +180,40 @@ def main() -> int:
     session.on("detached", on_detached)
 
     msgs = {"n": 0}
+    capture_dir = None
+    capture_index = None
+    if args.capture_cute_http:
+        ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        capture_dir = CAPTURE_ROOT / f"session_{ts}"
+        capture_dir.mkdir(parents=True, exist_ok=True)
+        capture_index = (capture_dir / "index.jsonl").open("a", buffering=1)
+        print(f"[*] packet captures -> {capture_dir}")
+
     def on_message(msg, data):
         msgs["n"] += 1
         t = time.time() - attach_t
         if msg["type"] == "send":
             p = msg.get("payload") or {}
-            print(f"[{t:5.1f}s] {p}", flush=True)
+            mtype = p.get("type", "")
+            if mtype in ("cute_http_codec_in", "cute_http_codec_out") and capture_dir is not None:
+                slot = p.get("slot", "unknown")
+                seq = p.get("seq", 0)
+                length = p.get("len", 0)
+                sent = p.get("sent", 0)
+                direction = "in" if mtype.endswith("_in") else "out"
+                fname = f"{seq:06d}_{slot}_{direction}.bin"
+                fpath = capture_dir / fname
+                if data is not None and sent > 0:
+                    fpath.write_bytes(data)
+                entry = {
+                    "t": round(t, 3), "seq": seq, "slot": slot, "dir": direction,
+                    "len": length, "sent": sent, "truncated": sent < length,
+                    "file": fname,
+                }
+                capture_index.write(json.dumps(entry) + "\n")
+                print(f"[{t:5.1f}s] capture seq={seq} {slot}/{direction} len={length} -> {fname}", flush=True)
+            else:
+                print(f"[{t:5.1f}s] {p}", flush=True)
         elif msg["type"] == "error":
             print(f"[{t:5.1f}s] [ERR] {msg.get('stack', msg)}", flush=True)
         else:
@@ -540,7 +571,9 @@ send({
 
     if args.capture_cute_http and not died["v"]:
         try:
-            snap = max(16, min(4096, int(args.capture_cute_http_snap)))
+            snap = int(args.capture_cute_http_snap)
+            if snap < 0:
+                snap = 0
             print(f"[{time.time()-attach_t:.1f}s] -> captureCuteHttpDelegates(maxSnap={snap})", flush=True)
             script.exports_sync.capture_cute_http_delegates(snap)
         except Exception as e:

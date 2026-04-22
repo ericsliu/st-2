@@ -2945,8 +2945,9 @@ export function installLibNativeLz4Hooks(opts?: { maxSnapshot?: number }): void 
  * All hooks are on libil2cpp.so — Interceptor.attach known shield-safe there.
  */
 let _cuteHttpBooted = false;
+let _cuteHttpSeq = 0;
 const _cuteHttpHooked = new Set<string>();
-export function captureCuteHttpDelegates(maxSnap: number = 256): void {
+export function captureCuteHttpDelegates(maxSnap: number = 0): void {
     if (_cuteHttpBooted) {
         send({ type: "cute_http_err", step: "already_booted" });
         return;
@@ -3022,54 +3023,44 @@ export function captureCuteHttpDelegates(maxSnap: number = 256): void {
             try {
                 Interceptor.attach(methodPtr, {
                     onEnter(args) {
-                        // Func<byte[],byte[]>.Invoke — arg[0] is the input managed byte[].
-                        (this as any)._inBytes = args[0];
+                        (this as any)._cuteSeq = ++_cuteHttpSeq;
                         try {
                             const arrPtr = args[0] as NativePointer;
                             // Il2CppArray<byte> layout:
-                            //   +0x00 Il2CppObject      = 16 bytes
-                            //   +0x10 bounds*           = 8 bytes
-                            //   +0x18 max_length        = uintptr (8 bytes on arm64)
-                            //   +0x20 vector[0]         = start of byte data
-                            if (!arrPtr.isNull()) {
-                                const len = arrPtr.add(0x18).readU64().valueOf() as any;
-                                const n = Math.min(Number(len), maxSnap);
-                                const data = arrPtr.add(0x20);
-                                const bytes = data.readByteArray(n);
-                                let hex = "";
-                                if (bytes) {
-                                    const u8 = new Uint8Array(bytes);
-                                    for (let i = 0; i < u8.length; i++) {
-                                        const b = u8[i].toString(16);
-                                        hex += b.length === 1 ? "0" + b : b;
-                                    }
-                                }
-                                send({ type: "cute_http_codec_in", slot, inLen: Number(len), inHead: hex });
+                            //   +0x00 Il2CppObject (16 bytes)
+                            //   +0x10 bounds*      (8 bytes)
+                            //   +0x18 max_length   (uintptr)
+                            //   +0x20 vector[0]    (raw byte data)
+                            if (arrPtr.isNull()) {
+                                send({ type: "cute_http_codec_in", slot, seq: (this as any)._cuteSeq, len: 0, sent: 0 });
+                                return;
                             }
+                            const len = Number(arrPtr.add(0x18).readU64().valueOf());
+                            const n = maxSnap > 0 ? Math.min(len, maxSnap) : len;
+                            const bytes = n > 0 ? arrPtr.add(0x20).readByteArray(n) : null;
+                            send(
+                                { type: "cute_http_codec_in", slot, seq: (this as any)._cuteSeq, len, sent: n },
+                                bytes as any,
+                            );
                         } catch (e: any) {
                             send({ type: "cute_http_err", slot, step: "read_in", err: String(e?.message ?? e) });
                         }
                     },
                     onLeave(retval) {
+                        const seq = (this as any)._cuteSeq;
                         try {
                             const arrPtr = retval as NativePointer;
                             if (arrPtr.isNull()) {
-                                send({ type: "cute_http_codec_out", slot, outLen: 0, outHead: "" });
+                                send({ type: "cute_http_codec_out", slot, seq, len: 0, sent: 0 });
                                 return;
                             }
-                            const len = arrPtr.add(0x18).readU64().valueOf() as any;
-                            const n = Math.min(Number(len), maxSnap);
-                            const data = arrPtr.add(0x20);
-                            const bytes = data.readByteArray(n);
-                            let hex = "";
-                            if (bytes) {
-                                const u8 = new Uint8Array(bytes);
-                                for (let i = 0; i < u8.length; i++) {
-                                    const b = u8[i].toString(16);
-                                    hex += b.length === 1 ? "0" + b : b;
-                                }
-                            }
-                            send({ type: "cute_http_codec_out", slot, outLen: Number(len), outHead: hex });
+                            const len = Number(arrPtr.add(0x18).readU64().valueOf());
+                            const n = maxSnap > 0 ? Math.min(len, maxSnap) : len;
+                            const bytes = n > 0 ? arrPtr.add(0x20).readByteArray(n) : null;
+                            send(
+                                { type: "cute_http_codec_out", slot, seq, len, sent: n },
+                                bytes as any,
+                            );
                         } catch (e: any) {
                             send({ type: "cute_http_err", slot, step: "read_out", err: String(e?.message ?? e) });
                         }

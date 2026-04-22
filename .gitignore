@@ -53,6 +53,7 @@ data/*.flag
 data/last_shop_turn.txt
 data/strategies/*.md
 data/strategies/*_fallback.yaml
+data/packet_captures/
 
 # Sprite assets (large, extracted from APK)
 *.png
