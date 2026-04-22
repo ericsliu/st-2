@@ -151,3 +151,4 @@ sirius_strategy_transcript.txt
 # Temp
 tmp/
 temp/
+frida_agent/node_modules/
