@@ -217,6 +217,96 @@ class ShopManager:
         return dict(self._inventory)
 
     # ------------------------------------------------------------------
+    # Packet-driven sync (Trackblazer free_data_set)
+    # ------------------------------------------------------------------
+
+    def apply_packet_state(self, state: GameState) -> bool:
+        """Refresh inventory + active effects from ``state.scenario_state``.
+
+        Returns True if a packet sync was applied (Trackblazer scenario_state
+        with mapped inventory entries). When this returns False, callers
+        should fall back to OCR / yaml-driven inventory tracking.
+        """
+        ss = state.scenario_state
+        if ss is None or ss.scenario_key != "trackblazer":
+            return False
+        new_inv: dict[str, int] = {}
+        for entry in ss.inventory:
+            if not entry.item_key:
+                continue
+            new_inv[entry.item_key] = entry.num
+        # Replace wholesale: packet is authoritative for Trackblazer.
+        self._inventory = new_inv
+        self._sync_active_effects_from_packet(ss, state.current_turn)
+        return True
+
+    def _sync_active_effects_from_packet(
+        self, scenario_state, current_turn: int
+    ) -> None:
+        """Replace ``_active_effects`` with what the packet says is live.
+
+        Server sends one ``item_effect_array`` entry per (use_id, effect_type)
+        pair, so the same item can appear multiple times — dedupe by
+        ``item_key`` and pick the longest remaining duration.
+        """
+        if current_turn <= 0:
+            # Without a turn we can't compute turns_remaining; leave as-is.
+            return
+        best: dict[str, ActiveEffect] = {}
+        for raw in scenario_state.active_effects:
+            key = raw.item_key
+            if not key:
+                continue
+            remaining = raw.turns_remaining(current_turn)
+            if remaining <= 0:
+                continue
+            effect_def = ITEM_TRAINING_EFFECTS.get(key, {})
+            candidate = ActiveEffect(
+                item_key=key,
+                turns_remaining=remaining,
+                multiplier=effect_def.get("multiplier", 1.0),
+                zero_failure=effect_def.get("zero_failure", False),
+            )
+            existing = best.get(key)
+            if existing is None or candidate.turns_remaining > existing.turns_remaining:
+                best[key] = candidate
+        self._active_effects = list(best.values())
+
+    def get_packet_shop_offerings(
+        self, state: GameState
+    ) -> list[tuple[ShopItem, int]] | None:
+        """Return ``[(ShopItem, current_price)]`` from packet shop offerings.
+
+        Returns None when ``state.scenario_state`` is missing — callers fall
+        back to ``get_purchase_priorities`` (OCR/tier-based).
+
+        Items with stock_remaining == 0 or no ITEM_CATALOGUE mapping are
+        skipped. Items marked NEVER are skipped. Otherwise the offerings
+        are sorted by tier (SS > S > A > B), then by current price.
+        """
+        ss = state.scenario_state
+        if ss is None or ss.scenario_key != "trackblazer":
+            return None
+        tier_order = {ItemTier.SS: 0, ItemTier.S: 1, ItemTier.A: 2, ItemTier.B: 3}
+        out: list[tuple[ShopItem, int, int]] = []
+        for offering in ss.pick_up_items:
+            if not offering.item_key:
+                continue
+            if offering.stock_remaining <= 0:
+                continue
+            shop_item = ITEM_CATALOGUE.get(offering.item_key)
+            if shop_item is None or shop_item.tier == ItemTier.NEVER:
+                continue
+            # Respect max_stock against current inventory
+            owned = self._inventory.get(offering.item_key, 0)
+            if shop_item.max_stock and owned >= shop_item.max_stock:
+                continue
+            tier_rank = tier_order.get(shop_item.tier, 99)
+            out.append((shop_item, offering.coin_num, tier_rank))
+        out.sort(key=lambda row: (row[2], row[1]))
+        return [(item, price) for item, price, _ in out]
+
+    # ------------------------------------------------------------------
     # Scenario-delegated decisions
     # ------------------------------------------------------------------
 

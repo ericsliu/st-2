@@ -153,3 +153,10 @@ sirius_strategy_transcript.txt
 tmp/
 temp/
 frida_agent/node_modules/
+
+# Reverse-engineering artifacts (large binaries, not source)
+il2cpp_artifacts/
+data/ws1_work/
+
+# Claude Code local state
+.claude/

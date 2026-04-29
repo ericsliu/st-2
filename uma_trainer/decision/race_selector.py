@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from uma_trainer.types import ActionType, BotAction, GameState, RaceOption
+from uma_trainer.types import ActionType, BotAction, GameState, RaceOption, UpcomingRace
 
 if TYPE_CHECKING:
     from uma_trainer.knowledge.database import KnowledgeBase
@@ -34,6 +34,30 @@ def _load_race_calendar(path: str = "data/race_calendar.json") -> list[dict]:
 
 
 GRADE_SORT_ORDER = {"G1": 0, "G2": 1, "G3": 2, "OP": 3, "Pre-OP": 4}
+
+
+def _upcoming_to_calendar_dict(race: UpcomingRace) -> dict:
+    """Render an ``UpcomingRace`` in the same shape ``data/race_calendar.json``
+    entries use, so the rest of the selector code can treat both sources
+    interchangeably.
+    """
+    return {
+        "name": race.name,
+        "grade": race.grade,
+        "distance": race.distance_m,
+        "surface": race.surface,
+        "month": race.month,
+        "half": race.half,
+        "fan_reward": 0,             # not carried in race_condition_array
+        "venue": "",
+        "course": "",
+        "category": "",
+        "race_id": str(race.race_id) if race.race_id else "",
+        "program_id": race.program_id,
+        # weather/ground from the server are exposed for completeness
+        "weather": race.weather,
+        "ground_condition": race.ground_condition,
+    }
 
 
 class RaceSelector:
@@ -85,11 +109,23 @@ class RaceSelector:
         half = "early" if year_turn % 2 == 0 else "late"
         return year, month, half
 
-    def get_races_for_turn(self, turn: int, max_turns: int = 72) -> list[dict]:
+    def get_races_for_turn(
+        self,
+        turn: int,
+        max_turns: int = 72,
+        state: GameState | None = None,
+    ) -> list[dict]:
         """Return all calendar races available at the given turn.
 
-        Filters by both month/half AND year (Junior/Classic/Senior).
+        When ``state.upcoming_races`` is non-empty, those entries are
+        used verbatim (the server already pre-filtered the list to
+        races currently available this career, so no turn-based
+        filtering is required). Otherwise this falls back to the
+        static ``data/race_calendar.json`` lookahead, filtering by
+        both month/half AND year (Junior/Classic/Senior).
         """
+        if state is not None and state.upcoming_races:
+            return [_upcoming_to_calendar_dict(r) for r in state.upcoming_races]
         year, month, half = self.turn_to_month_half(turn, max_turns)
         results = []
         for entry in self._calendar:
@@ -113,7 +149,7 @@ class RaceSelector:
         Stores result in self._pre_selected for later navigation.
         """
         calendar_races = self.get_races_for_turn(
-            state.current_turn, state.max_turns,
+            state.current_turn, state.max_turns, state=state,
         )
         if not calendar_races:
             self._pre_selected = None
@@ -533,7 +569,7 @@ class RaceSelector:
         Among eligible G1s, picks the one with the highest fan reward.
         """
         calendar_races = self.get_races_for_turn(
-            state.current_turn, state.max_turns,
+            state.current_turn, state.max_turns, state=state,
         )
         g1s = [r for r in calendar_races if r.get("grade") == "G1" and r.get("distance", 0) > 0]
         if not g1s:
@@ -578,7 +614,9 @@ class RaceSelector:
     def _best_available_grade(self, state: GameState) -> str:
         """Return the best race grade available this turn (e.g., 'G1', 'G2')."""
         grade_rank = {"G1": 0, "G2": 1, "G3": 2, "OP": 3, "Pre-OP": 4, "Debut": 5}
-        races = self.get_races_for_turn(state.current_turn, state.max_turns)
+        races = self.get_races_for_turn(
+            state.current_turn, state.max_turns, state=state,
+        )
         best = "Pre-OP"
         for r in races:
             grade = r.get("grade", "Pre-OP")

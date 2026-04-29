@@ -173,6 +173,124 @@ class RaceOption:
 
 
 @dataclass
+class ScenarioShopItem:
+    """One offering in the Trackblazer rotating shop, sourced from
+    ``free_data_set.pick_up_item_info_array``.
+
+    Mirrors the typed schema's ``TrackblazerShopItem`` but with the bot's
+    semantic key (``ITEM_CATALOGUE`` key) attached when known. Consumers
+    that don't care about the semantic key can read ``item_id`` directly.
+    """
+
+    shop_item_id: int = 0
+    item_id: int = 0                 # master.mdb item_id
+    item_key: str = ""               # ITEM_CATALOGUE key, "" if unmapped
+    coin_num: int = 0                # current price (post-sale)
+    original_coin_num: int = 0       # pre-sale price
+    item_buy_num: int = 0            # copies already bought this rotation
+    limit_buy_count: int = 0         # max purchases this rotation
+    limit_turn: int = 0              # rotation expiry turn (0 = no limit)
+
+    @property
+    def stock_remaining(self) -> int:
+        return max(0, self.limit_buy_count - self.item_buy_num)
+
+    @property
+    def is_on_sale(self) -> bool:
+        return self.original_coin_num > 0 and self.coin_num < self.original_coin_num
+
+
+@dataclass
+class ScenarioInventoryEntry:
+    """One owned item from the Trackblazer career inventory
+    (``free_data_set.user_item_info_array``)."""
+
+    item_id: int = 0          # master.mdb item_id
+    item_key: str = ""        # ITEM_CATALOGUE key, "" if unmapped
+    num: int = 0              # quantity owned
+
+
+@dataclass
+class ActiveItemEffect:
+    """One active item effect from ``free_data_set.item_effect_array``.
+
+    The server emits one entry per (use_id, effect_type) pair, so a single
+    item activation may produce multiple entries (e.g. ankle weights have
+    both a +50% stat-gain effect and a -20% failure-rate effect on the same
+    use_id). Consumers that just want "is item X currently active?" should
+    dedupe by ``item_id`` / ``item_key``.
+    """
+
+    use_id: int = 0              # server-assigned activation serial
+    item_id: int = 0             # master.mdb item_id
+    item_key: str = ""           # ITEM_CATALOGUE key, "" if unmapped
+    effect_type: int = 0         # raw effect category (11=stat-mult, 12=failure-rate, 14=...)
+    effect_value_1: int = 0      # primary parameter (e.g. stat_type for ankle weights)
+    effect_value_2: int = 0      # magnitude (e.g. 50 = +50%)
+    effect_value_3: int = 0
+    effect_value_4: int = 0
+    begin_turn: int = 0          # first turn the effect is live (inclusive)
+    end_turn: int = 0            # last turn the effect is live (inclusive)
+
+    def turns_remaining(self, current_turn: int) -> int:
+        """How many turns the effect still covers, including ``current_turn``."""
+        if current_turn <= 0:
+            return 0
+        return max(0, self.end_turn - current_turn + 1)
+
+
+@dataclass
+class ScenarioState:
+    """Scenario-specific overlay state from the per-turn sidecar packet.
+
+    Currently populated only for Trackblazer (``free_data_set``); other
+    scenarios may extend this in the future. When ``GameState.scenario_state``
+    is non-None, the shop manager prefers it over OCR-derived inventory and
+    shop offerings.
+    """
+
+    scenario_key: str = ""              # "trackblazer" when known
+    coin: int = 0                       # current scenario coin balance
+    score: int = 0                      # Trackblazer Result Pts (a.k.a. win_points)
+    pick_up_items: list[ScenarioShopItem] = field(default_factory=list)
+    inventory: list[ScenarioInventoryEntry] = field(default_factory=list)
+    # Active item effects (megaphones, ankle weights, etc.) sourced from
+    # ``free_data_set.item_effect_array``. Replaces the OCR popup at
+    # ``auto_turn._detect_active_effects`` when the packet is fresh.
+    active_effects: list[ActiveItemEffect] = field(default_factory=list)
+
+
+@dataclass
+class UpcomingRace:
+    """A race scheduled to be available this career, sourced from the
+    server's ``race_condition_array`` (training-home response packet).
+
+    This is the packet-driven counterpart to one entry of
+    ``data/race_calendar.json``. When ``GameState.upcoming_races`` is
+    non-empty, the race selector prefers it over the static JSON.
+
+    Field shapes mirror ``data/race_calendar.json`` so consumers in
+    ``race_selector.py`` can treat both sources uniformly:
+
+    * ``grade`` is the human-readable string ("G1", "G2", "G3", "OP",
+      "Pre-OP", "") — not the master.mdb integer code.
+    * ``surface`` is "turf" or "dirt".
+    * ``month`` is 1..12, ``half`` is "early" or "late".
+    """
+
+    program_id: int = 0          # single_mode_program.id
+    race_id: int = 0             # race.id (master.mdb)
+    name: str = ""               # localized race name from text_data category 38
+    grade: str = ""              # G1 / G2 / G3 / OP / Pre-OP
+    distance_m: int = 0          # race_course_set.distance
+    surface: str = "turf"        # turf | dirt
+    month: int = 0               # 1..12
+    half: str = ""               # "early" | "late"
+    weather: int = 0             # server-provided current weather (1..4)
+    ground_condition: int = 0    # server-provided current ground (1..4)
+
+
+@dataclass
 class SkillOption:
     skill_id: str = ""
     name: str = ""
@@ -213,6 +331,9 @@ class GameState:
     event_choices: list[EventChoice] = field(default_factory=list)
     available_skills: list[SkillOption] = field(default_factory=list)
     available_races: list[RaceOption] = field(default_factory=list)
+    # Server-authoritative race lookahead from race_condition_array; when
+    # non-empty, race_selector prefers this over data/race_calendar.json.
+    upcoming_races: list[UpcomingRace] = field(default_factory=list)
     skill_pts: int = 0
     # Trainee aptitudes read from the stats page at run start.
     # Keys: short, mile, medium, long, turf, dirt. Values: S/A/B/C/D/E/F/G.
@@ -226,6 +347,10 @@ class GameState:
     result_pts: int = 0                 # Trackblazer Result Pts (e.g. 300)
     all_bonds_maxed: bool = False       # True when all support cards have bond >= 80
     result_pts_target: int = 0           # Target Result Pts for current year (e.g. 300)
+    # Scenario-specific sidecar state from the live packet (Trackblazer for
+    # now). Non-None when free_data_set or equivalent was present in the
+    # response; consumers (shop_manager) prefer this over OCR fallback.
+    scenario_state: "ScenarioState | None" = None
     confidence: float = 1.0  # Assembler confidence in this reading
     raw_detections: list[Any] = field(default_factory=list)
     timestamp: float = field(default_factory=time.time)

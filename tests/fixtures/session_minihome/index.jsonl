@@ -1,0 +1,8 @@
+{"t": 41.028, "seq": 1, "slot": "compress_initial", "dir": "in", "len": 324, "sent": 324, "truncated": false, "file": "000001_compress_initial_in.bin"}
+{"t": 41.029, "seq": 1, "slot": "compress_initial", "dir": "out", "len": 716, "sent": 716, "truncated": false, "file": "000001_compress_initial_out.bin"}
+{"t": 41.259, "seq": 2, "slot": "decompress_initial", "dir": "in", "len": 15552, "sent": 15552, "truncated": false, "file": "000002_decompress_initial_in.bin"}
+{"t": 41.26, "seq": 2, "slot": "decompress_initial", "dir": "out", "len": 11627, "sent": 11627, "truncated": false, "file": "000002_decompress_initial_out.bin"}
+{"t": 66.894, "seq": 5, "slot": "compress_initial", "dir": "in", "len": 410, "sent": 410, "truncated": false, "file": "000005_compress_initial_in.bin"}
+{"t": 66.896, "seq": 5, "slot": "compress_initial", "dir": "out", "len": 824, "sent": 824, "truncated": false, "file": "000005_compress_initial_out.bin"}
+{"t": 67.091, "seq": 6, "slot": "decompress_initial", "dir": "in", "len": 9836, "sent": 9836, "truncated": false, "file": "000006_decompress_initial_in.bin"}
+{"t": 67.092, "seq": 6, "slot": "decompress_initial", "dir": "out", "len": 7337, "sent": 7337, "truncated": false, "file": "000006_decompress_initial_out.bin"}

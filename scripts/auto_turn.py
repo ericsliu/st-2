@@ -77,6 +77,31 @@ _event_handler = EventHandler(kb=_kb, local_llm=None, claude_client=None, overri
 from uma_trainer.perception.card_tracker import CardTracker
 _card_tracker = CardTracker()
 
+# Live packet→GameState pipeline. Tailer watches the most recent capture
+# session under data/packet_captures/; adapter turns the latest decoded
+# response into the same GameState shape OCR produces. UMA_PACKET_STATE=0
+# disables the overlay (OCR-only mode); freshness gate inside the helper
+# keeps us safe when the probe isn't running.
+import os as _os
+from uma_trainer.perception.carrotjuicer.session_tailer import SessionTailer
+from uma_trainer.perception.carrotjuicer.state_adapter import (
+    CardRegistry,
+    game_state_from_response,
+)
+from uma_trainer.perception.carrotjuicer.card_semantic import load_card_semantic_map
+_session_tailer = SessionTailer(max_age_s=30.0)
+_card_registry: CardRegistry | None = None
+try:
+    _card_registry = CardRegistry()
+except Exception:
+    _card_registry = None
+_PACKET_STATE_ENABLED = _os.environ.get("UMA_PACKET_STATE", "1") != "0"
+# Opt-in (default OFF) for the packet-driven training-tile path. Skips
+# the per-tile preview tap+OCR loop when the live capture is fresh; the
+# OCR loop remains the safe default while we validate it on real runs.
+_PACKET_TRAINING_ENABLED = _os.environ.get("UMA_PACKET_TRAINING", "0") == "1"
+_CARD_SEMANTIC_MAP = load_card_semantic_map()
+
 # Race plaque matcher (lazy init — loads 302 templates on first use)
 from uma_trainer.perception.plaque_matcher import PlaqueMatcher
 _plaque_matcher: PlaqueMatcher | None = None
@@ -93,8 +118,17 @@ from uma_trainer.decision.playbook import load_playbook, PlaybookEngine
 _playbook_engine: PlaybookEngine | None = None
 _FALLBACK_FLAG = Path("data/sirius_fallback.flag")
 _strategy_name = "sirius_riko_v1_fallback" if _FALLBACK_FLAG.exists() else "sirius_riko_v1"
-print(f"[strategy] Loaded: {_strategy_name}{' (FALLBACK active)' if _FALLBACK_FLAG.exists() else ''}")
-_playbook_engine = load_playbook(_strategy_name)
+# UMA_STRATEGY=none disables the playbook entirely (legacy scorer-only mode);
+# any other value selects a strategy yaml from data/strategies/.
+_strategy_override = _os.environ.get("UMA_STRATEGY")
+if _strategy_override:
+    _strategy_name = _strategy_override
+if _strategy_name.lower() in ("none", "off", "disabled"):
+    print("[strategy] Playbook disabled (legacy scorer-only mode)")
+    _playbook_engine = None
+else:
+    print(f"[strategy] Loaded: {_strategy_name}{' (FALLBACK active)' if _FALLBACK_FLAG.exists() else ''}")
+    _playbook_engine = load_playbook(_strategy_name)
 if _playbook_engine:
     # Playbook can override the default runspec (e.g. Sirius uses sirius_speed_v1)
     if _playbook_engine.playbook.runspec:
@@ -441,13 +475,81 @@ def cure_conditions_from_inventory():
     _shop_manager.save_inventory()
 
 
+_PACKET_OVERLAY_SCREENS = {
+    "career_home", "career_home_summer", "ts_climax_home", "training",
+}
+
+
+def _build_packet_training_tiles() -> list[TrainingTile] | None:
+    """Return TrainingTile list built from the latest packet, or None.
+
+    Returns None when ``UMA_PACKET_TRAINING`` is off, the session is stale,
+    or the response doesn't contain ``home_info.command_info_array``. The
+    adapter has already populated gains, failure_rate, support_cards, and
+    bond_levels for each tile — we just paste auto_turn's tap coordinates
+    in so the rest of ``handle_training`` can use them as drop-in tiles.
+    """
+    if not _PACKET_TRAINING_ENABLED or not _session_tailer.is_fresh():
+        return None
+    state = _packet_overlay_state("training")
+    if state is None or not state.training_tiles:
+        return None
+    out: list[TrainingTile] = []
+    for tile in state.training_tiles:
+        tile_name = tile.stat_type.value.capitalize()
+        coords = TRAINING_TILES.get(tile_name, (0, 0))
+        out.append(
+            TrainingTile(
+                stat_type=tile.stat_type,
+                tap_coords=coords,
+                stat_gains=tile.stat_gains,
+                support_cards=tile.support_cards,
+                bond_levels=tile.bond_levels,
+                has_hint=tile.has_hint,
+                failure_rate=tile.failure_rate,
+            )
+        )
+    return out
+
+
+def _packet_overlay_state(screen_type: str) -> GameState | None:
+    """Build a GameState from the latest captured response, or None.
+
+    Returns None when packet capture is disabled, the latest session has
+    gone stale (probe not running), or the screen type is not one the
+    adapter currently covers. Bot decision code reads the OCR-built
+    GameState in those cases.
+    """
+    if not _PACKET_STATE_ENABLED:
+        return None
+    if screen_type not in _PACKET_OVERLAY_SCREENS:
+        return None
+    if not _session_tailer.is_fresh():
+        return None
+    response = _session_tailer.latest_response(
+        endpoint_keys=("chara_info", "home_info"),
+    )
+    if response is None:
+        return None
+    try:
+        return game_state_from_response(
+            response,
+            registry=_card_registry,
+            screen=ScreenState.TRAINING,
+            card_semantic_map=_CARD_SEMANTIC_MAP or None,
+        )
+    except Exception as e:
+        log(f"[packet-state] adapter failed: {e!r}")
+        return None
+
+
 def build_game_state(img, screen_type: str, energy: int = -1) -> GameState:
     """Build a GameState from auto_turn's screen data.
 
     This bridges auto_turn.py's raw OCR/pixel data into the uma_trainer
     type system so decision components can consume it.
     """
-    global _current_turn, _current_stats, _skill_pts
+    global _current_turn, _current_stats, _skill_pts, _cached_aptitudes
 
     # Map auto_turn screen names to ScreenState
     screen_map = {
@@ -461,6 +563,32 @@ def build_game_state(img, screen_type: str, energy: int = -1) -> GameState:
         "skill_shop": ScreenState.SKILL_SHOP,
         "complete_career": ScreenState.RESULT_SCREEN,
     }
+
+    # Prefer packet-driven state when a fresh capture is available. This
+    # skips period+stat OCR entirely; the rest of the bot keeps reading
+    # _current_turn / _current_stats / _skill_pts globals.
+    overlay = _packet_overlay_state(screen_type)
+    if overlay is not None:
+        if overlay.current_turn:
+            _current_turn = overlay.current_turn
+        _current_stats = overlay.stats
+        _skill_pts = overlay.skill_pts
+        # Sync aptitudes so module-level callers (run-style picker, etc.)
+        # see packet-derived values without needing the Full Stats OCR pass.
+        if overlay.trainee_aptitudes:
+            _cached_aptitudes = dict(overlay.trainee_aptitudes)
+        overlay.screen = screen_map.get(screen_type, ScreenState.UNKNOWN)
+        if screen_type == "career_home_summer":
+            overlay.current_turn = max(overlay.current_turn, 25)
+        if energy >= 0:
+            overlay.energy = energy
+        log(
+            f"[packet-state] Stats: Spd={overlay.stats.speed} "
+            f"Sta={overlay.stats.stamina} Pow={overlay.stats.power} "
+            f"Gut={overlay.stats.guts} Wit={overlay.stats.wit} "
+            f"SP={overlay.skill_pts} energy={overlay.energy} turn={overlay.current_turn}"
+        )
+        return overlay
 
     # Read period text from top-left (e.g. "Classic Year Early Apr")
     # The "X turn(s) left" is a GOAL DEADLINE, not a turn counter.
@@ -1504,7 +1632,23 @@ def _detect_active_effects():
     Taps the left-side effect icon to open the Active Item Effects popup,
     reads it via OCR, then closes it. Updates _shop_manager._active_effects.
     Returns True if any effects were detected.
+
+    Packet-state shortcut: when the live capture is fresh, the
+    Trackblazer ``free_data_set.item_effect_array`` already lists every
+    active effect (with item_id and end_turn). ``apply_packet_state``
+    rebuilds ``_shop_manager._active_effects`` from it, so the OCR popup
+    never has to open. Falls through to the OCR path on stale/missing
+    packet or non-Trackblazer scenarios.
     """
+    overlay = _packet_overlay_state("career_home")
+    if overlay is not None and _shop_manager.apply_packet_state(overlay):
+        active = _shop_manager._active_effects
+        if active:
+            log(f"Active effects from packet: {[(e.item_key, e.turns_remaining) for e in active]}")
+        else:
+            log("Active effects from packet: none")
+        return bool(active)
+
     from scripts.ocr_util import ocr_image as ocr_full
     import tempfile, os
 
@@ -2336,10 +2480,22 @@ _inventory_checked = False  # Read Training Items on first career_home
 
 
 def read_inventory_from_training_items():
-    """Open Training Items screen, OCR item names and counts, update inventory."""
+    """Open Training Items screen, OCR item names and counts, update inventory.
+
+    Packet path: when a fresh capture is available and the response carries
+    Trackblazer ``free_data_set.user_item_info_array``, sync inventory from
+    that and skip the Training Items screen navigation entirely.
+    """
     global _inventory_checked
     from uma_trainer.decision.shop_manager import ITEM_CATALOGUE
     from rapidfuzz import fuzz, process
+
+    overlay = _packet_overlay_state("career_home")
+    if overlay is not None and _shop_manager.apply_packet_state(overlay):
+        log(f"Inventory from packet: {dict(_shop_manager.inventory)}")
+        _shop_manager.save_inventory()
+        _inventory_checked = True
+        return
 
     log("Reading inventory from Training Items screen...")
     from scripts.ocr_util import ocr_image as ocr_full
@@ -3488,6 +3644,14 @@ def handle_training():
 
     log("Training — previewing all tiles")
 
+    # Packet-driven preview short-circuit: the home_info.command_info_array
+    # carries gains, failure_rate, partners, and bonds for every tile, so
+    # we can skip the per-tile preview tap+OCR loop entirely. Opt-in via
+    # UMA_PACKET_TRAINING while the path bakes.
+    packet_tiles = _build_packet_training_tiles()
+    if packet_tiles is not None:
+        log(f"  Packet preview: {len(packet_tiles)} tiles (skipped OCR loop)")
+
     # Check which tile is pre-raised by reading gains before tapping
     # A pre-raised tile will show gains; tapping it again would CONFIRM training
     img_initial = screenshot(f"train_initial_{int(time.time())}")
@@ -3519,71 +3683,95 @@ def handle_training():
     initial_bgr = initial_rgb[:, :, ::-1].copy()
     tile_hints = _detect_tile_hints(initial_bgr)
 
-    # Build TrainingTile objects from OCR data
-    tiles = []
     last_previewed_tile = None
-    for tile_name, (tx, ty) in TRAINING_TILES.items():
-        if tile_name == pre_raised_tile:
-            # Already raised — use the initial screenshot, don't tap
-            img = img_initial
-            gains = pre_gains
-        else:
-            tap(tx, ty, delay=1)
-            last_previewed_tile = tile_name
-            img = screenshot(f"train_preview_{tile_name.lower()}_{int(time.time())}")
+    img = img_initial
+    if packet_tiles is not None:
+        # Packet path: tiles already populated from home_info.command_info_array.
+        # Overlay hint badges from the screenshot — they're not in the response.
+        for tile in packet_tiles:
+            tile_key = tile.stat_type.value.capitalize()
+            if tile_hints.get(tile_key, False):
+                tile.has_hint = True
+        tiles = packet_tiles
+        for tile in tiles:
+            gains_str = ", ".join(f"{k}+{v}" for k, v in sorted(tile.stat_gains.items()))
+            hint_str = " HINT" if tile.has_hint else ""
+            bond_str = f" bonds={tile.bond_levels}" if tile.bond_levels else ""
+            log(
+                f"  {tile.stat_type.value:8s}: total={tile.total_stat_gain}, "
+                f"cards={len(tile.support_cards)}{bond_str}{hint_str} "
+                f"fail={int(tile.failure_rate*100)}% ({gains_str})"
+            )
+    else:
+        # OCR path: preview each tile in turn and read gains.
+        tiles = []
+        for tile_name, (tx, ty) in TRAINING_TILES.items():
+            if tile_name == pre_raised_tile:
+                # Already raised — use the initial screenshot, don't tap
+                img = img_initial
+                gains = pre_gains
+            else:
+                tap(tx, ty, delay=1)
+                last_previewed_tile = tile_name
+                img = screenshot(f"train_preview_{tile_name.lower()}_{int(time.time())}")
 
-            # Check if an event fired during preview (events overlay training)
-            screen_check = detect_screen(img)
-            if screen_check != "training":
-                log(f"  {tile_name}: interrupted by {screen_check} — aborting preview")
-                return screen_check
+                # Check if an event fired during preview (events overlay training)
+                screen_check = detect_screen(img)
+                if screen_check != "training":
+                    log(f"  {tile_name}: interrupted by {screen_check} — aborting preview")
+                    return screen_check
 
-            gains = _ocr_training_gains(img)
+                gains = _ocr_training_gains(img)
 
-        fail_rate = _ocr_failure_rate(img)
-        # Count support card portraits and read bond levels
-        n_cards = count_portraits(img)
+            fail_rate = _ocr_failure_rate(img)
+            # Count support card portraits and read bond levels
+            n_cards = count_portraits(img)
 
-        # Read bond gauge fill levels for each card on this tile
-        frame_rgb = np.array(img.convert("RGB"))
-        frame_bgr = frame_rgb[:, :, ::-1].copy()
-        bond_levels = read_bond_levels(frame_bgr)
-        # Pad/trim to match card count
-        if len(bond_levels) < n_cards:
-            bond_levels.extend([80] * (n_cards - len(bond_levels)))
-        bond_levels = bond_levels[:n_cards]
+            # Read bond gauge fill levels for each card on this tile
+            frame_rgb = np.array(img.convert("RGB"))
+            frame_bgr = frame_rgb[:, :, ::-1].copy()
+            bond_levels = read_bond_levels(frame_bgr)
+            # Pad/trim to match card count
+            if len(bond_levels) < n_cards:
+                bond_levels.extend([80] * (n_cards - len(bond_levels)))
+            bond_levels = bond_levels[:n_cards]
 
-        # Identify cards via portrait matching and update bond tracker
-        card_ids = _card_tracker.identify_cards(frame_bgr, n_cards, bond_levels)
+            # Identify cards via portrait matching and update bond tracker
+            card_ids = _card_tracker.identify_cards(frame_bgr, n_cards, bond_levels)
 
-        # Use pre-detected hint from tile buttons
-        has_hint = tile_hints.get(tile_name, False)
+            # Use pre-detected hint from tile buttons
+            has_hint = tile_hints.get(tile_name, False)
 
-        stat_type = StatType(tile_name.lower())
-        tile = TrainingTile(
-            stat_type=stat_type,
-            tap_coords=(tx, ty),
-            stat_gains={k.lower(): v for k, v in gains.items()},
-            support_cards=card_ids,
-            bond_levels=bond_levels,
-            has_hint=has_hint,
-        )
-        tiles.append(tile)
+            stat_type = StatType(tile_name.lower())
+            tile = TrainingTile(
+                stat_type=stat_type,
+                tap_coords=(tx, ty),
+                stat_gains={k.lower(): v for k, v in gains.items()},
+                support_cards=card_ids,
+                bond_levels=bond_levels,
+                has_hint=has_hint,
+            )
+            tiles.append(tile)
 
-        hint_str = " HINT" if has_hint else ""
-        bond_str = f" bonds={bond_levels}" if bond_levels else ""
-        gains_str = ", ".join(f"{k}+{v}" for k, v in sorted(gains.items()))
-        fail_str = f" fail={fail_rate}%" if fail_rate is not None else " fail=?"
-        log(f"  {tile_name}: total={tile.total_stat_gain}, cards={n_cards}{bond_str}{hint_str}{fail_str} ({gains_str})")
+            hint_str = " HINT" if has_hint else ""
+            bond_str = f" bonds={bond_levels}" if bond_levels else ""
+            gains_str = ", ".join(f"{k}+{v}" for k, v in sorted(gains.items()))
+            fail_str = f" fail={fail_rate}%" if fail_rate is not None else " fail=?"
+            log(f"  {tile_name}: total={tile.total_stat_gain}, cards={n_cards}{bond_str}{hint_str}{fail_str} ({gains_str})")
 
     # Build GameState and let the scorer decide
     energy = get_energy_level(img)
     state = build_game_state(img, "training", energy=energy)
     state.training_tiles = tiles
-    state.all_bonds_maxed = _card_tracker.all_bonds_maxed()
-
-    if _card_tracker.card_count > 0:
-        log(f"Bond tracker: {_card_tracker.summary()}")
+    if packet_tiles is not None:
+        # Packet path skipped per-tile sprite matching — derive all_bonds_maxed
+        # from the bond_levels the adapter parsed off home_info.command_info_array.
+        all_levels = [b for tile in tiles for b in tile.bond_levels]
+        state.all_bonds_maxed = bool(all_levels) and all(b >= 80 for b in all_levels)
+    else:
+        state.all_bonds_maxed = _card_tracker.all_bonds_maxed()
+        if _card_tracker.card_count > 0:
+            log(f"Bond tracker: {_card_tracker.summary()}")
 
     # Pair commitment: if this is a pair-lead turn that needs tile preview to
     # decide between race+Riko vs train+train, evaluate now and either commit
@@ -5167,7 +5355,7 @@ def _run_one_turn_inner(stop_before=None):
 
     elif screen == "race_live":
         log("Live race — tapping Skip to fast-forward")
-        tap(778, 1862, delay=3.0)
+        tap(970, 1862, delay=3.0)
         return "race_live_skip"
 
     elif screen == "concert_confirm":

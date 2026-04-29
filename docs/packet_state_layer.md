@@ -154,6 +154,7 @@ Start with tail+decode. Switch to socket only if turn latency becomes an issue.
 ## References
 
 - Runtime stack + capture trigger lifecycle: `docs/packet_capture_runtime.md`
+- Typed schema coverage + gap/TODO audit: `docs/packet_schema_audit.md`
 - Hook implementation: `frida_agent/src/hook_deserializer.ts` (`captureCuteHttpDelegates`)
 - Probe driver + persistence: `scripts/frida_c1_probe.py` (`--capture-cute-http`; armed-by-default, `--capture-auto` to fire on attach)
 - Offline decoder: `scripts/decode_uma_capture.py`

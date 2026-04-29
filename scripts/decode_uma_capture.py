@@ -19,54 +19,27 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import base64
 import collections
 import json
 import sys
 from pathlib import Path
 
-import msgpack
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-CAPTURE_ROOT = Path(__file__).resolve().parents[1] / "data" / "packet_captures"
+from uma_trainer.perception.carrotjuicer._decode import (
+    CAPTURE_ROOT,
+    decode_payload,
+    is_plaintext_slot,
+    latest_session as _latest_session,
+    load_index,
+)
 
 
 def latest_session() -> Path:
-    sessions = sorted(p for p in CAPTURE_ROOT.iterdir() if p.is_dir() and p.name.startswith("session_"))
-    if not sessions:
-        raise SystemExit(f"no sessions found in {CAPTURE_ROOT}")
-    return sessions[-1]
-
-
-def load_index(session_dir: Path) -> list[dict]:
-    entries = []
-    with (session_dir / "index.jsonl").open() as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            entries.append(json.loads(line))
-    return entries
-
-
-def decode_payload(path: Path, is_plaintext: bool) -> tuple[str, object]:
-    raw = path.read_bytes()
-    if not is_plaintext:
-        return "ciphertext_b64", base64.b64encode(raw).decode("ascii")
     try:
-        obj = msgpack.unpackb(raw, raw=False, strict_map_key=False)
-        return "msgpack", obj
-    except Exception as e:
-        return "decode_err", f"{type(e).__name__}: {e}"
-
-
-def is_plaintext_slot(slot: str, direction: str) -> bool:
-    # compress: in=plaintext, out=ciphertext
-    # decompress: in=ciphertext, out=plaintext
-    if slot.startswith("compress"):
-        return direction == "in"
-    if slot.startswith("decompress"):
-        return direction == "out"
-    return False
+        return _latest_session()
+    except FileNotFoundError as e:
+        raise SystemExit(str(e))
 
 
 def main() -> int:
