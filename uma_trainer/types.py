@@ -330,6 +330,11 @@ class GameState:
     event_text: str = ""
     event_choices: list[EventChoice] = field(default_factory=list)
     available_skills: list[SkillOption] = field(default_factory=list)
+    # Packet-driven skill rosters (populated from chara_info + master.mdb when
+    # SessionTailer is fresh). available_skills above stays for the OCR path.
+    buyable_skills: list[Any] = field(default_factory=list)  # list[BuyableSkill]
+    owned_skill_ids: set[int] = field(default_factory=set)
+    disabled_skill_ids: set[int] = field(default_factory=set)
     available_races: list[RaceOption] = field(default_factory=list)
     # Server-authoritative race lookahead from race_condition_array; when
     # non-empty, race_selector prefers this over data/race_calendar.json.
@@ -338,6 +343,12 @@ class GameState:
     # Trainee aptitudes read from the stats page at run start.
     # Keys: short, mile, medium, long, turf, dirt. Values: S/A/B/C/D/E/F/G.
     active_conditions: list[Condition] = field(default_factory=list)
+    # Lowercase string keys mirroring scripts.auto_turn.CONDITION_CURES /
+    # POSITIVE_KEYWORDS, populated by the packet path from
+    # ``chara_info.chara_effect_id_array``. Parallel to ``active_conditions``
+    # rather than a replacement so the OCR fallback path still works.
+    condition_keys: list[str] = field(default_factory=list)
+    positive_statuses: list[str] = field(default_factory=list)
     trainee_aptitudes: dict[str, str] = field(default_factory=dict)
     # TS Climax state (only populated during Twinkle Star Climax phase)
     ts_climax_races_done: int = 0   # e.g. 0 in "0/3 Races"

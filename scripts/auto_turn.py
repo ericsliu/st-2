@@ -89,12 +89,18 @@ from uma_trainer.perception.carrotjuicer.state_adapter import (
     game_state_from_response,
 )
 from uma_trainer.perception.carrotjuicer.card_semantic import load_card_semantic_map
+from uma_trainer.knowledge.skill_catalog import SkillCatalog
 _session_tailer = SessionTailer(max_age_s=30.0)
 _card_registry: CardRegistry | None = None
 try:
     _card_registry = CardRegistry()
 except Exception:
     _card_registry = None
+_skill_catalog: SkillCatalog | None = None
+try:
+    _skill_catalog = SkillCatalog()
+except Exception:
+    _skill_catalog = None
 _PACKET_STATE_ENABLED = _os.environ.get("UMA_PACKET_STATE", "1") != "0"
 # Opt-in (default OFF) for the packet-driven training-tile path. Skips
 # the per-tile preview tap+OCR loop when the live capture is fresh; the
@@ -360,7 +366,9 @@ def _parse_aptitudes_from_image(img):
 def read_fullstats():
     """Navigate to Full Stats screen, OCR aptitudes + conditions, close.
 
-    Runs every turn to keep state in sync with the game.
+    Fallback path. Primary source is the packet overlay in
+    ``build_game_state()``; this only runs when ``_session_tailer.is_fresh()``
+    is False or ``UMA_PACKET_STATE=0`` (see ``_should_call_fullstats``).
     Returns dict of aptitudes or None on failure.
     """
     global _cached_aptitudes, _active_conditions, _positive_statuses, _sirius_bond_unlocked
@@ -414,13 +422,11 @@ def read_fullstats():
     POSITIVE_KEYWORDS = ["charming", "practice perfect", "hot topic", "pure passion"]
     _positive_statuses = [s for s in POSITIVE_KEYWORDS if s in pos_text]
 
-    # Pure Passion = Team Sirius bond event already fired
-    if "pure passion" in _positive_statuses and not _sirius_bond_unlocked:
-        _sirius_bond_unlocked = True
-        _SIRIUS_BOND_FILE.touch()
-        log("Pure Passion detected — Sirius bond unlocked (from Full Stats)")
-        _scorer.mark_bond_complete("team_sirius")
-        _promote_post_sirius_priorities()
+    # NOTE: Sirius bond unlock detection moved to the packet overlay block in
+    # build_game_state() — driven by ``state.positive_statuses`` carrying
+    # ``"pure passion"`` (chara_effect_id 100/101). This OCR fallback path
+    # only runs when the capture is stale, in which case the game-log
+    # "shining stars" probe in _read_game_log() catches the unlock.
 
     if aptitudes:
         log(f"Aptitudes: {aptitudes}")
@@ -512,6 +518,21 @@ def _build_packet_training_tiles() -> list[TrainingTile] | None:
     return out
 
 
+def _should_call_fullstats() -> bool:
+    """Return True when the OCR Full Stats screen pass must run.
+
+    Packet path is preferred when the live capture is fresh AND
+    ``UMA_PACKET_STATE`` isn't explicitly disabled. Otherwise we fall
+    through to the OCR screen pass that ``read_fullstats()`` performs
+    (aptitudes, conditions, positive statuses, Sirius bond probe).
+    """
+    if _os.environ.get("UMA_PACKET_STATE") == "0":
+        return True
+    if not _session_tailer.is_fresh():
+        return True
+    return False
+
+
 def _packet_overlay_state(screen_type: str) -> GameState | None:
     """Build a GameState from the latest captured response, or None.
 
@@ -537,6 +558,7 @@ def _packet_overlay_state(screen_type: str) -> GameState | None:
             registry=_card_registry,
             screen=ScreenState.TRAINING,
             card_semantic_map=_CARD_SEMANTIC_MAP or None,
+            skill_catalog=_skill_catalog,
         )
     except Exception as e:
         log(f"[packet-state] adapter failed: {e!r}")
@@ -550,6 +572,7 @@ def build_game_state(img, screen_type: str, energy: int = -1) -> GameState:
     type system so decision components can consume it.
     """
     global _current_turn, _current_stats, _skill_pts, _cached_aptitudes
+    global _active_conditions, _positive_statuses, _sirius_bond_unlocked
 
     # Map auto_turn screen names to ScreenState
     screen_map = {
@@ -577,6 +600,27 @@ def build_game_state(img, screen_type: str, energy: int = -1) -> GameState:
         # see packet-derived values without needing the Full Stats OCR pass.
         if overlay.trainee_aptitudes:
             _cached_aptitudes = dict(overlay.trainee_aptitudes)
+        # Sync conditions + positive statuses from packet so read_fullstats()
+        # (the OCR fallback) only runs when the capture is stale or disabled.
+        _active_conditions = list(overlay.condition_keys)
+        _positive_statuses = list(overlay.positive_statuses)
+        # Pure Passion (chara_effect_id 100/101) === Team Sirius bond unlock.
+        # Server-authoritative — appears the moment the bond event resolves
+        # and persists for the rest of the run. Replaces the OCR detector
+        # in read_fullstats() and the game-log "shining stars" probe.
+        if "pure passion" in _positive_statuses and not _sirius_bond_unlocked:
+            _sirius_bond_unlocked = True
+            try:
+                _SIRIUS_BOND_FILE.touch()
+            except Exception as e:
+                log(f"[packet-state] could not touch sirius bond flag: {e!r}")
+            log("[packet-state] Pure Passion detected — Sirius bond unlocked")
+            try:
+                _scorer.set_bond_override("team_sirius", 60)
+                _scorer.mark_bond_complete("team_sirius")
+                _promote_post_sirius_priorities()
+            except Exception as e:
+                log(f"[packet-state] sirius bond hooks failed: {e!r}")
         overlay.screen = screen_map.get(screen_type, ScreenState.UNKNOWN)
         if screen_type == "career_home_summer":
             overlay.current_turn = max(overlay.current_turn, 25)
@@ -809,6 +853,27 @@ def find_green_button(img, y_range, x_range=(300, 950)):
     return (green_ys[mid][1], green_ys[mid][0])
 
 
+def is_button_active(img, cx, cy, half_w=60, half_h=20, min_ratio=0.35):
+    """Check whether a green CTA button is enabled (saturated) vs grayed.
+
+    Disabled buttons share the same shape but are desaturated — the green
+    channel still dominates slightly but the (g - r) gap is small. Sample
+    a small grid around the button center and require min_ratio of points
+    to clear the is_green threshold.
+    """
+    hits = 0
+    samples = 0
+    for dy in range(-half_h, half_h + 1, 4):
+        for dx in range(-half_w, half_w + 1, 6):
+            samples += 1
+            r, g, b = px(img, cx + dx, cy + dy)
+            if is_green(r, g, b):
+                hits += 1
+    if samples == 0:
+        return False
+    return hits / samples >= min_ratio
+
+
 def _confirm_race_entry():
     """Confirm race entry, dismissing the consecutive-races Warning popup if shown.
 
@@ -1035,6 +1100,17 @@ def detect_screen(img):
     # Skill shop (Learn screen) — has skill list with Confirm button
     if has("Learn") and has("Confirm") and has("Skill Points"):
         return "skill_shop"
+
+    # Training Items / Exchange Complete dialogs — recognized only when we
+    # find ourselves looking at one without an active flow driving it. The
+    # in-flow handlers (`_use_training_items`, `_use_exchange_items`) drive
+    # these screens directly, so this classifier only fires when they exit
+    # back into the main loop or get interrupted mid-tap.
+    if has("Confirm Use") and has("Close"):
+        if has("Exchange Complete"):
+            return "exchange_complete_idle"
+        if has("Training Items"):
+            return "training_items_idle"
 
     # Shop screen
     if has("Shop Coins") or (has("Shop") and has("Cost")):
@@ -1610,8 +1686,16 @@ def _read_game_log():
     full_text = " ".join(t.strip() for t, c, _ in results if c > 0.25)
     log(f"Game log OCR ({len(full_text)} chars): {full_text[:200]}")
 
-    # Check for Sirius bond unlock event
-    if not _sirius_bond_unlocked and "shining stars" in full_text.lower():
+    # Check for Sirius bond unlock event. When the packet capture is fresh
+    # the overlay path in build_game_state() already drives this signal off
+    # ``state.positive_statuses`` (chara_effect_id 100/101 = Pure Passion);
+    # only fall through to game-log scraping when the session is stale, so
+    # we don't double-fire on the same career.
+    if (
+        not _sirius_bond_unlocked
+        and not _session_tailer.is_fresh()
+        and "shining stars" in full_text.lower()
+    ):
         _sirius_bond_unlocked = True
         _SIRIUS_BOND_FILE.touch()
         log("Sirius bond event detected — bond unlocked!")
@@ -2303,6 +2387,131 @@ def _scan_all_skills():
     return list(all_skills.values()), sp
 
 
+def _normalize_skill_name(name: str) -> str:
+    """Lower-cased, alnum-only skill name for fuzzy match across packet/OCR."""
+    return "".join(c for c in name.lower() if c.isalnum())
+
+
+def _buy_skills_from_targets(targets, max_pages: int = 6):
+    """Localise a known list of target skills via OCR and tap their + buttons.
+
+    Used by the packet-driven fast path in :func:`handle_skill_shop`. The
+    scrolling logic is much shorter than :func:`_scan_all_skills` because we
+    already know exactly which skills we're looking for — we stop the moment
+    every target is matched, or when two consecutive pages produce no OCR
+    results (end of list).
+
+    Returns ``(matched, unmatched)`` lists of the original target objects.
+    """
+    if not targets:
+        return [], []
+
+    # Build a normalised lookup for fuzzy matching against OCR'd names.
+    # Each entry maps norm_name -> original BuyableSkill target.
+    pending: dict[str, object] = {}
+    for t in targets:
+        key = _normalize_skill_name(getattr(t, "name", ""))
+        if key:
+            pending[key] = t
+
+    matched: list = []
+
+    # Scroll to top — packet path's target list is small so we don't need 8.
+    log("[skill-shop] scrolling to top for packet-driven buy")
+    for _ in range(4):
+        scroll_up(settle=0.6)
+    time.sleep(0.5)
+
+    empty_streak = 0
+    for page in range(max_pages):
+        if not pending:
+            break
+        img = screenshot(f"skill_buy_packet_{page}_{int(time.time())}")
+        visible = _ocr_skill_list(img)
+        if not visible:
+            empty_streak += 1
+            if empty_streak >= 2:
+                log("[skill-shop] two empty pages in a row — stopping scan")
+                break
+        else:
+            empty_streak = 0
+
+        page_hits = 0
+        for skill in visible:
+            ocr_norm = _normalize_skill_name(skill.name)
+            if not ocr_norm:
+                continue
+            # Match if either name contains the other (after normalisation),
+            # i.e. case-insensitive substring both ways. Mirrors how
+            # OverridesLoader.is_priority_skill matches names.
+            hit_key = None
+            for key in pending:
+                if key == ocr_norm or key in ocr_norm or ocr_norm in key:
+                    hit_key = key
+                    break
+            if hit_key is None:
+                continue
+            target = pending.pop(hit_key)
+            log(
+                f"[skill-shop] tapping + for '{getattr(target, 'name', '')}' "
+                f"at {skill.tap_coords}"
+            )
+            tap(skill.tap_coords[0], skill.tap_coords[1])
+            time.sleep(0.5)
+            matched.append(target)
+            page_hits += 1
+            if not pending:
+                break
+
+        log(
+            f"[skill-shop] page {page}: visible={len(visible)} matched={page_hits} "
+            f"remaining={len(pending)}"
+        )
+        if not pending:
+            break
+        scroll_down("short", settle=1.0)
+
+    unmatched = list(pending.values())
+    return matched, unmatched
+
+
+def _confirm_skill_purchase():
+    """Tap Confirm + handle the 'Learn the above skills?' dialog.
+
+    Shared between the OCR and packet-driven branches of
+    :func:`handle_skill_shop`. Caller is responsible for having tapped the
+    individual + buttons first.
+    """
+    time.sleep(0.5)
+    fresh_img = screenshot(f"skill_confirm_{int(time.time())}")
+    confirm_btn = find_green_button(fresh_img, (1570, 1640), (100, 500))
+    if confirm_btn:
+        log(f"[skill-shop] found Confirm at {confirm_btn}")
+        tap(confirm_btn[0], confirm_btn[1])
+    else:
+        log("[skill-shop] Confirm button not found — tapping default coords")
+        tap(270, 1600)
+
+    time.sleep(1.5)
+    learn_img = screenshot(f"skill_learn_{int(time.time())}")
+    learn_screen = detect_screen(learn_img)
+    if learn_screen == "skill_confirm_dialog":
+        log("[skill-shop] tapping Learn on confirmation dialog")
+        tap(810, 1830, delay=2.0)
+        for _ in range(5):
+            time.sleep(1.5)
+            sl_img = screenshot(f"skill_learned_{int(time.time())}")
+            sl_screen = detect_screen(sl_img)
+            if sl_screen == "skills_learned":
+                log("[skill-shop] Skills Learned popup — tapping Close")
+                tap(540, 1200)
+                break
+            elif sl_screen == "skill_confirm_dialog":
+                tap(810, 1830)
+            else:
+                tap(540, 960)
+
+
 def handle_skill_shop(img, force_recovery=False):
     """Buy skills from the skill shop screen.
 
@@ -2310,7 +2519,51 @@ def handle_skill_shop(img, force_recovery=False):
     skills until we hit SP reserve. At Complete Career, spend everything.
     If force_recovery=True, lower SP reserve and prioritize recovery skills.
     """
-    global _skill_shop_done
+    global _skill_shop_done, _recovery_skills_bought
+
+    # Packet-driven fast path: when SessionTailer has a fresh capture and the
+    # adapter populated buyable_skills, we already know which skills the game
+    # offers — skip the slow 8-swipe + 15-page OCR scan and just localise our
+    # planned targets. force_recovery still falls through to the OCR path
+    # because it needs visibility into the full SP/cost picture.
+    if (
+        not force_recovery
+        and _session_tailer.is_fresh()
+        and getattr(_game_state, "buyable_skills", None)
+    ):
+        targets = _skill_buyer.decide_from_packet(_game_state)
+        log(
+            f"[skill-shop] packet plan: {len(targets)} targets, "
+            f"budget={getattr(_game_state, 'skill_pts', 0)}"
+        )
+        for t in targets:
+            log(
+                f"[skill-shop]   → {getattr(t, 'name', '?')} "
+                f"(cost={getattr(t, 'effective_cost', getattr(t, 'base_cost', 0))})"
+            )
+        if targets:
+            matched, unmatched = _buy_skills_from_targets(targets)
+            log(
+                f"[skill-shop] matched {len(matched)}/{len(targets)}; "
+                f"unmatched={[getattr(s, 'name', '?') for s in unmatched]}"
+            )
+            if matched:
+                _confirm_skill_purchase()
+                for t in matched:
+                    name = getattr(t, "name", "")
+                    if name and name.lower() in _RECOVERY_SKILL_NAMES:
+                        _recovery_skills_bought += 1
+                        log(
+                            f"[skill-shop] recovery skill bought: {name} "
+                            f"(total: {_recovery_skills_bought})"
+                        )
+                return "skill_shop"
+            log("[skill-shop] no targets matched on screen — falling back to OCR scan")
+        else:
+            log("[skill-shop] packet plan empty — exiting without OCR scan")
+            _skill_shop_done = True
+            tap(40, 1830)
+            return "skill_back"
 
     # Phase 1: Scan all pages
     all_skills, sp = _scan_all_skills()
@@ -2421,41 +2674,11 @@ def handle_skill_shop(img, force_recovery=False):
         tap(40, 1830)
         return "skill_back"
 
-    # Phase 4: Confirm purchase
+    # Phase 4+5: Confirm purchase + handle "Learn the above skills?" dialog
     log(f"Confirming {len(bought)} skill purchases")
-    time.sleep(0.5)
-    fresh_img = screenshot(f"skill_confirm_{int(time.time())}")
-    confirm_btn = find_green_button(fresh_img, (1570, 1640), (100, 500))
-    if confirm_btn:
-        log(f"  Found Confirm at {confirm_btn}")
-        tap(confirm_btn[0], confirm_btn[1])
-    else:
-        log("  Confirm button not found — tapping default coords")
-        tap(270, 1600)
-
-    # Phase 5: Handle "Learn the above skills?" confirmation dialog
-    time.sleep(1.5)
-    learn_img = screenshot(f"skill_learn_{int(time.time())}")
-    learn_screen = detect_screen(learn_img)
-    if learn_screen == "skill_confirm_dialog":
-        log("  Tapping Learn on confirmation dialog")
-        tap(810, 1830, delay=2.0)
-        # Wait for "Skills Learned" popup and close it
-        for _ in range(5):
-            time.sleep(1.5)
-            sl_img = screenshot(f"skill_learned_{int(time.time())}")
-            sl_screen = detect_screen(sl_img)
-            if sl_screen == "skills_learned":
-                log("  Skills Learned popup — tapping Close")
-                tap(540, 1200)
-                break
-            elif sl_screen == "skill_confirm_dialog":
-                tap(810, 1830)
-            else:
-                tap(540, 960)
+    _confirm_skill_purchase()
 
     # Track recovery skills bought
-    global _recovery_skills_bought
     for name in bought:
         if name.lower() in _RECOVERY_SKILL_NAMES:
             _recovery_skills_bought += 1
@@ -3208,7 +3431,13 @@ def _use_shop_exchange_items(use_now_keys):
         return False
 
     # Confirm Use (green) → final confirmation popup (Use button, same position
-    # as Training Items) → result Close
+    # as Training Items) → result Close. Re-screenshot first so we can verify
+    # the button is actually active — disabled buttons keep the same shape.
+    pre_confirm = screenshot(f"shop_exchange_pre_confirm_{int(time.time())}")
+    if not is_button_active(pre_confirm, *CONFIRM_USE_BTN):
+        log("  Confirm Use is grayed out — nothing landed on the dialog. Tapping Close")
+        tap(*CLOSE_BTN, delay=2.0)
+        return False
     log("  Tapping Confirm Use")
     tap(*CONFIRM_USE_BTN, delay=2.5)
     # Final confirmation popup mirrors Training Items layout
@@ -3425,6 +3654,14 @@ def _use_training_items(item_keys):
             break
 
     if used_any:
+        # Confirm Use grays out when no quantity is staged. If our taps
+        # never landed (wrong row, dimmed +, scroll race) the count stays
+        # at zero — bail to Close instead of pumping a dead button.
+        pre_confirm = screenshot(f"use_items_pre_confirm_{int(time.time())}")
+        if not is_button_active(pre_confirm, *BTN_ITEMS_CONFIRM):
+            log("Confirm Use is grayed out — taps did not register. Tapping Close")
+            tap(*BTN_ITEMS_CLOSE, delay=1.5)
+            return False
         log("Tapping Confirm Use")
         tap(*BTN_ITEMS_CONFIRM, delay=2.0)
         # Confirmation popup: "Use Training Items" — same position
@@ -4097,13 +4334,18 @@ def _handle_career_home(img):
         energy = get_energy_level(img)
     log(f"Energy: ~{energy}% | Turn: {_current_turn} | Consecutive races: {_scenario._consecutive_races}")
 
-    # Read Full Stats (aptitudes + conditions)
-    read_fullstats()
-    time.sleep(1)
-    img = _wait_for_career_home("post_stats")
-    if img is None:
-        return "recovering"
-    energy = get_energy_level(img)
+    # Read Full Stats (aptitudes + conditions). Packet path populates these
+    # globals during build_game_state(); only fall back to OCR when the
+    # session is stale or UMA_PACKET_STATE=0.
+    if _should_call_fullstats():
+        read_fullstats()
+        time.sleep(1)
+        img = _wait_for_career_home("post_stats")
+        if img is None:
+            return "recovering"
+        energy = get_energy_level(img)
+    else:
+        log(f"[packet-state] Conditions: {_active_conditions}; Positive: {_positive_statuses}")
 
     # Build authoritative game state with aptitudes
     _game_state = build_game_state(img, "career_home", energy=energy)
@@ -5497,6 +5739,16 @@ def _run_one_turn_inner(stop_before=None):
 
     elif screen == "skill_shop":
         return handle_skill_shop(img)
+
+    elif screen in ("training_items_idle", "exchange_complete_idle"):
+        # We landed on the items dialog without an active use flow driving
+        # it (probable causes: a prior _use_training_items hit Confirm with
+        # nothing selected, or the dialog reopened on its own). Tap Close
+        # to dismiss — never blindly retry Confirm Use.
+        active = is_button_active(img, *BTN_ITEMS_CONFIRM)
+        log(f"Items dialog idle ({screen}); Confirm Use active={active} — tapping Close")
+        tap(*BTN_ITEMS_CLOSE, delay=2.0)
+        return "items_dialog_close"
 
     else:
         # Check if this is actually a pre_race screen that OCR missed

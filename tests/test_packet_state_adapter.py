@@ -317,6 +317,105 @@ def test_shop_manager_active_effects_skipped_when_no_packet():
     assert sm._active_effects == [sentinel]
 
 
+def _mutate_chara_effects(response: dict, ids: list[int]) -> dict:
+    """Return a deep-ish copy of ``response`` with chara_effect_id_array set.
+
+    The fixture is plain msgpack-decoded data; we mutate the inner
+    chara_info dict directly. The adapter only consumes ``data["chara_info"]``,
+    so a shallow tweak is sufficient.
+    """
+    data = response.get("data") if "data" in response else response
+    chara = dict(data.get("chara_info") or {})
+    chara["chara_effect_id_array"] = list(ids)
+    new_data = dict(data)
+    new_data["chara_info"] = chara
+    if "data" in response:
+        return {**response, "data": new_data}
+    return new_data
+
+
+def test_chara_effects_empty_when_array_empty(response):
+    """The fixture's chara_effect_id_array is empty → both lists empty."""
+    gs = game_state_from_response(response)
+    assert gs.condition_keys == []
+    assert gs.positive_statuses == []
+
+
+def test_chara_effects_negative_only(response):
+    mutated = _mutate_chara_effects(response, [1, 5])
+    gs = game_state_from_response(mutated)
+    assert gs.condition_keys == ["migraine", "night owl"]
+    assert gs.positive_statuses == []
+
+
+def test_chara_effects_positive_only(response):
+    mutated = _mutate_chara_effects(response, [8, 100])
+    gs = game_state_from_response(mutated)
+    assert gs.condition_keys == []
+    assert gs.positive_statuses == ["charming", "pure passion"]
+
+
+def test_chara_effects_mixed_with_dupes(response):
+    mutated = _mutate_chara_effects(response, [8, 10, 11, 100, 101])
+    gs = game_state_from_response(mutated)
+    assert gs.condition_keys == []
+    # 10 + 11 collapse to "practice perfect"; 100 + 101 collapse to "pure passion"
+    assert gs.positive_statuses == [
+        "charming",
+        "practice perfect",
+        "pure passion",
+    ]
+
+
+def test_chara_effects_unknown_id_skipped(response):
+    mutated = _mutate_chara_effects(response, [9999])
+    gs = game_state_from_response(mutated)
+    assert gs.condition_keys == []
+    assert gs.positive_statuses == []
+
+
+def test_chara_effects_neutral_dropped(response):
+    """Fan Promise (id 14) has polarity="neutral" → never on either list."""
+    mutated = _mutate_chara_effects(response, [14])
+    gs = game_state_from_response(mutated)
+    assert gs.condition_keys == []
+    assert gs.positive_statuses == []
+
+
+def test_sirius_bond_signal_in_positive_statuses(response):
+    """Step 6: Pure Passion (id 100) surfaces directly on positive_statuses."""
+    mutated = _mutate_chara_effects(response, [100])
+    gs = game_state_from_response(mutated)
+    assert gs.positive_statuses == ["pure passion"]
+
+
+CHARA_EFFECT_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "chara_effect_synthetic.msgpack"
+)
+
+
+@pytest.mark.skipif(
+    not CHARA_EFFECT_FIXTURE.exists(),
+    reason="run scripts/build_chara_effect_fixture.py to generate",
+)
+def test_chara_effects_from_synthetic_fixture():
+    """End-to-end fixture: msgpack on disk → adapter → typed lists.
+
+    The fixture is produced by ``scripts/build_chara_effect_fixture.py``
+    and injects ids [1, 5, 8, 100, 14, 9999]:
+      * 1, 5         → negative ("night owl", "migraine")
+      * 8, 100       → positive ("charming", "pure passion")
+      * 14           → neutral (Fan Promise) → dropped
+      * 9999         → unknown → logged + dropped
+    """
+    payload = msgpack.unpackb(
+        CHARA_EFFECT_FIXTURE.read_bytes(), raw=False, strict_map_key=False
+    )
+    gs = game_state_from_response(payload)
+    assert gs.condition_keys == ["migraine", "night owl"]
+    assert gs.positive_statuses == ["charming", "pure passion"]
+
+
 @pytest.mark.skipif(not MDB_PATH.exists(), reason="master.mdb not available")
 def test_scenario_npc_resolved_with_registry(response):
     """If the response has any training_partner_id in the 100s (scenario NPC),
@@ -331,3 +430,79 @@ def test_scenario_npc_resolved_with_registry(response):
         if not name.startswith("slot") and not name.startswith("npc_")
     ]
     assert npc_names, "expected at least one resolved partner name"
+
+
+# ---------------------------------------------------------------------------
+# Skill roster (Step 2 of effervescent-forging-whale plan).
+#
+# home_response_turn21.msgpack chara_info has:
+#   card_id = 100901
+#   skill_array len = 2  → owned skill_ids {10091, 201312}
+#   skill_tips_array len = 7
+#   disable_skill_id_array len = 0
+# ---------------------------------------------------------------------------
+
+
+def test_skill_roster_owned_and_disabled(response):
+    """Without a SkillCatalog, owned_skill_ids/disabled_skill_ids fill from
+    chara_info; buyable_skills stays empty."""
+    gs = game_state_from_response(response)
+    assert len(gs.owned_skill_ids) == 2
+    assert all(isinstance(sid, int) for sid in gs.owned_skill_ids)
+    assert isinstance(gs.disabled_skill_ids, set)
+    assert all(isinstance(sid, int) for sid in gs.disabled_skill_ids)
+    assert gs.buyable_skills == []
+
+
+@pytest.mark.skipif(not MDB_PATH.exists(), reason="master.mdb not available")
+def test_skill_roster_with_catalog_populates_buyable(response):
+    """With a SkillCatalog, buyable_skills carries both preset (innate)
+    and hint-only skills."""
+    from uma_trainer.knowledge.skill_catalog import SkillCatalog
+
+    cat = SkillCatalog(MDB_PATH)
+    gs = game_state_from_response(response, skill_catalog=cat)
+    assert gs.buyable_skills, "expected at least one buyable skill"
+    has_preset = any(not bs.is_hint_only for bs in gs.buyable_skills)
+    has_hint_only = any(bs.is_hint_only for bs in gs.buyable_skills)
+    assert has_preset, "expected at least one preset entry"
+    assert has_hint_only, "expected at least one hint-only entry"
+
+
+@pytest.mark.skipif(not MDB_PATH.exists(), reason="master.mdb not available")
+def test_skill_roster_filters_owned_skills(response):
+    """Owned skill_ids must never appear in buyable_skills."""
+    from uma_trainer.knowledge.skill_catalog import SkillCatalog
+
+    cat = SkillCatalog(MDB_PATH)
+    gs = game_state_from_response(response, skill_catalog=cat)
+    for bs in gs.buyable_skills:
+        assert bs.skill_id not in gs.owned_skill_ids, (
+            f"buyable skill {bs.skill_id} ({bs.name}) is already owned"
+        )
+
+
+@pytest.mark.skipif(not MDB_PATH.exists(), reason="master.mdb not available")
+def test_skill_roster_stamps_hint_discount_on_preset(response):
+    """When a preset skill's (group_id, rarity) overlaps with a
+    skill_tips_array entry, the BuyableSkill must carry hint_level > 0
+    (the discount stamp). Marked xfail if this fixture has no overlap."""
+    from uma_trainer.knowledge.skill_catalog import SkillCatalog
+
+    cat = SkillCatalog(MDB_PATH)
+    gs = game_state_from_response(response, skill_catalog=cat)
+    inner = response.get("data", response)
+    hints = inner["chara_info"].get("skill_tips_array") or []
+    hint_pairs = {(h["group_id"], h["rarity"]) for h in hints}
+
+    preset_overlap = [
+        bs for bs in gs.buyable_skills
+        if not bs.is_hint_only and (bs.group_id, bs.rarity) in hint_pairs
+    ]
+    if not preset_overlap:
+        pytest.xfail("fixture has no preset/hint overlap")
+    for bs in preset_overlap:
+        assert bs.hint_level > 0, (
+            f"preset skill {bs.skill_id} ({bs.name}) overlaps a hint "
+            f"but hint_level={bs.hint_level}"
+        )

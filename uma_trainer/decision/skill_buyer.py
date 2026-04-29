@@ -9,8 +9,17 @@ from uma_trainer.types import ActionType, BotAction, GameState, SkillOption
 
 if TYPE_CHECKING:
     from uma_trainer.knowledge.overrides import OverridesLoader
+    from uma_trainer.knowledge.skill_catalog import BuyableSkill
 
 logger = logging.getLogger(__name__)
+
+
+# Rarity codes in master.mdb skill_data:
+#   1 = white (common)
+#   2 = gold (rare)
+#   3 = unique (chara-specific) — never auto-buy in parent runs
+#   4 = inherited (rare-gold variant) — also avoid
+_UNIQUE_RARITIES = {3, 4}
 
 
 class SkillBuyer:
@@ -60,6 +69,73 @@ class SkillBuyer:
             reason="Finished shopping",
         ))
         return actions
+
+    def decide_from_packet(
+        self,
+        state: GameState,
+        *,
+        reserve: int = 200,
+    ) -> list["BuyableSkill"]:
+        """Plan a buy list from packet-driven ``state.buyable_skills``.
+
+        Independent of :meth:`decide` (which works on OCR-derived
+        ``state.available_skills``). Used by the packet-fast-path in
+        ``handle_skill_shop`` once ``SessionTailer.is_fresh()``.
+
+        Selection rules:
+          * Look up each skill's priority via the same strategy overrides used
+            by :meth:`_apply_strategy` (fuzzy name match). Default 0 if not on
+            the priority list. 0 if blacklisted.
+          * Skip uniques/inherited (rarity in :data:`_UNIQUE_RARITIES`).
+          * Skip skills with priority 0 (no positive signal — neither
+            blacklisted in a useful way nor whitelisted).
+          * Sort by ``(priority desc, effective_cost asc)``.
+          * Greedy fill until ``accumulated_cost + reserve > skill_pts``.
+
+        Returns the chosen skills in priority order (highest priority first).
+        """
+        buyable = list(getattr(state, "buyable_skills", None) or [])
+        if not buyable:
+            return []
+
+        budget = int(getattr(state, "skill_pts", 0) or 0)
+        if budget <= reserve:
+            return []
+
+        strategy = self._get_strategy()
+
+        scored: list[tuple[int, "BuyableSkill"]] = []
+        for bs in buyable:
+            if int(getattr(bs, "rarity", 0)) in _UNIQUE_RARITIES:
+                continue
+
+            name = getattr(bs, "name", "") or ""
+            priority = 0
+            if strategy is not None:
+                if strategy.is_blacklisted(name):
+                    continue
+                sp = strategy.is_priority_skill(name)
+                if sp is not None:
+                    priority = int(sp.priority)
+
+            if priority <= 0:
+                continue
+
+            scored.append((priority, bs))
+
+        # Sort: priority desc, then effective_cost asc (cheapest first within tier).
+        scored.sort(key=lambda pair: (-pair[0], pair[1].effective_cost))
+
+        chosen: list["BuyableSkill"] = []
+        spent = 0
+        for _prio, bs in scored:
+            cost = int(bs.effective_cost)
+            if spent + cost + reserve > budget:
+                break
+            chosen.append(bs)
+            spent += cost
+
+        return chosen
 
     def _evaluate_skill(self, skill: SkillOption, state: GameState) -> BotAction:
         """Decide whether to buy a specific skill."""
