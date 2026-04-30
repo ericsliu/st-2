@@ -2535,17 +2535,17 @@ def handle_skill_shop(img, force_recovery=False):
     # Packet-driven fast path: when SessionTailer has a fresh capture and the
     # adapter populated buyable_skills, we already know which skills the game
     # offers — skip the slow 8-swipe + 15-page OCR scan and just localise our
-    # planned targets. force_recovery still falls through to the OCR path
-    # because it needs visibility into the full SP/cost picture.
+    # planned targets.
     if (
-        not force_recovery
+        _session_tailer is not None
         and _session_tailer.is_fresh()
         and getattr(_game_state, "buyable_skills", None)
     ):
-        targets = _skill_buyer.decide_from_packet(_game_state)
+        pkt_reserve = 400 if force_recovery else 200
+        targets = _skill_buyer.decide_from_packet(_game_state, reserve=pkt_reserve)
         log(
             f"[skill-shop] packet plan: {len(targets)} targets, "
-            f"budget={getattr(_game_state, 'skill_pts', 0)}"
+            f"budget={getattr(_game_state, 'skill_pts', 0)}, reserve={pkt_reserve}"
         )
         for t in targets:
             log(
@@ -4367,11 +4367,15 @@ def _handle_career_home(img):
     _game_state = build_game_state(img, "career_home", energy=energy)
 
     # Fast-path: if playbook says race or recreation and no conditions to cure,
-    # skip slow housekeeping (inventory, shop) but still detect active effects
+    # skip slow housekeeping but still detect active effects
     # (needed for cleat hammer decisions on race turns).
     if _playbook_engine and not _active_conditions and not is_pre_debut:
         scheduled = _playbook_engine._get_scheduled_action(_current_turn)
         if scheduled and scheduled.action in ("race", "recreation"):
+            if _packet_fresh:
+                overlay = _packet_overlay_state("career_home")
+                if overlay is not None:
+                    _shop_manager.apply_packet_state(overlay)
             if not _packet_fresh:
                 _detect_active_effects()
                 img = _wait_for_career_home("post_effects_fast")
