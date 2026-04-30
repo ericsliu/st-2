@@ -1,5 +1,6 @@
 """Helper for manual career run-through — screenshot + basic analysis."""
 
+import os
 import subprocess
 import sys
 import time
@@ -7,7 +8,7 @@ from pathlib import Path
 
 from PIL import Image
 
-DEVICE = "127.0.0.1:5555"
+DEVICE = os.environ.get("ADB_SERIAL", "emulator-5554")
 SCREENSHOTS_DIR = Path("screenshots/run_log")
 SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 

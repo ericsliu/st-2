@@ -173,7 +173,10 @@ Every field has a **confidence** marker in the dataclass docstring:
 Notes: wisdom stat is `wiz`, not `wisdom` or `int`. `motivation` is
 1-5 where 5 = Great.  `command_id` 101=Speed, 102=Power, 103=Guts,
 105=Stamina, 106=Wisdom (601-605 in summer, 1101-1105 overseas,
-2101-2305 for scenario-specific training).
+2101-2305 for scenario-specific training). `chara_effect_id_array`
+elements are bare ints — see `data/chara_effect_lookup.json` for the
+id → key/polarity mapping; regenerate via `scripts/extract_effect_ids.py`
+when `data/master.mdb` refreshes.
 
 ### Event trigger
 
@@ -259,8 +262,6 @@ The following fields are currently typed as `Any` or are left in
 `extras` because we could not positively identify their structure from
 static reading. Phase 2 (live packet capture) should verify:
 
-- `chara_effect_id_array` - list of active effect IDs; shape of each
-  element is uncertain.
 - `race_reward_info.reward_info_array` - per-reward structure.
 - `race_scenario` binary blob - handled by `race.RaceScenarioDecoded`
   placeholder; real parser lives in Hakuraku's TS code and needs a

@@ -21,7 +21,7 @@ skill_blacklist:
 skill_priority_list:
   # Must-buy (10)
   - {name: "Straightaway Spurt", priority: 10}
-  - {name: "Uma Star", priority: 10}
+  - {name: "Uma Stan", priority: 10}
   - {name: "Encroaching Shadow", priority: 10}
   - {name: "Blast Forward", priority: 10}
   - {name: "Daring Strike", priority: 10}
@@ -40,21 +40,15 @@ skill_priority_list:
   - {name: "The Coast Is Clear", priority: 8}
   - {name: "I Can See Right Through", priority: 0}
   - {name: "Mile Corners", priority: 8}
-  - {name: "Mid-Distance Corners", priority: 8}
   - {name: "Medium Corners", priority: 8}
-  - {name: "Long-Distance Corners", priority: 8}
   - {name: "Long Corners", priority: 8}
-  - {name: "Short-Distance Corners", priority: 8}
   - {name: "Sprint Corners", priority: 8}
   - {name: "Mile Straightaways", priority: 8}
-  - {name: "Mid-Distance Straightaways", priority: 8}
   - {name: "Medium Straightaways", priority: 8}
-  - {name: "Long-Distance Straightaways", priority: 8}
   - {name: "Long Straightaways", priority: 8}
-  - {name: "Short-Distance Straightaways", priority: 8}
   - {name: "Sprint Straightaways", priority: 8}
-  - {name: "Straightaway Recover", priority: 8}
-  - {name: "Outer Post Efficiency", priority: 8}
+  - {name: "Straightaway Recovery", priority: 8}
+  - {name: "Outer Post Proficiency", priority: 8}
   # Good speed/position skills (7)
   - {name: "Lead the Charge", priority: 7}
   - {name: "Forward, March", priority: 7}
@@ -75,7 +69,7 @@ skill_priority_list:
   - {name: "Wet Conditions", priority: 6}
   # Decent general skills (5)
   - {name: "Corner Adept", priority: 5}
-  - {name: "Inner Lane", priority: 5}
+  - {name: "Inner Post Proficiency", priority: 5}
   - {name: "Intense Gaze", priority: 5}
   # Low priority (4)
   - {name: "Glittering Star", priority: 4}

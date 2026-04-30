@@ -105,8 +105,8 @@ ITEM_CATALOGUE: dict[str, ShopItem] = {
     "berry_cupcake":        ShopItem("Berry Sweet Cupcake", 55, ItemTier.A, max_stock=1, effect="Mood +2"),
 
     # -- Training Items --
-    # Empowering (2-turn) is top priority until we have 2 stockpiled for summer
-    "empowering_mega":      ShopItem("Empowering Megaphone", 70, ItemTier.SS, max_stock=2, effect="+60% training, 2 turns", save_for="summer_camp"),
+    # Empowering (2-turn) is top priority — stockpile for summer + late-career use
+    "empowering_mega":      ShopItem("Empowering Megaphone", 70, ItemTier.SS, max_stock=4, effect="+60% training, 2 turns", save_for="summer_camp"),
     # Motivating (3-turn) useful for good random training days
     "motivating_mega":      ShopItem("Motivating Megaphone", 55, ItemTier.S, max_stock=2, effect="+40% training, 3 turns", tier_extra=ItemTier.B),
     "coaching_mega":        ShopItem("Coaching Megaphone", 40, ItemTier.NEVER, max_stock=0, effect="+20% training, 4 turns"),

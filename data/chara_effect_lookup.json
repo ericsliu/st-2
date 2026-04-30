@@ -1,0 +1,112 @@
+{
+  "1": {
+    "key": "night owl",
+    "name": "Night Owl",
+    "polarity": "negative"
+  },
+  "10": {
+    "key": "practice perfect",
+    "name": "Practice Perfect ○",
+    "polarity": "positive"
+  },
+  "100": {
+    "key": "pure passion",
+    "name": "Pure Passion: Team Sirius",
+    "polarity": "positive"
+  },
+  "101": {
+    "key": "pure passion",
+    "name": "Pure Passion: Heirs to the Throne",
+    "polarity": "positive"
+  },
+  "11": {
+    "key": "practice perfect",
+    "name": "Practice Perfect ◎",
+    "polarity": "positive"
+  },
+  "12": {
+    "key": "under the weather",
+    "name": "Under the Weather",
+    "polarity": "negative"
+  },
+  "13": {
+    "key": "shining brightly",
+    "name": "Shining Brightly",
+    "polarity": "positive"
+  },
+  "14": {
+    "key": "fan promise hokkaido",
+    "name": "Fan Promise (Hokkaido)",
+    "polarity": "neutral"
+  },
+  "15": {
+    "key": "fan promise hokuto",
+    "name": "Fan Promise (Hokuto)",
+    "polarity": "neutral"
+  },
+  "16": {
+    "key": "fan promise nakayama",
+    "name": "Fan Promise (Nakayama)",
+    "polarity": "neutral"
+  },
+  "17": {
+    "key": "fan promise kansai",
+    "name": "Fan Promise (Kansai)",
+    "polarity": "neutral"
+  },
+  "18": {
+    "key": "fan promise kokura",
+    "name": "Fan Promise (Kokura)",
+    "polarity": "neutral"
+  },
+  "19": {
+    "key": "not ready",
+    "name": "Not Ready",
+    "polarity": "negative"
+  },
+  "2": {
+    "key": "slacker",
+    "name": "Slacker",
+    "polarity": "negative"
+  },
+  "20": {
+    "key": "legs of glass",
+    "name": "Legs of Glass",
+    "polarity": "negative"
+  },
+  "3": {
+    "key": "skin outbreak",
+    "name": "Skin Outbreak",
+    "polarity": "negative"
+  },
+  "4": {
+    "key": "overweight",
+    "name": "Slow Metabolism",
+    "polarity": "negative"
+  },
+  "5": {
+    "key": "migraine",
+    "name": "Migraine",
+    "polarity": "negative"
+  },
+  "6": {
+    "key": "practice poor",
+    "name": "Practice Poor",
+    "polarity": "negative"
+  },
+  "7": {
+    "key": "fast learner",
+    "name": "Fast Learner",
+    "polarity": "positive"
+  },
+  "8": {
+    "key": "charming",
+    "name": "Charming ○",
+    "polarity": "positive"
+  },
+  "9": {
+    "key": "hot topic",
+    "name": "Hot Topic",
+    "polarity": "positive"
+  }
+}

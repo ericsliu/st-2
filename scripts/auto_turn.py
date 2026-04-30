@@ -3,6 +3,7 @@
 Uses uma_trainer decision components for training scoring, skill buying,
 and race selection. Screen detection and tap handling remain in this script.
 """
+import os
 import re
 import subprocess
 import sys
@@ -39,7 +40,7 @@ from uma_trainer.types import (
 )
 
 LOG = Path("screenshots/run_log/run_current.md")
-DEVICE = "127.0.0.1:5555"
+DEVICE = os.environ.get("ADB_SERIAL", "emulator-5554")
 
 # State tracking to avoid loops
 _last_result = None
@@ -105,7 +106,7 @@ _PACKET_STATE_ENABLED = _os.environ.get("UMA_PACKET_STATE", "1") != "0"
 # Opt-in (default OFF) for the packet-driven training-tile path. Skips
 # the per-tile preview tap+OCR loop when the live capture is fresh; the
 # OCR loop remains the safe default while we validate it on real runs.
-_PACKET_TRAINING_ENABLED = _os.environ.get("UMA_PACKET_TRAINING", "0") == "1"
+_PACKET_TRAINING_ENABLED = _os.environ.get("UMA_PACKET_TRAINING", "1") == "1"
 _CARD_SEMANTIC_MAP = load_card_semantic_map()
 
 # Race plaque matcher (lazy init — loads 302 templates on first use)
@@ -198,6 +199,7 @@ _ts_climax_retries = 0        # Retry counter for TS Climax races (max 3)
 _g1_retries = 0               # Total alarm clocks used this career (max 5)
 _g1_retried_this_race = False # True after we retry the current race (1 retry per race max)
 _backed_out_to_home_this_turn = False  # Prevents infinite back-out loop on recreation turns
+_race_attempted_turn = -1             # Turn number of last race attempt — prevents re-entry loop
 _recovery_skills_bought = 0           # Track recovery skills bought (need 2+ before Kikuka Sho)
 _RECOVERY_SKILL_NAMES = {"corner recovery", "straightaway recover", "standing by", "after-school stroll"}
 _prev_stats = None                # Previous turn's stats for suspicious jump detection
@@ -986,6 +988,10 @@ def detect_screen(img):
     if has("Quick Mode") and has("Confirm") and has("Cancel"):
         return "quick_mode_settings"
 
+    # Continue Career dialog — resume a saved career
+    if has("Continue Career") and has("Resume"):
+        return "continue_career"
+
     # Skill purchase confirmation dialog: "Learn the above skills?"
     if has("Confirmation") and has("Learn the above skills"):
         return "skill_confirm_dialog"
@@ -1288,20 +1294,25 @@ def _find_recreation_card(img, source_key: str) -> int | None:
 def _get_recreation_member() -> str:
     """Get the specific Sirius member name for this turn's recreation.
 
-    Extracts from schedule note format: "Sirius: Member Name (details)"
+    Handles two note formats:
+      "Sirius: Member Name (details)"     — main strategy
+      "Sirius recreation (Member Name)"   — fallback strategy
     Returns member name string, or "" if not found.
     """
     if _playbook_engine:
         scheduled = _playbook_engine._get_scheduled_action(_current_turn)
         if scheduled and scheduled.note:
             note = scheduled.note
-            # Format: "Sirius: Member Name (details)"
             if "sirius:" in note.lower():
                 after_colon = note.split(":", 1)[1].strip()
-                # Take everything before the parenthetical
                 member = after_colon.split("(")[0].strip()
                 return member
-    return ""  # Empty = tap first available
+            if "sirius recreation" in note.lower() and "(" in note:
+                member = note.split("(", 1)[1].split(")")[0].strip()
+                if " — " in member:
+                    member = member.split(" — ")[0].strip()
+                return member
+    return ""
 
 
 def _find_member_on_screen(img, member_name: str) -> int | None:
@@ -4292,6 +4303,7 @@ def _handle_career_home(img):
     global _playbook_force_train, _train_drink_used
     global _pending_training_stat, _pending_training_turn
     global _last_race_was_g1, _g1_retried_this_race, _backed_out_to_home_this_turn
+    global _race_attempted_turn
 
     # Check Skip button — re-enable if toggled off
     import numpy as np
@@ -4322,16 +4334,19 @@ def _handle_career_home(img):
     is_pre_debut = _current_turn < 12  # Pre-Debut: no shop, no inventory, no effects
 
     if not is_pre_debut:
-        _read_game_log()
-        img = _wait_for_career_home("post_log")
-        if img is None:
-            return "recovering"
+        if not _session_tailer.is_fresh():
+            _read_game_log()
+            img = _wait_for_career_home("post_log")
+            if img is None:
+                return "recovering"
 
-        _detect_active_effects()
-        img = _wait_for_career_home("post_effects")
-        if img is None:
-            return "recovering"
-        energy = get_energy_level(img)
+            _detect_active_effects()
+            img = _wait_for_career_home("post_effects")
+            if img is None:
+                return "recovering"
+            energy = get_energy_level(img)
+        else:
+            log("[packet-state] Skipping game log + effects OCR (packet fresh)")
     log(f"Energy: ~{energy}% | Turn: {_current_turn} | Consecutive races: {_scenario._consecutive_races}")
 
     # Read Full Stats (aptitudes + conditions). Packet path populates these
@@ -4407,8 +4422,9 @@ def _handle_career_home(img):
                     tap(*BTN_HOME_RACES)
                     return "going_to_races"
 
-    # Read inventory on first turn, then every 6 turns (synced with shop refreshes)
-    if not is_pre_debut and (not _inventory_checked or _current_turn % 6 == 0):
+    # Packet inventory sync every turn (free); OCR fallback every 6 turns
+    _packet_fresh = _session_tailer is not None and _session_tailer.is_fresh()
+    if not is_pre_debut and (not _inventory_checked or _current_turn % 6 == 0 or _packet_fresh):
         read_inventory_from_training_items()
         time.sleep(1)
         img = _wait_for_career_home("post_inv")
@@ -4678,10 +4694,11 @@ def _handle_career_home(img):
         _current_turn, energy, _shop_manager.inventory, mood,
     )
 
-    # Ask the race selector (handles: hard cap, G1/goal,
-    # scenario fatigue chain, early game skip, race rhythm, low energy racing)
     _game_state.energy = energy
-    race_action = _race_selector.should_race_this_turn(_game_state)
+    already_tried = (_race_attempted_turn == _current_turn)
+    if already_tried:
+        log(f"Already attempted race on turn {_current_turn} — skipping race decision")
+    race_action = None if (is_pre_debut or already_tried) else _race_selector.should_race_this_turn(_game_state)
 
     if race_action:
         # Conservation overrides non-mandatory races (rhythm, low-energy races)
@@ -4708,6 +4725,7 @@ def _handle_career_home(img):
                     log(f"Racing: {race_action.reason}")
                     _last_race_was_g1 = is_g1
                     _g1_retried_this_race = False
+                    _race_attempted_turn = _current_turn
                     tap(*BTN_HOME_RACES)
                     return "going_to_races"
                 else:
@@ -4722,6 +4740,7 @@ def _handle_career_home(img):
                 log(f"Racing: {race_action.reason}")
                 _last_race_was_g1 = is_g1
                 _g1_retried_this_race = False
+                _race_attempted_turn = _current_turn
                 tap(*BTN_HOME_RACES)
                 return "going_to_races"
     else:
@@ -4887,13 +4906,14 @@ _INTERMEDIATE_RESULTS = {
     "cutscene_skip", "tutorial_slide", "goal_complete", "fan_class",
     "unlock_popup", "trophy_won", "race_lineup", "post_race_next",
     "shop_popup_enter", "unknown", "event", "event_choice", "skill_confirm", "skills_learned_close",
-    "recovering", "placement_next", "ts_climax_racing", "race_day_racing",
+    "continue_career", "recovering", "placement_next", "ts_climax_racing", "race_day_racing",
     "ts_climax_standings", "ts_standings_next", "post_career_next",
     "post_career_confirm", "career_finishing", "warning_ok",
     "rest", "recreation", "recreation_cancel", "recreation_select", "recreation_member_select", "rest_confirm", "race_back",
     "training_back_to_rest", "race_live_skip", "career_home_summer",
     "photo_save_cancel", "race_photo_skip", "quick_mode_dismiss",
     "retry_race", "try_again_confirmed", "log_close",
+    "shop_done",
 }
 
 def run_one_turn(stop_before=None, stop_on_turn_advance=True):
@@ -4944,7 +4964,7 @@ def run_one_turn(stop_before=None, stop_on_turn_advance=True):
 
 def _run_one_turn_inner(stop_before=None):
     """Internal: execute one game action."""
-    global _last_result, _needs_shop_visit, _last_shop_turn, _inventory_checked, _skill_shop_done, _summer_whistle_used, _backed_out_to_home_this_turn
+    global _last_result, _needs_shop_visit, _last_shop_turn, _inventory_checked, _skill_shop_done, _summer_whistle_used, _backed_out_to_home_this_turn, _pending_training_stat, _pending_training_turn
 
     img = screenshot(f"auto_{int(time.time())}")
     screen = detect_screen(img)
@@ -5125,8 +5145,74 @@ def _run_one_turn_inner(stop_before=None):
 
         # (Charm usage is now handled in the energy/insurance plan above — see §2.)
 
-        # 4. Ankle weights — stat-specific, used after scorer picks stat in handle_training()
-        # (follows reset whistle pattern: back out → use item → re-enter training)
+        # 4. Pre-score tiles from packets to skip preview loop in handle_training.
+        #    Whistle + ankle weights are handled here instead of inside handle_training.
+        packet_tiles = _build_packet_training_tiles()
+        if packet_tiles:
+            state = build_game_state(img, "career_home_summer", energy=energy)
+            state.training_tiles = packet_tiles
+            all_levels = [b for tile in packet_tiles for b in tile.bond_levels]
+            state.all_bonds_maxed = bool(all_levels) and all(b >= 80 for b in all_levels)
+            action = _scorer.best_action(state)
+            scored_tiles = _scorer.score_tiles(state)
+            best_score = scored_tiles[0][1] if scored_tiles else 0
+            log(f"SUMMER CAMP — Pre-scored from packets (best: {best_score:.1f})")
+            for st_tile, st_score in scored_tiles:
+                log(f"  {st_tile.stat_type.value:8s}: score={st_score:5.1f}  cards={len(st_tile.support_cards)}  gains={dict(st_tile.stat_gains)}")
+
+            summer_turns = set(range(37, 41)) | set(range(61, 65))
+            is_whistle_turn = _current_turn in summer_turns or _current_turn >= 72
+            if (is_whistle_turn and best_score < WHISTLE_THRESHOLD
+                    and not _summer_whistle_used
+                    and inventory.get("reset_whistle", 0) > 0):
+                log(f"SUMMER CAMP — Best score {best_score:.1f} < {WHISTLE_THRESHOLD}, using Reset Whistle from home")
+                _summer_whistle_used = True
+                if _use_training_items(["reset_whistle"]):
+                    if _shop_manager._inventory.get("reset_whistle", 0) > 0:
+                        _shop_manager._inventory["reset_whistle"] -= 1
+                        if _shop_manager._inventory["reset_whistle"] <= 0:
+                            del _shop_manager._inventory["reset_whistle"]
+                    _shop_manager.save_inventory()
+                    log("SUMMER CAMP — Whistle used, waiting for fresh packet then re-entering")
+                    time.sleep(2)
+                else:
+                    log("SUMMER CAMP — Failed to use Reset Whistle")
+                    if _shop_manager._inventory.get("reset_whistle", 0) > 0:
+                        _shop_manager._inventory["reset_whistle"] -= 1
+                        if _shop_manager._inventory["reset_whistle"] <= 0:
+                            del _shop_manager._inventory["reset_whistle"]
+                    _shop_manager.save_inventory()
+                return "training_back_to_rest"
+
+            if action.action_type != ActionType.REST:
+                chosen_stat = action.target.lower() if action.target else ""
+                from uma_trainer.decision.shop_manager import ANKLE_WEIGHT_MAP
+                ankle_key = ANKLE_WEIGHT_MAP.get(chosen_stat)
+                active_weights = [e for e in _shop_manager._active_effects if "ankle" in e.item_key]
+                if (is_whistle_turn and ankle_key and not active_weights
+                        and _shop_manager.inventory.get(ankle_key, 0) > 0):
+                    log(f"SUMMER CAMP — Using {ankle_key} for {chosen_stat} training (+50% gain)")
+                    if _use_training_items([ankle_key]):
+                        if _shop_manager._inventory.get(ankle_key, 0) > 0:
+                            _shop_manager._inventory[ankle_key] -= 1
+                            if _shop_manager._inventory[ankle_key] <= 0:
+                                del _shop_manager._inventory[ankle_key]
+                        _shop_manager.save_inventory()
+                        _shop_manager.activate_item(ankle_key)
+                    else:
+                        log(f"SUMMER CAMP — Failed to use {ankle_key}")
+                        if _shop_manager._inventory.get(ankle_key, 0) > 0:
+                            _shop_manager._inventory[ankle_key] -= 1
+                            if _shop_manager._inventory[ankle_key] <= 0:
+                                del _shop_manager._inventory[ankle_key]
+                        _shop_manager.save_inventory()
+                    time.sleep(1)
+                    img = screenshot(f"summer_post_ankle_{int(time.time())}")
+                    if detect_screen(img) != "career_home_summer":
+                        return "recovering"
+                _pending_training_stat = chosen_stat
+                _pending_training_turn = _current_turn
+                log(f"SUMMER CAMP — Pre-committed to {chosen_stat} (score {best_score:.1f}, skipping preview)")
 
         log(f"SUMMER CAMP — Energy ~{energy}% OK — going to Training")
         tap(*BTN_TRAINING)
@@ -5257,6 +5343,15 @@ def _run_one_turn_inner(stop_before=None):
             tap(180, 1853)
         return "tutorial_slide"
 
+    elif screen == "continue_career":
+        log("Continue Career dialog — tapping Resume")
+        resume_btn = find_green_button(img, (1300, 1500))
+        if resume_btn:
+            tap(resume_btn[0], resume_btn[1])
+        else:
+            tap(270, 1410)
+        return "continue_career"
+
     elif screen == "goal_complete":
         log("Goal complete / goals screen — tapping Next")
         next_btn = find_green_button(img, (1600, 1800))
@@ -5298,9 +5393,7 @@ def _run_one_turn_inner(stop_before=None):
         return "quick_mode_dismiss"
 
     elif screen == "warning_popup":
-        # If we just came from race flow, this is a race energy warning
         if _last_result in ("going_to_races", "race_enter"):
-            _scenario.on_race_completed(is_g1=_last_race_was_g1)
             log(f"Race warning popup — tapping OK (consecutive: {_scenario._consecutive_races})")
         else:
             log("Warning popup — tapping OK")
@@ -5375,16 +5468,21 @@ def _run_one_turn_inner(stop_before=None):
             return "recreation_cancel"
 
     elif screen == "recreation_member_select":
-        # Sirius member selection screen — pick the specific member from schedule
         member = _get_recreation_member()
         log(f"Recreation member select — looking for '{member}'")
+        if _last_result == "recreation_member_select":
+            log(f"  Member select stuck — cancelling recreation via back button")
+            if _playbook_engine:
+                _playbook_engine.skipped_recreation_turns.add(_current_turn)
+            press_back()
+            return "recreation_cancel"
         tap_y = _find_member_on_screen(img, member)
         if tap_y:
             log(f"  Found {member} at y={tap_y}, tapping")
             tap(540, tap_y)
         else:
             log(f"  WARNING: Could not find '{member}' — tapping first available")
-            tap(540, 300)  # First member row
+            tap(540, 300)
         return "recreation_member_select"
 
     elif screen == "recreation_confirm":

@@ -192,6 +192,35 @@ def test_inventory_packet_skip(monkeypatch):
     assert len(auto_turn._shop_manager.inventory) > 0
 
 
+def test_packet_overlay_populates_conditions(fresh_response, blank_image, monkeypatch):
+    """Step 4: chara_effect_id_array → _active_conditions / _positive_statuses."""
+    data = fresh_response.get("data") if "data" in fresh_response else fresh_response
+    chara = dict(data.get("chara_info") or {})
+    chara["chara_effect_id_array"] = [1, 8]
+    new_data = dict(data)
+    new_data["chara_info"] = chara
+    mutated = (
+        {**fresh_response, "data": new_data}
+        if "data" in fresh_response
+        else new_data
+    )
+
+    monkeypatch.setattr(auto_turn, "_PACKET_STATE_ENABLED", True)
+    monkeypatch.setattr(auto_turn._session_tailer, "is_fresh", lambda: True)
+    monkeypatch.setattr(
+        auto_turn._session_tailer,
+        "latest_response",
+        lambda *, endpoint_keys=None: mutated,
+    )
+    monkeypatch.setattr(auto_turn, "_active_conditions", [])
+    monkeypatch.setattr(auto_turn, "_positive_statuses", [])
+
+    auto_turn.build_game_state(blank_image, "career_home")
+
+    assert auto_turn._active_conditions == ["night owl"]
+    assert auto_turn._positive_statuses == ["charming"]
+
+
 def test_overlay_syncs_cached_aptitudes(fresh_response, blank_image, monkeypatch):
     """Step 6: overlay path populates _cached_aptitudes from packet data so
     downstream callers (run-style picker, etc.) don't need the Full Stats OCR pass."""

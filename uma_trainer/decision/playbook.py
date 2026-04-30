@@ -642,13 +642,14 @@ class PlaybookEngine:
         "warn" if a warning deadline was missed, or None.
         skip_cards: card names to skip (e.g. bond already confirmed unlocked).
         """
+        if self.rec_tracker.total_used == 0 and turn > 12:
+            return None
         for name, deadline in self.playbook.friendship.deadlines.items():
             if skip_cards and name in skip_cards:
                 continue
             if turn >= deadline.by_turn:
                 remaining = self.rec_tracker.remaining_for(name)
                 total = self.playbook.recreation.sources.get(name, RecreationSource()).total
-                # If no recreations have been used by the deadline, friendship wasn't unlocked
                 if remaining == total and total > 0:
                     logger.warning(
                         "Friendship deadline missed: %s by turn %d (action: %s)",
