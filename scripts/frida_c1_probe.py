@@ -83,7 +83,7 @@ def main() -> int:
     ap.add_argument("--capture-cute-http-snap", type=int, default=0, help="Per-hit byte cap (0 = full buffer; >0 truncates each byte[] to this many bytes)")
     ap.add_argument("--capture-auto", action="store_true", help="(Hardening override) Install cute-http capture hooks immediately on attach. Default is to wait until manually triggered (ENTER on stdin or touching the trigger file) so the process spends login/auth WITHOUT any managed-layer trampolines in memory.")
     ap.add_argument("--capture-trigger-file", type=Path, default=Path("/tmp/uma_capture_go"), help="Flag file that, if created, fires the capture hook (polled once/sec). Default /tmp/uma_capture_go")
-    ap.add_argument("--duration", type=float, default=30.0, help="Watch seconds after attach")
+    ap.add_argument("--duration", type=float, default=0, help="Run seconds after attach (0 = indefinite)")
     ap.add_argument("--startup-wait", type=float, default=8.0, help="Seconds to wait for main pid")
     ap.add_argument("--no-launch", action="store_true", help="Skip launch; attach to already-running Uma")
     ap.add_argument("--discover-delay", type=float, default=2.0,
@@ -730,17 +730,26 @@ send({
             while not capture_fired["v"] and not died["v"]:
                 time.sleep(0.2)
             if capture_fired["v"]:
-                print(f"[{time.time()-attach_t:.1f}s] capture live; running for {args.duration}s more (Ctrl-C to stop early)", flush=True)
-                end = time.time() + args.duration
-                while time.time() < end and not died["v"]:
-                    time.sleep(0.2)
+                if args.duration > 0:
+                    print(f"[{time.time()-attach_t:.1f}s] capture live; running for {args.duration}s more (Ctrl-C to stop early)", flush=True)
+                    end = time.time() + args.duration
+                    while time.time() < end and not died["v"]:
+                        time.sleep(0.2)
+                else:
+                    print(f"[{time.time()-attach_t:.1f}s] capture live; running indefinitely (Ctrl-C to stop)", flush=True)
+                    while not died["v"]:
+                        time.sleep(0.5)
         except KeyboardInterrupt:
             print(f"[{time.time()-attach_t:.1f}s] Ctrl-C; detaching", flush=True)
     else:
-        end = time.time() + args.duration
         try:
-            while time.time() < end and not died["v"]:
-                time.sleep(0.2)
+            if args.duration > 0:
+                end = time.time() + args.duration
+                while time.time() < end and not died["v"]:
+                    time.sleep(0.2)
+            else:
+                while not died["v"]:
+                    time.sleep(0.5)
         except KeyboardInterrupt:
             print(f"[{time.time()-attach_t:.1f}s] Ctrl-C; detaching", flush=True)
     time.sleep(0.5)

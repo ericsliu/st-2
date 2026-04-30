@@ -4333,8 +4333,9 @@ def _handle_career_home(img):
 
     is_pre_debut = _current_turn < 12  # Pre-Debut: no shop, no inventory, no effects
 
+    _packet_fresh = _session_tailer is not None and _session_tailer.is_fresh()
     if not is_pre_debut:
-        if not _session_tailer.is_fresh():
+        if not _packet_fresh:
             _read_game_log()
             img = _wait_for_career_home("post_log")
             if img is None:
@@ -4371,11 +4372,12 @@ def _handle_career_home(img):
     if _playbook_engine and not _active_conditions and not is_pre_debut:
         scheduled = _playbook_engine._get_scheduled_action(_current_turn)
         if scheduled and scheduled.action in ("race", "recreation"):
-            _detect_active_effects()
-            img = _wait_for_career_home("post_effects_fast")
-            if img is None:
-                return "recovering"
-            energy = get_energy_level(img)
+            if not _packet_fresh:
+                _detect_active_effects()
+                img = _wait_for_career_home("post_effects_fast")
+                if img is None:
+                    return "recovering"
+                energy = get_energy_level(img)
             _game_state = build_game_state(img, "career_home", energy=energy)
             log(f"State gathered: Turn {_current_turn}, Energy {energy}%, "
                 f"Stats Spd={_current_stats.speed} Sta={_current_stats.stamina} "
@@ -4989,12 +4991,13 @@ def _run_one_turn_inner(stop_before=None):
         # Refresh _current_turn from period OCR — otherwise playbook lookups
         # stay stuck on the pre-summer turn number across intermediate loops.
         build_game_state(img, "career_home", energy=energy)
-        _detect_active_effects()
-        # Re-screenshot after popup close
-        img = screenshot(f"summer_post_effects_{int(time.time())}")
-        if detect_screen(img) != "career_home_summer":
-            return "recovering"
-        energy = get_energy_level(img)
+        _summer_packet_fresh = _session_tailer is not None and _session_tailer.is_fresh()
+        if not _summer_packet_fresh:
+            _detect_active_effects()
+            img = screenshot(f"summer_post_effects_{int(time.time())}")
+            if detect_screen(img) != "career_home_summer":
+                return "recovering"
+            energy = get_energy_level(img)
         mood = detect_mood(img)
         inventory = _shop_manager.inventory
         active_megas = [e for e in _shop_manager._active_effects if "mega" in e.item_key]
@@ -5253,12 +5256,16 @@ def _run_one_turn_inner(stop_before=None):
                 return "recovering"
 
         energy = get_energy_level(img)
-        _detect_active_effects()
-        # Re-screenshot after popup close
-        img = screenshot(f"ts_post_effects_{int(time.time())}")
-        if detect_screen(img) != "ts_climax_home":
-            return "recovering"
-        energy = get_energy_level(img)
+        _ts_packet_fresh = _session_tailer is not None and _session_tailer.is_fresh()
+        if not _ts_packet_fresh:
+            _detect_active_effects()
+            img = screenshot(f"ts_post_effects_{int(time.time())}")
+            if detect_screen(img) != "ts_climax_home":
+                return "recovering"
+            energy = get_energy_level(img)
+        else:
+            active = _shop_manager._active_effects
+            log(f"Active effects from packet: {[(e.item_key, e.turns_remaining) for e in active] if active else 'none'}")
         log(f"TS CLIMAX training turn — Energy: ~{energy}%")
 
         # 1. Cupcake — bring mood to Great before training (stacking multiplier)
