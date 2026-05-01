@@ -254,10 +254,8 @@ def _has_double_friendship_training(state: GameState) -> bool:
     """Check if any training tile has 2+ support cards with potential
     friendship gains (i.e. not all bonds maxed on those cards)."""
     for tile in (state.training_tiles or []):
-        friend_cards = sum(
-            1 for c in tile.support_cards
-            if c.bond_level < 80
-        )
+        bonds = tile.bond_levels or []
+        friend_cards = sum(1 for b in bonds if b < 80)
         if friend_cards >= 2:
             return True
     return False
@@ -496,6 +494,11 @@ class PlaybookEngine:
             )
 
         if role == "follow":
+            if turn in self.skipped_recreation_turns:
+                return BotAction(
+                    action_type=ActionType.REST,
+                    reason=f"playbook pair {pair} follow: recreation skipped (source not found on screen)",
+                )
             commitment = self._get_commitment(pair)
             if not commitment:
                 raise RuntimeError(
@@ -513,15 +516,9 @@ class PlaybookEngine:
                 )
             choice = commitment["choice"]
             if choice == "race":
-                riko_left = self.rec_tracker.remaining_for("riko")
-                if riko_left > 0:
-                    return BotAction(
-                        action_type=ActionType.GO_OUT,
-                        reason=f"playbook pair {pair} follow: Riko (lead turn {scheduled.partner_turn} raced)",
-                    )
                 return BotAction(
-                    action_type=ActionType.REST,
-                    reason=f"playbook pair {pair} follow: Riko exhausted ({riko_left} left), resting",
+                    action_type=ActionType.GO_OUT,
+                    reason=f"playbook pair {pair} follow: Riko (lead turn {scheduled.partner_turn} raced)",
                 )
             return BotAction(
                 action_type=ActionType.TRAIN,
@@ -582,12 +579,6 @@ class PlaybookEngine:
                             reason=f"playbook: {scheduled.fallback} (condition: {cond} not met)",
                         )
 
-        # If recreation is scheduled but the source is exhausted, fall back to rest
-        if scheduled.action == "recreation" and not self.rec_tracker.any_remaining:
-            return BotAction(
-                action_type=ActionType.REST,
-                reason=f"playbook: recreation exhausted, resting",
-            )
         # If this turn's recreation already failed on screen (no valid card),
         # don't re-enter the recreation flow — train instead.
         if scheduled.action == "recreation" and turn in self.skipped_recreation_turns:
@@ -605,8 +596,6 @@ class PlaybookEngine:
     def wants_recreation(self, turn: int) -> bool:
         """Check if the playbook wants recreation confirmed this turn."""
         if not self.playbook.recreation.enabled:
-            return False
-        if not self.rec_tracker.any_remaining:
             return False
         if turn in self.skipped_recreation_turns:
             return False
@@ -642,8 +631,6 @@ class PlaybookEngine:
         "warn" if a warning deadline was missed, or None.
         skip_cards: card names to skip (e.g. bond already confirmed unlocked).
         """
-        if self.rec_tracker.total_used == 0 and turn > 12:
-            return None
         for name, deadline in self.playbook.friendship.deadlines.items():
             if skip_cards and name in skip_cards:
                 continue

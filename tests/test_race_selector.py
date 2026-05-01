@@ -144,6 +144,7 @@ class TestRacePolicy:
                 SupportCard(card_id="1", name="c1", bond_level=30),
                 SupportCard(card_id="2", name="c2", bond_level=40),
             ],
+            bond_levels=[30, 40],
         )
         state = GameState(
             current_turn=20,

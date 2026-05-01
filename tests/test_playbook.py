@@ -43,10 +43,12 @@ def _make_tile(
     """Helper to make a TrainingTile. cards = list of (bond_level, is_friend)."""
     tile = TrainingTile()
     tile.stat_type = stat_type
+    card_list = cards or []
     tile.support_cards = [
         SupportCard(card_id=str(i), name=f"card_{i}", bond_level=bond, is_friend=friend)
-        for i, (bond, friend) in enumerate(cards or [])
+        for i, (bond, friend) in enumerate(card_list)
     ]
+    tile.bond_levels = [bond for bond, _ in card_list]
     tile.stat_gains = {stat_type: total_gain}
     return tile
 

@@ -199,6 +199,7 @@ _ts_climax_retries = 0        # Retry counter for TS Climax races (max 3)
 _g1_retries = 0               # Total alarm clocks used this career (max 5)
 _g1_retried_this_race = False # True after we retry the current race (1 retry per race max)
 _backed_out_to_home_this_turn = False  # Prevents infinite back-out loop on recreation turns
+_recreation_seeded = False             # True after OCR-seeding rec_tracker from recreation_select screen
 _race_attempted_turn = -1             # Turn number of last race attempt — prevents re-entry loop
 _recovery_skills_bought = 0           # Track recovery skills bought (need 2+ before Kikuka Sho)
 _RECOVERY_SKILL_NAMES = {"corner recovery", "straightaway recover", "standing by", "after-school stroll"}
@@ -1289,6 +1290,52 @@ def _find_recreation_card(img, source_key: str) -> int | None:
                     continue
                 return int(y_pos)
     return None
+
+
+def _seed_recreation_from_ocr(img) -> None:
+    """OCR the recreation_select screen to log story completion status.
+
+    'Event Complete!' means story events are done, NOT that the card is
+    exhausted for recreation. Cards remain usable after story completion.
+    This function only logs — the schedule is authoritative for whether
+    recreation should happen.
+    """
+    global _recreation_seeded
+    if _recreation_seeded:
+        return
+    if not _playbook_engine:
+        return
+    _recreation_seeded = True
+
+    results = ocr_full_screen(img)
+
+    complete_ys = set()
+    for text, conf, y_pos in results:
+        if conf < 0.3:
+            continue
+        if "event complete" in text.strip().lower():
+            complete_ys.add(int(y_pos))
+
+    seed_log_parts = []
+    for source_key, remaining in list(_playbook_engine.rec_tracker.uses_remaining.items()):
+        match_names = _RECREATION_SOURCE_NAMES.get(source_key, [source_key])
+        story_done = False
+        for text, conf, y_pos in results:
+            if conf < 0.3:
+                continue
+            text_lower = text.strip().lower()
+            for name in match_names:
+                if name in text_lower:
+                    nearby_complete = any(abs(int(y_pos) - cy) < 120 for cy in complete_ys)
+                    if nearby_complete:
+                        story_done = True
+                        break
+            if story_done:
+                break
+        status = "story_complete" if story_done else f"{remaining} remaining"
+        seed_log_parts.append(f"{source_key}={status}")
+
+    log(f"Recreation OCR seed: {', '.join(seed_log_parts)}")
 
 
 def _get_recreation_member() -> str:
@@ -4401,7 +4448,7 @@ def _handle_career_home(img):
                     _scenario.on_non_race_action()
                     tap(*BTN_RECREATION)
                     return "recreation"
-                else:
+                elif pb_action.action_type == ActionType.RACE:
                     log(f"Playbook: Racing — {pb_action.reason} (fast-path)")
                     # Force-buy recovery skills before Kikuka Sho even on race turns.
                     if (
@@ -4646,7 +4693,7 @@ def _handle_career_home(img):
             _scenario.on_non_race_action()
             tap(*BTN_RECREATION)
             return "recreation"
-        elif pb_action.action_type == ActionType.RACE:
+        if pb_action.action_type == ActionType.RACE:
             log(f"Playbook: Racing — {pb_action.reason}")
             # Pass target race name to selector for forced matching.
             # Pair-tagged turns store the race name in `race` (clean); other
@@ -5429,6 +5476,8 @@ def _run_one_turn_inner(stop_before=None):
         return "race_confirm"
 
     elif screen == "recreation_select":
+        # Seed recreation tracker from OCR on first visit after restart
+        _seed_recreation_from_ocr(img)
         # Recreation card selection screen — pick the right card based on playbook
         if _playbook_engine and _playbook_engine.wants_recreation(_current_turn):
             source = _get_recreation_source()
