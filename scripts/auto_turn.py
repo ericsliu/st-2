@@ -1023,7 +1023,7 @@ def detect_screen(img):
         if has("enter this race"):
             return "race_confirm"
         if has("Playback") or has("Songs") or has("Landscape") or has("Portrait"):
-            return "concert_confirm"
+            return "race_playback_settings"
         if has("Recreation") or has("fun outing"):
             return "recreation_confirm"
         if has("Photo Album") or has("Save image"):
@@ -4965,6 +4965,7 @@ _INTERMEDIATE_RESULTS = {
     "rest", "recreation", "recreation_cancel", "recreation_select", "recreation_member_select", "rest_confirm", "race_back",
     "training_back_to_rest", "race_live_skip", "career_home_summer",
     "photo_save_cancel", "race_photo_skip", "quick_mode_dismiss",
+    "race_playback_start", "concert_skip",
     "retry_race", "try_again_confirmed", "log_close",
     "shop_done",
 }
@@ -5754,14 +5755,18 @@ def _run_one_turn_inner(stop_before=None):
         return "inspiration"
 
     elif screen == "race_live":
-        log("Live race — tapping Skip to fast-forward")
-        tap(970, 1862, delay=3.0)
+        log("Live race — tapping center to advance (no skip button)")
+        tap(540, 960, delay=5.0)
         return "race_live_skip"
 
-    elif screen == "concert_confirm":
-        log("Concert playback prompt — pressing Back to dismiss")
-        subprocess.run(["adb", "-s", DEVICE, "shell", "input", "keyevent", "KEYCODE_BACK"])
-        return "concert_cancel"
+    elif screen == "race_playback_settings":
+        log("Race playback settings — tapping OK to start race")
+        ok_btn = find_green_button(img, (1750, 1900))
+        if ok_btn:
+            tap(ok_btn[0], ok_btn[1])
+        else:
+            tap(540, 1830)
+        return "race_playback_start"
 
     elif screen == "concert":
         log("Victory concert — opening menu and skipping")

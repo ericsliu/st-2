@@ -107,7 +107,7 @@ recreation:
       total: 7
       special_index: 7
     riko:
-      total: 13
+      total: 5
       available_after: summer_camp_1
   energy_recovery: true
   mood_recovery: true
