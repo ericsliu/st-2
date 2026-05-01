@@ -255,10 +255,13 @@ def px(img, x, y):
 
 
 def detect_mood(img):
-    """Detect mood from the mood icon text via OCR.
+    """Detect mood from packet data or OCR fallback.
 
     Returns one of: GREAT, GOOD, NORMAL, BAD, AWFUL, UNKNOWN
     """
+    if _session_tailer.is_fresh() and _game_state and _game_state.mood:
+        m = _game_state.mood.value.upper()
+        return "AWFUL" if m == "TERRIBLE" else m
     mood_text = ocr_region(img, 800, 160, 1080, 260, save_path="/tmp/mood_crop.png")
     if isinstance(mood_text, list):
         mood_text = " ".join(t for t, c in mood_text)
